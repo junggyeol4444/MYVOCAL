@@ -75,3 +75,10 @@ test('accepts valid profiles and rejects duplicate IDs within the same library',
  input.profiles.voices.push({...voice});
  assert.throws(()=>validateBundleEnvelope(input),/프로필/);
 });
+
+
+test('rejects an ID collision between voice and character libraries',()=>{
+ const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,
+  profiles:{voices:[{id:'shared-1',name:'My Voice'}],characters:[{id:'shared-1',name:'My Character'}]},assets:{}};
+ assert.throws(()=>validateBundleEnvelope(input),/프로필/);
+});
