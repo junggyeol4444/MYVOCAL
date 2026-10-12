@@ -1,0 +1,42 @@
+name: MYVOCAL source validation
+on:
+  push:
+    branches: [main, 'myvocal/**']
+  pull_request:
+  workflow_dispatch:
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require source before test
+        run: |
+          test -f MYVOCAL-Studio-source/package.json
+          test -f desktop/go.mod
+  javascript:
+    needs: inventory
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: MYVOCAL-Studio-source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+  desktop:
+    needs: inventory
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+      - run: go test ./...
+      - run: go vet ./...
+      - name: Windows cross compile only, not real device verification
+        run: GOOS=windows GOARCH=amd64 go build -o /tmp/MYVOCAL-Studio-Windows.exe .
