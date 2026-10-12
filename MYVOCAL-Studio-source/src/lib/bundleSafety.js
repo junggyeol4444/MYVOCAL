@@ -11,7 +11,7 @@ export function validateBundleEnvelope(input) {
   const entries = Object.entries(assets);
   if (entries.length > MAX_ASSETS) throw new Error('백업 원본 파일 수가 제한을 초과했습니다.');
   for (const [id, meta] of entries) {
-   if (!id || !meta || typeof meta !== 'object' || typeof meta.dataUrl !== 'string' || !meta.dataUrl.startsWith('data:') || !meta.dataUrl.includes(';base64,')) throw new Error('백업 원본 파일 데이터가 잘못되었습니다.');
+   if (!id || ['__proto__','prototype','constructor'].includes(id) || !meta || typeof meta !== 'object' || typeof meta.dataUrl !== 'string' || !meta.dataUrl.startsWith('data:') || !meta.dataUrl.includes(';base64,')) throw new Error('백업 원본 파일 데이터가 잘못되었습니다.');
    if (meta.dataUrl.length > 130 * 1024 * 1024) throw new Error('백업 원본 파일 크기가 제한을 초과했습니다.');
   }
  }
