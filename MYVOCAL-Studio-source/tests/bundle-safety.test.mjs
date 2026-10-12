@@ -37,3 +37,11 @@ test('accepts valid padded and unpadded base64 without changes',()=>{
   assert.equal(validateBundleEnvelope(input),input);
  }
 });
+
+
+test('rejects noncanonical Base64 padding bits',()=>{
+ for(const payload of ['AB==','AAB=','//9=','/x==']) {
+  const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets:{x:{dataUrl:'data:audio/wav;base64,'+payload}}};
+  assert.throws(()=>validateBundleEnvelope(input),/Base64/);
+ }
+});
