@@ -22,3 +22,18 @@ test('permits valid modest media backup without mutating it',()=>{
  const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets:{a:{dataUrl:'data:audio/wav;base64,AA=='}}};
  assert.equal(validateBundleEnvelope(input),input);
 });
+
+
+test('rejects malformed base64 data before decode or storage',()=>{
+ for(const payload of ['AA=', 'AA===', 'AA!A', 'AA==AAAA', 'A', 'AAAA\n', '', 'AAAA=']) {
+  const assets={a:{dataUrl:'data:audio/wav;base64,'+payload}};
+  assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets}),/Base64/);
+ }
+});
+
+test('accepts valid padded and unpadded base64 without changes',()=>{
+ for(const payload of ['AA==','AAA=','AAAA']) {
+  const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets:{a:{dataUrl:'data:audio/wav;base64,'+payload}}};
+  assert.equal(validateBundleEnvelope(input),input);
+ }
+});
