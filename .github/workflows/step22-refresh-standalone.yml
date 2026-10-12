@@ -1,0 +1,41 @@
+name: Step22 refresh bundled desktop UI
+on:
+  push:
+    branches: ['myvocal/step22-section-genres']
+permissions:
+  contents: write
+jobs:
+  regenerate:
+    # The workflow commits just once. Its own generated commit does not re-trigger regeneration.
+    if: "!startsWith(github.event.head_commit.message, 'ci: update standalone HTML for Step22')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install TypeScript standalone build tool
+        working-directory: MYVOCAL-Studio-source
+        run: npm install --no-save --ignore-scripts
+      - name: Compile the latest React sources to standalone HTML
+        working-directory: MYVOCAL-Studio-source
+        run: npm run build:standalone
+      - name: Synchronize desktop embedded HTML
+        run: cp MYVOCAL-Studio-source/MYVOCAL-Studio-v1.8.html desktop/index.html
+      - name: Run unit tests and HTML parity test
+        working-directory: MYVOCAL-Studio-source
+        run: npm test
+      - name: Commit generated HTML back to the feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- MYVOCAL-Studio-source/MYVOCAL-Studio-v1.8.html desktop/index.html
+          if git diff --cached --quiet; then
+            echo "Generated standalone HTML is already current"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "ci: update standalone HTML for Step22"
+          git push origin HEAD:${{ github.ref_name }}
