@@ -9,6 +9,22 @@ export function validateBundleEnvelope(input) {
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion === 2) {
   if (input.profiles != null && (typeof input.profiles !== 'object' || Array.isArray(input.profiles) || !Array.isArray(input.profiles.voices) || !Array.isArray(input.profiles.characters))) throw new Error('백업 프로필 목록이 잘못되었습니다.');
   if (input.profiles && (input.profiles.voices.length > 500 || input.profiles.characters.length > 500)) throw new Error('백업 프로필 수가 제한을 초과했습니다.');
+  // Do not allow untrusted profile IDs to become object prototype properties.
+  // Validate before the importer builds a map of regenerated voice/character IDs.
+  if (input.profiles) {
+   const reservedIds = new Set(['__proto__', 'prototype', 'constructor']);
+   for (const group of ['voices', 'characters']) {
+    const seen = new Set();
+    for (const profile of input.profiles[group]) {
+     if (!profile || typeof profile !== 'object' || Array.isArray(profile) ||
+         typeof profile.id !== 'string' || !profile.id || reservedIds.has(profile.id) ||
+         typeof profile.name !== 'string' || !profile.name || seen.has(profile.id)) {
+      throw new Error('백업 프로필 ID 또는 이름이 잘못되었습니다.');
+     }
+     seen.add(profile.id);
+    }
+   }
+  }
   const assets = input.assets;
   if (!assets || typeof assets !== 'object' || Array.isArray(assets)) throw new Error('백업 원본 파일 목록이 잘못되었습니다.');
   const entries = Object.entries(assets);
