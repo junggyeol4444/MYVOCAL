@@ -7,6 +7,8 @@ export function validateBundleEnvelope(input) {
  if (Object.hasOwn(input, 'format') && input.format !== 'MYVOCAL_PROJECT_BACKUP') throw new Error('알 수 없는 프로젝트 백업 형식입니다.');
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion !== 2) throw new Error('지원하지 않는 프로젝트 백업 버전입니다.');
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion === 2) {
+  if (input.profiles != null && (typeof input.profiles !== 'object' || Array.isArray(input.profiles) || !Array.isArray(input.profiles.voices) || !Array.isArray(input.profiles.characters))) throw new Error('백업 프로필 목록이 잘못되었습니다.');
+  if (input.profiles && (input.profiles.voices.length > 500 || input.profiles.characters.length > 500)) throw new Error('백업 프로필 수가 제한을 초과했습니다.');
   const assets = input.assets;
   if (!assets || typeof assets !== 'object' || Array.isArray(assets)) throw new Error('백업 원본 파일 목록이 잘못되었습니다.');
   const entries = Object.entries(assets);
