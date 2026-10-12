@@ -52,3 +52,26 @@ test('rejects invalid or excessive voice and character profile lists',()=>{
  const profiles={voices:Array.from({length:501},()=>({})),characters:[]};
  assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,project:{title:'ok'},profiles,assets:{}}),/프로필/);
 });
+
+
+test('rejects malformed and prototype-sensitive profile IDs before restoring',()=>{
+ for(const id of ['__proto__','constructor','prototype','']){
+  const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,
+   profiles:{voices:[{id,name:'Voice'}],characters:[]},assets:{}};
+  assert.throws(()=>validateBundleEnvelope(input),/프로필/);
+ }
+ for(const profile of [null,{},[],{id:'v'}, {id:'v',name:1}]){
+  const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,
+   profiles:{voices:[profile],characters:[]},assets:{}};
+  assert.throws(()=>validateBundleEnvelope(input),/프로필/);
+ }
+});
+
+test('accepts valid profiles and rejects duplicate IDs within the same library',()=>{
+ const voice={id:'voice-1',name:'Original Voice'};
+ const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,
+  profiles:{voices:[voice],characters:[{id:'chr-1',name:'Original Character'}]},assets:{}};
+ assert.equal(validateBundleEnvelope(input),input);
+ input.profiles.voices.push({...voice});
+ assert.throws(()=>validateBundleEnvelope(input),/프로필/);
+});
