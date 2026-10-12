@@ -2,6 +2,7 @@
 // This is a rule-based local arranger, NOT a trained generative AI model.
 // All notes are original procedurally generated note patterns, not reproductions.
 import {chordPitches} from './midiEngine.js';
+import {resolveGenreMix,genreMixText} from './genreMix.js';
 
 export const songMoods=['희망적','감성적','웅장한','경쾌한','차분한','어두운'];
 export const songLengths=[16,24,32];
@@ -83,12 +84,16 @@ export function buildMidiArrangement({chords,bars=24,key='C Major',genre='Pop',m
  }
  return tracks.map(t=>({...t,midiNotes:t.midiNotes.map((n,i)=>({...n,id:`${t.role}_${i}_${seed}`}))}));
 }
-export function generateOfflineDraft({prompt='',title='',genre='Pop',mood='희망적',key='C Major',bpm=0,bars=24,variation=0}={}){
+export function generateOfflineDraft({prompt='',title='',genre='Pop',genreMix,mood='희망적',key='C Major',bpm=0,bars=24,variation=0}={}){
  const safeBars=songLengths.includes(Number(bars))?Number(bars):24;
- const [min,max]=suggested(genre,mood),seed=hash([prompt,title,genre,mood,key,safeBars,variation].join('|'));
+ const normalizedMix=resolveGenreMix(genreMix,genre);
+ const primaryGenre=[...normalizedMix].sort((a,b)=>b.weight-a.weight)[0].name;
+ const [min,max]=normalizedMix.reduce(([a,b],item)=>{const [low,high]=suggested(item.name,mood);return [a+low*item.weight/100,b+high*item.weight/100];},[0,0]);
+ const genreSignature=genreMixText(normalizedMix);
+ const seed=hash([prompt,title,genreSignature,mood,key,safeBars,variation].join('|'));
  const chosenBpm=bpm?limit(Number(bpm),40,240):Math.round((min+max)/2);
- const theme=asTheme(prompt||title),chords=chordsFor({bars:safeBars,key,mood,genre});
- return {source:'offline-rules',createdAt:new Date().toISOString(),title:String(title||theme).slice(0,80),prompt,genre,mood,key,bpm:chosenBpm,bars:safeBars,lyrics:passages(theme,mood),chords,sections:sectionsFor(safeBars),seed,midiTracks:buildMidiArrangement({chords,bars:safeBars,key,genre,mood,seed})};
+ const theme=asTheme(prompt||title),chords=chordsFor({bars:safeBars,key,mood,genre:primaryGenre});
+ return {source:'offline-rules',createdAt:new Date().toISOString(),title:String(title||theme).slice(0,80),prompt,genre:primaryGenre,genreMix:normalizedMix,mood,key,bpm:chosenBpm,bars:safeBars,lyrics:passages(theme,mood),chords,sections:sectionsFor(safeBars),seed,midiTracks:buildMidiArrangement({chords,bars:safeBars,key,genre:primaryGenre,mood,seed})};
 }
 export function normalizeRemoteProposal(result,options={}){
  if(!result||typeof result!=='object'||typeof result.lyrics!=='string'||!result.lyrics.trim())throw Error('AI가 가사 데이터를 반환하지 않았습니다.');
@@ -105,5 +110,5 @@ export function applyComposition(project,draft,{lyrics=true,chords=true,midi=tru
  const existing=Array.isArray(project.tracks)?project.tracks:[];
  const old=replace?existing.filter(t=>t.generatedBy!=='composer-v04'):existing;
  const newTracks=midi?(draft.midiTracks||[]).map((t,i)=>({id:`trk_composer_${Date.now()}_${i}`,name:t.name,instrument:t.instrument,type:t.role==='drums'?'rhythm':'instrument',generatedBy:'composer-v04',mute:false,solo:false,volume:t.volume,clips:[],midiNotes:t.midiNotes})):[];
- return {...project,...(lyrics?{lyrics:draft.lyrics}:{}),...(chords?{chords:draft.chords,sections:draft.sections}:{}),...(settings?{bpm:draft.bpm,key:draft.key,genreMix:[{name:draft.genre,weight:100}]}:{}),tracks:[...old,...newTracks],compositionHistory:[...(project.compositionHistory||[]).slice(-9),{time:new Date().toISOString(),source:draft.source,title:draft.title,notes:newTracks.reduce((s,t)=>s+t.midiNotes.length,0)}]};
+ return {...project,...(lyrics?{lyrics:draft.lyrics}:{}),...(chords?{chords:draft.chords,sections:draft.sections}:{}),...(settings?{bpm:draft.bpm,key:draft.key,genreMix:draft.genreMix?resolveGenreMix(draft.genreMix,draft.genre):resolveGenreMix(null,draft.genre)}:{}),tracks:[...old,...newTracks],compositionHistory:[...(project.compositionHistory||[]).slice(-9),{time:new Date().toISOString(),source:draft.source,title:draft.title,notes:newTracks.reduce((s,t)=>s+t.midiNotes.length,0)}]};
 }
