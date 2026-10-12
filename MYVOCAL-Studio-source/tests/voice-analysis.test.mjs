@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {findPitch,analyzeSamples,hzToNote,voiceAdvice} from '../src/lib/voiceAnalysis.js';
+const sine=(freq,seconds=4,rate=8000,amp=0.4)=>Float32Array.from({length:Math.round(seconds*rate)},(_,i)=>amp*Math.sin(2*Math.PI*freq*i/rate));
+test('note mapping for A4 and C4',()=>{assert.equal(hzToNote(440),'A4');assert.equal(hzToNote(261.63),'C4');assert.equal(hzToNote(0),'—');});
+test('single-frame pitch estimates A4',()=>{const p=findPitch(sine(440,.4).subarray(0,2048),8000);assert.ok(p);assert.ok(Math.abs(p.hz-440)<10,JSON.stringify(p));});
+test('silent clip has no pitch',()=>assert.equal(findPitch(new Float32Array(2048),8000),null));
+test('analysis computes a note estimate and acoustic levels',async()=>{const a=await analyzeSamples(sine(220,4),8000);assert.ok(a.voicedFrames>5);assert.equal(a.medianNote,'A3');assert.ok(Math.abs(a.medianHz-220)<5);assert.ok(a.peakDb<0);assert.equal(a.clippedPercent,0);assert.equal(a.quality,'measured');});
+test('silence gets insufficient status without fabricated notes',async()=>{const a=await analyzeSamples(new Float32Array(8000*3),8000);assert.equal(a.voicedFrames,0);assert.equal(a.medianNote,'—');assert.equal(a.quality,'insufficient');assert.match(voiceAdvice(a),/부족/);});
+test('maxSeconds limit is enforced',async()=>{const a=await analyzeSamples(sine(440,5),8000,{maxSeconds:2});assert.equal(a.duration,5);assert.equal(a.analyzedSeconds,2);});
