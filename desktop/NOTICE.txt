@@ -1,0 +1,3 @@
+MYVOCAL Studio v0.5 Prototype Frontend
+This application embeds React/ReactDOM runtime components. React's MIT license is
+included under MYVOCAL-Studio-v0.5/third_party/react-MIT-LICENSE.txt.
