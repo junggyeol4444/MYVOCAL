@@ -8,3 +8,5 @@ test('rejects excessive asset count',()=>{const assets=Object.fromEntries(Array.
 test('rejects unsupported backup versions instead of treating them as legacy',()=>{for(const version of [0,1,3,null,undefined]) assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:version,assets:{}}))});
 
 test('rejects unknown declared backup formats instead of treating them as legacy projects',()=>{for(const format of ['OTHER_BACKUP','',null,0])assert.throws(()=>validateBundleEnvelope({format,title:'legacy-looking',tracks:[],sections:[]}))});
+
+test('rejects prototype-sensitive asset IDs before mapping',()=>{for(const id of ['__proto__','constructor','prototype']){const assets=Object.fromEntries([[id,{dataUrl:'data:audio/wav;base64,AA=='}]]);assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets}))}});
