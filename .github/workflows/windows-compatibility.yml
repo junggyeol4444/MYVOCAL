@@ -1,0 +1,40 @@
+name: Windows 10 and 11 compatibility
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-compatibility:
+    name: ${{ matrix.os }} - desktop regression and cross-build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+      - name: Go desktop tests
+        working-directory: desktop
+        run: go test ./...
+      - name: Go desktop vet
+        working-directory: desktop
+        run: go vet ./...
+      - name: Compile Windows x64 GUI
+        working-directory: desktop
+        run: go build -trimpath -ldflags='-s -w -H windowsgui' -o ../MYVOCAL-Studio-Windows.exe .
+      - name: Compile Windows x64 COM mock tests
+        working-directory: desktop
+        run: go test -c -o ../MYVOCAL-Windows-Tests.exe .
+      - name: Upload unsigned test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-${{ matrix.os }}
+          path: |
+            MYVOCAL-Studio-Windows.exe
+            MYVOCAL-Windows-Tests.exe
+          retention-days: 7
