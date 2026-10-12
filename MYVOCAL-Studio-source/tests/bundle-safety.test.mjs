@@ -10,3 +10,15 @@ test('rejects unsupported backup versions instead of treating them as legacy',()
 test('rejects unknown declared backup formats instead of treating them as legacy projects',()=>{for(const format of ['OTHER_BACKUP','',null,0])assert.throws(()=>validateBundleEnvelope({format,title:'legacy-looking',tracks:[],sections:[]}))});
 
 test('rejects prototype-sensitive asset IDs before mapping',()=>{for(const id of ['__proto__','constructor','prototype']){const assets=Object.fromEntries([[id,{dataUrl:'data:audio/wav;base64,AA=='}]]);assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets}))}});
+
+
+test('rejects cumulative media size before decoding or writing',()=>{
+ const payload='A'.repeat(88*1024*1024);
+ const assets={a:{dataUrl:'data:audio/wav;base64,'+payload},b:{dataUrl:'data:audio/wav;base64,'+payload},c:{dataUrl:'data:audio/wav;base64,'+payload}};
+ assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets}),/150MB/);
+});
+
+test('permits valid modest media backup without mutating it',()=>{
+ const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets:{a:{dataUrl:'data:audio/wav;base64,AA=='}}};
+ assert.equal(validateBundleEnvelope(input),input);
+});
