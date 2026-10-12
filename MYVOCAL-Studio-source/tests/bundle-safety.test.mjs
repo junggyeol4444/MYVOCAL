@@ -47,7 +47,7 @@ test('rejects noncanonical Base64 padding bits',()=>{
 });
 
 
-test('rejects invalid or excessive voice and character profile lists',()=>{
+test('rejects invalid v2 project and profile lists before import',()=>{
  for(const profiles of [[], {voices:[]}, {voices:{},characters:[]}, {voices:[],characters:null}]) assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,project:{title:'ok'},profiles,assets:{}}),/프로필/);
  const profiles={voices:Array.from({length:501},()=>({})),characters:[]};
  assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,project:{title:'ok'},profiles,assets:{}}),/프로필/);
