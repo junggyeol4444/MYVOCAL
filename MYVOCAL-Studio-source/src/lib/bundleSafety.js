@@ -3,6 +3,7 @@ export const MAX_BUNDLE_BYTES = 220 * 1024 * 1024;
 export const MAX_ASSETS = 500;
 export function validateBundleEnvelope(input) {
  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('프로젝트 백업 형식이 잘못되었습니다.');
+ if (Object.hasOwn(input, 'format') && input.format !== 'MYVOCAL_PROJECT_BACKUP') throw new Error('알 수 없는 프로젝트 백업 형식입니다.');
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion !== 2) throw new Error('지원하지 않는 프로젝트 백업 버전입니다.');
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion === 2) {
   const assets = input.assets;
