@@ -14,7 +14,7 @@ export function makeZip(entries){
   if(body.length>0xffffffff)throw Error('ZIP 항목이 너무 큽니다.');
   const crc=crc32(body),lf=new Uint8Array(30+name.length),cf=new Uint8Array(46+name.length);
   u32(lf,0,0x04034b50);u16(lf,4,20);u16(lf,6,0x0800);u16(lf,8,0);u32(lf,14,crc);u32(lf,18,body.length);u32(lf,22,body.length);u16(lf,26,name.length);lf.set(name,30);
-  u32(cf,0,0x02014b50);u16(cf,4,20);u16(cf,6,20);u16(cf,8,0x0800);u16(cf,10,0);u32(cf,16,crc);u32(cf,20,body.length);u16(cf,28,name.length);u32(cf,42,offset);cf.set(name,46);
+  u32(cf,0,0x02014b50);u16(cf,4,20);u16(cf,6,20);u16(cf,8,0x0800);u16(cf,10,0);u32(cf,16,crc);u32(cf,20,body.length);u32(cf,24,body.length);u16(cf,28,name.length);u32(cf,42,offset);cf.set(name,46);
   local.push(lf,body);central.push(cf);offset+=lf.length+body.length;centSize+=cf.length;
  }
  if(offset+centSize>0xffffffff)throw Error('ZIP 크기 제한을 초과했습니다.');
