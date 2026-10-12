@@ -1,6 +1,7 @@
 export const genId = (prefix = 'id') => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 export const now = () => new Date().toISOString();
-export const genreList = ['K-Pop','Ballad','Rock','Pop','R&B','Hip-Hop','EDM','House','Techno','Metal','Punk','Jazz','City Pop','J-Pop','Anime Song','Vocal Synth','Orchestral','Cinematic','Acoustic','Lo-fi','Synthwave'];
+import {validateGenreMix,singleGenreMix} from './genreMix.js';
+export {genreList} from './genres.js';
 export const songSections = ['Intro', 'Verse 1', 'Pre-Chorus', 'Chorus', 'Verse 2', 'Bridge', 'Final Chorus', 'Outro'];
 export const trackPresets = ['Lead Vocal', 'Harmony', 'Drums', 'Bass', 'Piano', 'Guitar', 'Strings', 'Synth', 'FX'];
 export const steps = ['아이디어', '작사', '곡 구조', 'BPM / Key', '코드', '멜로디', '편곡', 'Singing', 'Mix', 'Master', 'Storyboard', '영상'];
@@ -14,9 +15,11 @@ export const rightsOptions = [
 export const initialData = {
   version: 10, projects: [], voices: [], trainingPlans: [], voiceModels: [], voicebanks: [], characters: [], virtualSingers: [], musicStyles: [], videoStyles: [], learning: [], settings: { provider:'MYVOCAL Native', defaultMode:'auto' }
 };
-export function newProject({title='새 프로젝트',prompt='',genre='Rock',voiceId='',characterId='',videoMode='auto',withVideo=true,options={}}={}) {
+export function newProject({title='새 프로젝트',prompt='',genre='Rock',genreMix,genreAuto=false,voiceId='',characterId='',videoMode='auto',withVideo=true,options={}}={}) {
+  // Keep legacy projects intact; the new field is opt-in.
+  const normalizedMix=genreMix===undefined?singleGenreMix(genre):validateGenreMix(genreMix);
   const date=now();
-  return {id:genId('prj'),title,prompt,status:'초안',createdAt:date,updatedAt:date,bpm:120,key:'C Major',genreMix:[{name:genre,weight:100}],genreAuto:false,voiceId,characterId,videoMode,withVideo,options,
+  return {id:genId('prj'),title,prompt,status:'초안',createdAt:date,updatedAt:date,bpm:120,key:'C Major',genreMix:normalizedMix,genreAuto:!!genreAuto,voiceId,characterId,videoMode,withVideo,options,
     lyrics:'',activeTab:'music',tracks:[
       {id:genId('trk'),name:'Lead Vocal',type:'vocal',mute:false,solo:false,volume:85,clips:[],midiNotes:[],instrument:'synth'},
       {id:genId('trk'),name:'Drums',type:'rhythm',mute:false,solo:false,volume:78,clips:[],midiNotes:[],instrument:'drums'},
