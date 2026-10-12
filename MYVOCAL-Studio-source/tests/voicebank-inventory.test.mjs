@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {inspectVoicebankFolder} from '../src/lib/voicebankInventory.js';
+const ini='a.wav=a,0,90,-50,100,10\nsub\\ha.wav=ha,0,90,-50,100,10';
+const entries=[{path:'bank/oto.ini',size:ini.length,otoText:ini},{path:'bank/a.wav',size:48000},{path:'bank/sub/ha.wav',size:84000}];
+test('voicebank folder inventory validates nested WAV references',()=>{const out=inspectVoicebankFolder(entries);assert.equal(out.otoCount,1);assert.equal(out.found,2);assert.equal(out.missingCount,0);assert.deepEqual(out.parsed.aliases,['a','ha']);});
+test('missing and undersized wave files reported without loading audio',()=>{let data=entries.map(x=>({...x}));data[2].size=10;let r=inspectVoicebankFolder(data);assert.equal(r.found,1);assert.equal(r.suspicious.length,1);assert.equal(r.missingCount,0);data.pop();r=inspectVoicebankFolder(data);assert.equal(r.missingCount,1);assert.match(r.missing[0],/sub\/ha\.wav/);});
+test('multiple oto.ini folders resolve their own relative paths',()=>{const a='hi.wav=hi,0,0,0,0,0';const r=inspectVoicebankFolder([{path:'mybank/a/oto.ini',size:60,otoText:a},{path:'mybank/b/oto.ini',size:60,otoText:a},{path:'mybank/a/hi.wav',size:55}]);assert.equal(r.otoCount,2);assert.equal(r.found,1);assert.equal(r.missingCount,1);});
+test('reject path traversal in waveform file references',()=>{const text='../secret.wav=a,0,0,0,0,0';const r=inspectVoicebankFolder([{path:'voice/oto.ini',size:40,otoText:text}]);assert.equal(r.found,0);assert.equal(r.suspicious.length,1);});
+test('folder must include valid oto metadata',()=>{assert.throws(()=>inspectVoicebankFolder([]),/파일이 없습니다/);assert.throws(()=>inspectVoicebankFolder([{path:'folder/test.wav',size:44}]),/oto.ini/);assert.throws(()=>inspectVoicebankFolder([{path:'folder/oto.ini',size:9,otoText:'oops'}]),/유효한 oto.ini/);});
+test('nested UTAU oto.ini is supported',()=>{const text='tone.wav=tone,1,2,3,4,5';const r=inspectVoicebankFolder([{path:'root/append/oto.ini',otoText:text,size:30},{path:'root/append/tone.wav',size:44}]);assert.equal(r.found,1);});
+test('reject unsafe path and duplicate names',()=>{assert.throws(()=>inspectVoicebankFolder([{path:'folder/oto.ini',otoText:'a.wav=a,0,0,0,0,0'}, {path:'folder/oto.ini',otoText:'a.wav=a,0,0,0,0,0'}]),/중복/);assert.throws(()=>inspectVoicebankFolder([{path:'folder/../oto.ini'}]),/허용되지/);});
