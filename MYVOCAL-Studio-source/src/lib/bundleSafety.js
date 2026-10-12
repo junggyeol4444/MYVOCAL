@@ -29,6 +29,14 @@ export function validateBundleEnvelope(input) {
      throw new Error('백업 원본 파일 Base64 형식이 잘못되었습니다.');
     }
    }
+   // Canonical RFC 4648 padding: unused low bits must be zero.
+   // This prevents distinct encodings for the same media bytes.
+   if (padCount === 2 && 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(payload[payload.length - 3]) % 16 !== 0) {
+    throw new Error('백업 원본 파일 Base64 패딩이 잘못되었습니다.');
+   }
+   if (padCount === 1 && 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.indexOf(payload[payload.length - 2]) % 4 !== 0) {
+    throw new Error('백업 원본 파일 Base64 패딩이 잘못되었습니다.');
+   }
    const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
    const estimatedBytes = payload.length / 4 * 3 - padding;
    totalDecodedBytes += estimatedBytes;
