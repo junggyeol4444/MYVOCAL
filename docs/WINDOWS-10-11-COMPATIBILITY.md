@@ -1,17 +1,18 @@
-# Windows 10 and Windows 11 support policy
+# MYVOCAL Studio Windows 10 / Windows 11 compatibility policy
 
-Target both **Windows 10 x64** and **Windows 11 x64**. Preserve browser/WebView2 user profiles, existing project/media data and music/voice/video features.
+**Target:** Windows 10 x64 and Windows 11 x64, both supported. Go desktop module is compiled for `windows/amd64`; no Windows 11-only API may become a required dependency.
 
-GitHub-hosted windows-2022 and windows-2025 matrix runners are Windows Server, **NOT Windows 10/11 clients**. Passing these runners proves only regression/build validation, not user-device compatibility.
+**Current reality:** GitHub-hosted `windows-2022` and `windows-2025` are Windows Server runners; they are only automated ABI/build/regression indicators. **They are not Windows 10 or 11 user-device tests.** No conclusion of actual client OS compatibility may be drawn from green runner tests alone.
 
-Both real client OS versions need manual QA:
-1. Start GUI; verify Chromium fallback and separately opt-in isolated WebView2 mode with trusted x64 Loader DLL and Runtime.
-2. Verify COM STA callbacks and shutdown, repeated restarts and DPI.
-3. Create/save/quit/relaunch projects and audio/image/video with checksum preservation.
-4. Verify pre-existing IndexedDB, localStorage and browser/WebView2 profile compatibility; never auto-migrate or delete existing data.
-5. Check legitimate junctions, redirection and reparse points, directory permissions, and path TOCTOU.
-6. Verify actual AI engine execution separately from mocks.
+**Real-device release gates (both OS versions, not yet performed):**
+1. Launch unsigned EXE and check application window/loopback server; test Edge or Chrome app-mode fallback when native WebView2 is unavailable.
+2. Native WebView2 (opt-in isolated profile only): official x64 Loader DLL provenance/version, WebView2 Runtime presence, STA COM callbacks, window close, repeated relaunch.
+3. New and existing projects: create, edit, save, quit, relaunch, reload, export. Test audio, images and video. Compare checksums of project data and media.
+4. Confirm Chromium/WebView2 pre-existing data/profiles are not overwritten, deleted or automatically migrated.
+5. Verify Windows 10 vs 11 path redirection, junctions, long paths, permissions, DPI scaling and required runtimes.
+6. Check 64-bit architecture and Windows 10 baseline API requirements; reject unsupported architecture with a clear message.
+7. Run local AI provider and separately an actual AI model where configured, without marking mocked inference as real.
 
-The user has supplied the **original 66-section product specification**. SHA-256 of its uploaded Markdown source: `8c061276b9cd6cf09a66541a1f335c8a5ab0aec0eba87f2b9f0a7cf3b7279a07`. The detailed original 100-step roadmap is still not available and must not be reconstructed. The full 66-section Markdown is preserved verbatim in the Step10 local source ZIP, pending GitHub upload.
+**Feature specification:** `docs/MYVOCAL-66-ORIGINAL.md` is the original user-provided 66-section product plan, copied byte-for-byte. It is **not** the unavailable 100-step detailed roadmap.
 
-This branch is incomplete, and main must not be merged until the original full app source has been imported and tested.
+**Pending:** Real Windows 10+11 devices, actual COM/STA and loader behavior, saved projects/media, AI inference. Keep building later independent steps while these are pending.
