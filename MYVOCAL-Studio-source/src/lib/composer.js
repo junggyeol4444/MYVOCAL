@@ -1,3 +1,4 @@
+import {retainSectionGenreMix} from './sectionGenre.js';
 // MYVOCAL Studio v0.4 — offline song draft and MIDI arrangement.
 // This is a rule-based local arranger, NOT a trained generative AI model.
 // All notes are original procedurally generated note patterns, not reproductions.
@@ -110,5 +111,5 @@ export function applyComposition(project,draft,{lyrics=true,chords=true,midi=tru
  const existing=Array.isArray(project.tracks)?project.tracks:[];
  const old=replace?existing.filter(t=>t.generatedBy!=='composer-v04'):existing;
  const newTracks=midi?(draft.midiTracks||[]).map((t,i)=>({id:`trk_composer_${Date.now()}_${i}`,name:t.name,instrument:t.instrument,type:t.role==='drums'?'rhythm':'instrument',generatedBy:'composer-v04',mute:false,solo:false,volume:t.volume,clips:[],midiNotes:t.midiNotes})):[];
- return {...project,...(lyrics?{lyrics:draft.lyrics}:{}),...(chords?{chords:draft.chords,sections:draft.sections}:{}),...(settings?{bpm:draft.bpm,key:draft.key,genreMix:draft.genreMix?resolveGenreMix(draft.genreMix,draft.genre):resolveGenreMix(null,draft.genre)}:{}),tracks:[...old,...newTracks],compositionHistory:[...(project.compositionHistory||[]).slice(-9),{time:new Date().toISOString(),source:draft.source,title:draft.title,notes:newTracks.reduce((s,t)=>s+t.midiNotes.length,0)}]};
+ return {...project,...(lyrics?{lyrics:draft.lyrics}:{}),...(chords?{chords:draft.chords,sections:retainSectionGenreMix(project.sections,draft.sections)}:{}),...(settings?{bpm:draft.bpm,key:draft.key,genreMix:draft.genreMix?resolveGenreMix(draft.genreMix,draft.genre):resolveGenreMix(null,draft.genre)}:{}),tracks:[...old,...newTracks],compositionHistory:[...(project.compositionHistory||[]).slice(-9),{time:new Date().toISOString(),source:draft.source,title:draft.title,notes:newTracks.reduce((s,t)=>s+t.midiNotes.length,0)}]};
 }

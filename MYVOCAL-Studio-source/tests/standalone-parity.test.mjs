@@ -12,4 +12,6 @@ test('Windows embedded HTML exactly matches the current standalone application',
  const content=app.toString('utf8');
  assert.match(content,/genre-mix-editor/);
  assert.match(content,/genreMixEditor|genreMix/);
+ assert.match(content,/section-genre-editor/);
+ assert.match(content,/SectionGenreEditor|sectionGenreMix/);
 });
