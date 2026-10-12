@@ -6,3 +6,5 @@ test('rejects malformed v2 assets before any writes',()=>{for(const assets of [n
 test('rejects excessive asset count',()=>{const assets=Object.fromEntries(Array.from({length:MAX_ASSETS+1},(_,i)=>[String(i),{dataUrl:'data:;base64,AA=='}]));assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets}))});
 
 test('rejects unsupported backup versions instead of treating them as legacy',()=>{for(const version of [0,1,3,null,undefined]) assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:version,assets:{}}))});
+
+test('rejects unknown declared backup formats instead of treating them as legacy projects',()=>{for(const format of ['OTHER_BACKUP','',null,0])assert.throws(()=>validateBundleEnvelope({format,title:'legacy-looking',tracks:[],sections:[]}))});
