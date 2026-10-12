@@ -4,15 +4,35 @@ on:
     branches: [main, 'myvocal/**']
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   inventory:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Require source before test
+      - name: Require complete source before accepting builds
+        shell: bash
         run: |
-          test -f MYVOCAL-Studio-source/package.json
-          test -f desktop/go.mod
+          set -euo pipefail
+          required=(
+            MYVOCAL-Studio-source/package.json
+            MYVOCAL-Studio-source/index.html
+            MYVOCAL-Studio-source/src/App.jsx
+            MYVOCAL-Studio-source/src/lib/bundleSafety.js
+            MYVOCAL-Studio-source/tests/bundle-safety.test.mjs
+            desktop/go.mod
+            desktop/main.go
+            desktop/native_webview_windows.go
+            desktop/browser_profile.go
+            docs/MYVOCAL-66-ORIGINAL.md
+          )
+          for file in "${required[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              echo "::error file=$file::Source not imported. Do not merge this branch."
+              exit 1
+            fi
+          done
   javascript:
     needs: inventory
     runs-on: ubuntu-latest
