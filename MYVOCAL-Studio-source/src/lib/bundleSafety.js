@@ -13,8 +13,10 @@ export function validateBundleEnvelope(input) {
   // Validate before the importer builds a map of regenerated voice/character IDs.
   if (input.profiles) {
    const reservedIds = new Set(['__proto__', 'prototype', 'constructor']);
+   // The importer uses one ID map for both libraries, so a cross-library
+   // collision could silently connect a voice to the wrong profile.
+   const seen = new Set();
    for (const group of ['voices', 'characters']) {
-    const seen = new Set();
     for (const profile of input.profiles[group]) {
      if (!profile || typeof profile !== 'object' || Array.isArray(profile) ||
          typeof profile.id !== 'string' || !profile.id || reservedIds.has(profile.id) ||
