@@ -5,7 +5,17 @@ export function validateMediaDataUrl(value, maxBase64Length=130*1024*1024){
  if(!match)throw new Error('유효하지 않은 미디어 데이터 URL입니다.');
  const payload=value.slice(match[0].length);
  if(payload.length>maxBase64Length)throw new Error('복원 파일이 너무 큽니다.');
- if(payload.length%4!==0||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(payload))throw new Error('손상된 Base64 미디어 데이터입니다.');
+ // A bounded chunk scan avoids catastrophic regex stack use on large backups.
+ const bad=()=>{throw new Error('손상된 Base64 미디어 데이터입니다.');};
+ if(!payload.length||payload.length%4!==0)bad();
+ const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+ const pad=payload.endsWith('==')?2:payload.endsWith('=')?1:0;
+ const bodyLength=payload.length-pad;
+ for(let offset=0;offset<bodyLength;offset+=8192){
+  if(!/^[A-Za-z0-9+/]+$/.test(payload.slice(offset,Math.min(offset+8192,bodyLength))))bad();
+ }
+ if(pad===2&&alphabet.indexOf(payload[payload.length-3])%16!==0)bad();
+ if(pad===1&&alphabet.indexOf(payload[payload.length-2])%4!==0)bad();
  return {mime:match[1],payload};
 }
 
