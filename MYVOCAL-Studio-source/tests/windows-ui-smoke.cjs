@@ -33,9 +33,20 @@ async function run() {
     const context = await browser.newContext({ acceptDownloads: true, locale: 'ko-KR', viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
     const pageErrors = [];
+    const browserConsoleErrors = [];
+    page.on('console', m => { if (m.type() === 'error') browserConsoleErrors.push(m.text()); });
+    page.on('requestfailed', r => browserConsoleErrors.push(`REQUEST ${r.url()} ${r.failure()?.errorText || ''}`));
     page.on('pageerror', e => pageErrors.push(String(e)));
     await page.goto(base, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: '새 음악 만들기' }).click();
+    const createButton = page.getByRole('button', { name: '새 음악 만들기' });
+    try { await createButton.waitFor({ timeout: 10000 }); }
+    catch (err) {
+      const diag = { url: page.url(), title: await page.title(), body: (await page.locator('body').innerText()).slice(0, 1500), buttons: await page.locator('button').allTextContents(), pageErrors, browserConsoleErrors };
+      console.error('MYVOCAL_OFFLINE_EXE_UI_DIAGNOSTICS=' + JSON.stringify(diag));
+      await page.screenshot({ path: join(screenshotDir, '00-error-exe-offline-ui.png'), fullPage: true }).catch(() => {});
+      throw err;
+    }
+    await createButton.click();
     await page.getByPlaceholder('예: 다시 만나는 밤').fill('STEP100 Windows UI 실사용 검증');
     await page.getByPlaceholder('애니메이션 록 발라드를 만들어줘.\n오래 헤어져 있던 친구를 다시 만나는 이야기.\n마지막 후렴은 웅장하게.').fill('Rock 70%와 발라드 30% 느낌의 한국어 노래.');
     await page.getByText('STEP97 · 선택한 로컬 가사/MIDI/스토리보드 생성까지 실행').click();
