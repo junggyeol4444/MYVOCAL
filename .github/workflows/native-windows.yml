@@ -1,0 +1,43 @@
+name: MYVOCAL Native Windows GUI (test branch only)
+on:
+  push:
+    branches: ['test/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-windows:
+    name: Native EXE and actual Win32 UI on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+      - name: Native project format / MIDI / WAV / SRT / backup tests
+        run: go test -v ./...
+      - name: Static analysis
+        run: go vet ./...
+      - name: Race detector
+        run: go test -race -count=1 ./...
+      - name: Build Windows x64 native GUI executable
+        run: go build -trimpath -ldflags='-H windowsgui' -o MYVOCAL-Native-Windows.exe .
+      - name: Operate real Windows native app via Win32 controls
+        shell: pwsh
+        run: ./tests/windows-ui-smoke.ps1 -ExePath (Join-Path (Get-Location) 'MYVOCAL-Native-Windows.exe')
+      - name: Preserve Windows native test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: myvocal-native-${{ matrix.os }}
+          path: |
+            native/MYVOCAL-Native-Windows.exe
+            ${{ runner.temp }}/myvocal-native-win32-test/**
+          retention-days: 14
