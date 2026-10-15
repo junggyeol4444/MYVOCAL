@@ -64,7 +64,17 @@ export async function createVocalExchangePackage(project,alignment,voice=null,mo
  const bytes=makeZip(entries);
  return {bytes,manifest,fileName:`MYVOCAL-v0.9-${String(project.title||'project').replace(/[^\w가-힣-]/g,'_')}-vocal-exchange.zip`};
 }
-export function makeImportedVocalTrack(project,file,assetId,durationSec){
- if(!project?.id||!assetId||!file||!Number.isFinite(durationSec)||durationSec<=0||durationSec>480)throw Error('오디오 원본이 올바르지 않습니다.');
- return {id:`trk_voice_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,name:'외부 보컬 WAV',type:'vocal',instrument:'synth',mute:false,solo:false,volume:85,midiNotes:[],clips:[{id:`clip_voice_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,assetId,fileName:file.name,durationSec,startBar:1,size:file.size}]};
+// startSec is the original musical-timeline offset for a cropped guide WAV.
+// Keep it as a fractional bar: the audio workstation and mixdown both accept
+// fractional startBar values, preserving sub-beat timing without moving any
+// existing clips. Older imports still default to bar 1.
+export function makeImportedVocalTrack(project,file,assetId,durationSec,startSec=0){
+ if(!project?.id||typeof assetId!=='string'||!assetId||!file||!Number.isFinite(durationSec)||durationSec<=0||durationSec>480)
+  throw Error('오디오 원본이 올바르지 않습니다.');
+ const bpm=Number(project.bpm);
+ if(!Number.isFinite(bpm)||bpm<40||bpm>240)throw Error('프로젝트 BPM이 올바르지 않습니다.');
+ if(!Number.isFinite(startSec)||startSec<0||startSec>480||startSec+durationSec>480)
+  throw Error('선택 구간 WAV의 원곡 위치 또는 길이가 잘못되었습니다.');
+ const startBar=1+startSec*bpm/240;
+ return {id:`trk_voice_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,name:'외부 보컬 WAV',type:'vocal',instrument:'synth',mute:false,solo:false,volume:85,midiNotes:[],clips:[{id:`clip_voice_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,assetId,fileName:file.name,durationSec,startBar,size:file.size}]};
 }

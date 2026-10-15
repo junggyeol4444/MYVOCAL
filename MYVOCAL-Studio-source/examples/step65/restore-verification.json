@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "restoredShots": 2,
+  "planSeconds": 8,
+  "gaps": [
+    {
+      "startSec": 3,
+      "endSec": 4
+    }
+  ],
+  "includesOriginalAssets": false,
+  "automatedVideo": false
+}

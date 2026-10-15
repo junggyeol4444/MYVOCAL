@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "type": "local-learning-midi-replay",
+  "mode": "symbolic-preset-not-ai",
+  "trainingPerformed": false,
+  "referenceTrainingAllowed": false,
+  "sourceAudioIncluded": false,
+  "projectModified": false,
+  "styleProfile": {
+    "schemaVersion": 1,
+    "type": "my-music-style",
+    "id": "synthetic-step58-example",
+    "name": "Synthetic Example Profile",
+    "trainingPerformed": false,
+    "sourceCount": 1,
+    "sources": [
+      {
+        "musicId": "synthetic-source",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "descriptors": {
+      "meanPeak": 0.7,
+      "meanRms": 0.22,
+      "activeFraction": 0.6
+    }
+  },
+  "referenceReport": {
+    "schemaVersion": 1,
+    "type": "reference-signal-report",
+    "name": "Synthetic reference only",
+    "rightsCategory": "reference-only",
+    "purpose": "reference-analysis",
+    "trainingAllowed": false,
+    "trainingPerformed": false,
+    "audioIncluded": false,
+    "descriptors": {
+      "durationSeconds": 8,
+      "peak": 1,
+      "rms": 0.5,
+      "activeFraction": 1,
+      "energyCurve": [
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.03,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85
+      ]
+    }
+  },
+  "options": {
+    "seed": 19,
+    "bpm": 120,
+    "bars": 8,
+    "rootMidi": 60,
+    "scale": "minor",
+    "complexity": "full",
+    "parts": [
+      "melody",
+      "bass",
+      "chords",
+      "drums"
+    ],
+    "velocityGuide": true,
+    "densityGuide": true,
+    "velocityStrength": 80,
+    "densityStrength": 100
+  },
+  "result": {
+    "midiSha256": "65113df95a74f1bf6f8dec4131ac26f6e4550a04adcd153ce912276117ee58ed",
+    "recipeSha256": "52256eefd01227343744f2ea789dc90431e01a1aaeaa3d70cde6c43c5d671e2c",
+    "midiBytes": 1617,
+    "trackSummary": [
+      {
+        "part": "melody",
+        "notes": 44
+      },
+      {
+        "part": "bass",
+        "notes": 20
+      },
+      {
+        "part": "chords",
+        "notes": 36
+      },
+      {
+        "part": "drums",
+        "notes": 64
+      }
+    ]
+  }
+}

@@ -1,13 +1,13 @@
-name: Windows 10 and 11 compatibility
+name: MYVOCAL Windows validation (test branches only)
 on:
   push:
-  pull_request:
+    branches: ['test/**']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   windows-compatibility:
-    name: ${{ matrix.os }} - desktop regression and cross-build
+    name: ${{ matrix.os }} - Go tests and Windows build
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

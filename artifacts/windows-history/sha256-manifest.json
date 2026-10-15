@@ -1,0 +1,472 @@
+{
+  "schema": "MYVOCAL-Step100-github-import-v1",
+  "source_zip": "MYVOCAL-Studio-Step100-LocalOnly.zip",
+  "original_zip_file_count": 628,
+  "original_zip_total_bytes": 531680171,
+  "raw_source_files": 572,
+  "historical_windows_exe_files": 56,
+  "encoding": "Executable binaries are preserved as SHA-256-verified tar.zst pieces; runnable source files are ordinary Git files.",
+  "archives": [
+    {
+      "label": "historical",
+      "name": "myvocal-historical-exe.tar.zst",
+      "size": 37921221,
+      "sha256": "d022b91a375002da6dd84a7fb8ccf69527aea0d1437c2089fe6cf2ace854f17c",
+      "parts": [
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part00",
+          "sha256": "5a2ffa88f828885514da56479264d172e43638a8a77f4e7cd70db9d38073c84c",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part01",
+          "sha256": "4e0954142d6b6a189e59d326bd56865b8940c2f238e05d87ff67d9b923f40183",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part02",
+          "sha256": "a5e5e9d708d2a300c16eef643e80f401868ff3d6dec5ca08ca5ec44e29ca9101",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part03",
+          "sha256": "849a1bc09153325fb33ae99fcf659cbe783bdbda4fcaa837b77ee2417f4bd8bc",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part04",
+          "sha256": "978535d2495b172f2db3845c923b18516bce147bc8e06dd5bf6d2054a3db37c6",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part05",
+          "sha256": "8e36b2cb06ac5a2610897f5bd575e6fddae17cab743df43ef747df54255572fc",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part06",
+          "sha256": "da093e9535b9c2cd2b0c3a76ef9f37637a722d56b7ef86c6f22d4a5a9b7a41bb",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part07",
+          "sha256": "4b610d96f1d4eae6273845c677c3f429c36234d4948568ea8da8bd511a4d060c",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part08",
+          "sha256": "ccacacadd1b0deb63bdf3a09087b1255a7b6e57d2c848c8092b1cae3ad543ab8",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part09",
+          "sha256": "6d515cc3ffaf27bc74984df797cf6e0e1f2e4c7cef369ee86ba47afbff377f70",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part10",
+          "sha256": "ec590b34093345f456c01003a7b811db3cf94ada38b088048c75949461a1b958",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part11",
+          "sha256": "8941488045b0d20e3ad13a470d1c5e269c61fc0cc92714b51f2c447a7975acd9",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part12",
+          "sha256": "5212a2c1cc7e16d38624f3af5046820a7bcbdc367453e763e95407538487e98f",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part13",
+          "sha256": "731a1c2cb08c8c695a6347fb21347c039ba2dff44b1a58d4dcac15961c0e98da",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part14",
+          "sha256": "974d5b68129108347633284a5b694767005893664a8c9fd7d8b542e9e1c242e7",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part15",
+          "sha256": "99d023404a8f66e2e37572749ab99b21382a871b7d98d28111036aa0294534eb",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part16",
+          "sha256": "8d2cae936086a00832dd1a3e65fac716f6b08b6f384d37304f75cdaff2c4a889",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part17",
+          "sha256": "bb7feee2a82f4cf78bb2695ae56e5aa60c4f07f4f36ea5d88371f54be6c4f2d6",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part18",
+          "sha256": "7bb3fd39108b02407c47cc3c5ee0b920bc1ce542e560c00a85713b4b0c891eb9",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part19",
+          "sha256": "1d786037090b32974a9504f86b74b7db1e34e28962eee42d22a513e712d0f8c3",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part20",
+          "sha256": "20fc257140ed78ef10c6d341ee2311ec6bd5df167ce4d24a69dab6fbd992802c",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part21",
+          "sha256": "fe6e1e51bc8b747e0feb28752372c75750f70741c59a1e88f29a85545aadcef5",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part22",
+          "sha256": "e6cf0da38db838db5d35893f040262a879125e3e630b59c4927b97a6731dbd54",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part23",
+          "sha256": "a6f56fea78b8e6236d6ca59632216f7a0f16173d8a268d5f6f4f03b56b8a726a",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part24",
+          "sha256": "b864d433fe7802baa5921204a650f74a672b8c3c57d4d88bb7d6841ffacff455",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part25",
+          "sha256": "525424196bfeffe4e2c7145c485f3dcac0cd4914267eead5d9d0a481776e11e6",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part26",
+          "sha256": "b849d4ab497c8a782e432b7a48c2785fbedb01ab621b878749e273a45d905a5f",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part27",
+          "sha256": "f779d42a3fba774c1fdaa705ed1d59786e893d4baf3fccb8c6db0d17adab010d",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part28",
+          "sha256": "c887b1b790f8c7763406dee103c5176839bf845c92b2a31ba83b3051f47beec3",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part29",
+          "sha256": "0d439ebd2c390e388515ddf41b7be61a38d98b0b876079b43862bc590b4d6565",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part30",
+          "sha256": "7f27a4fe76d74b81e2f4ec785ac8253b1fa51b6e71310b3d0205169dd370d018",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part31",
+          "sha256": "6014279b11fd2afe07651aad19bcb0a097804f40e53b70c2baa6405a22dbf7d4",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part32",
+          "sha256": "fe2c7e8cb2e9723177b963a8c49c9dd3d225ca7251d7f62032fe371dad29d6c9",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part33",
+          "sha256": "084d6a320b33968cfc469b6353d5e1a69b178a344845e7afac383728a1853b30",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part34",
+          "sha256": "5e2762edeea08b04962dde0db82ab9ccf212f392580023b93b9e347cfb93659c",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part35",
+          "sha256": "9ab9d62a77a121a7d3833ea8fa92d2cfc44ee0e88c7a3d2fb943706c7340f51c",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-history/step54-87.tar.zst.part36",
+          "sha256": "ba7301c96bde9073677e16bdb53a1a2372ea4c5594dbb9b8f91745b60361177c",
+          "size": 172485
+        }
+      ]
+    },
+    {
+      "label": "latest",
+      "name": "myvocal-step100-windows.exe.zst",
+      "size": 5462423,
+      "sha256": "5669aeb1a3a7938186cabfc97be98aaf4351283e8e21cfc24f3d22472bcb4c80",
+      "parts": [
+        {
+          "path": "artifacts/windows-latest/MYVOCAL-Step100-Windows.exe.zst.part00",
+          "sha256": "6758aa2bc6b71d904ba7d7687ac43cca9b37b62a212a5e36ca6076e2cfc64206",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-latest/MYVOCAL-Step100-Windows.exe.zst.part01",
+          "sha256": "4c19950814aa5887d0d90b50700da6f0537949fe08d98ae64fcbc80dd6bd9dd2",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-latest/MYVOCAL-Step100-Windows.exe.zst.part02",
+          "sha256": "3eceaa7177f8425781615b31c85f70c76e55687371e44281d3d0eb4d2f806a8e",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-latest/MYVOCAL-Step100-Windows.exe.zst.part03",
+          "sha256": "c94e8aa83fea16a0c72a9dedbbd43f0f53dfd8c53456bfcd823af9f15a21431e",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-latest/MYVOCAL-Step100-Windows.exe.zst.part04",
+          "sha256": "d7331c43b0b2f713f225a9e83ee8fb1d54de61eee766e0a3b607fd0da29fdbba",
+          "size": 1048576
+        },
+        {
+          "path": "artifacts/windows-latest/MYVOCAL-Step100-Windows.exe.zst.part05",
+          "sha256": "c812b9d86f32e7da23ef83747fc9276283408cc24456ab2ae88667325aa8c7ba",
+          "size": 219543
+        }
+      ]
+    }
+  ],
+  "original_executables": {
+    "MYVOCAL-Step54-Windows-Tests.exe": {
+      "sha256": "0507bd3487e37bb63f3ae12c70a5a316741e4303ff564dda55d0211c95f7becc",
+      "size": 10507776
+    },
+    "MYVOCAL-Step54-Windows.exe": {
+      "sha256": "543bd565a09842607ad64509a2336d16f82ee2491ffc11e69ca3d047df31b68e",
+      "size": 9943552
+    },
+    "MYVOCAL-Step55-Windows-Tests.exe": {
+      "sha256": "f61d3bcf4d1024899b18603ebe29f3338a5b24e19a8630ccb25043af76a6073f",
+      "size": 10507776
+    },
+    "MYVOCAL-Step55-Windows.exe": {
+      "sha256": "9916ef761d86b25d6b8f90a037793fde2df71f488a6dc3863cf7677f7a2bf614",
+      "size": 9943552
+    },
+    "MYVOCAL-Step56-Windows-Tests.exe": {
+      "sha256": "00a3c9642ee481772b839dc26346eff6abfb039e95661f015ae82a6ef289b91b",
+      "size": 10492928
+    },
+    "MYVOCAL-Step56-Windows.exe": {
+      "sha256": "b05827cb0a98525429dfc1c6e88b20701a76da47171c386a31e14afcfdd49a5a",
+      "size": 9969152
+    },
+    "MYVOCAL-Step57-Windows-Tests.exe": {
+      "sha256": "90ff0ac9993771e613b449d44ebe641c8df1e4b43769789b742df624085154c4",
+      "size": 10507776
+    },
+    "MYVOCAL-Step57-Windows.exe": {
+      "sha256": "94882907d6fe1e792d0b1a93ac2b5b016f1154856a6b86520316d105c20b80de",
+      "size": 7183360
+    },
+    "MYVOCAL-Step58-Windows-Tests.exe": {
+      "sha256": "3518269bccaee02b54c47404b32754fa5bd8cfee28a515492f2c2daa7a7d61cf",
+      "size": 10507776
+    },
+    "MYVOCAL-Step58-Windows.exe": {
+      "sha256": "01be515458853997449278e842afde40e1e774c9195af6afea2cabc024187096",
+      "size": 9995776
+    },
+    "MYVOCAL-Step59-Windows-Tests.exe": {
+      "sha256": "47549df951ea5366705b14dfedac3b9cfb1213ac5336112ef405469382d7f4de",
+      "size": 10507776
+    },
+    "MYVOCAL-Step59-Windows.exe": {
+      "sha256": "1cdaa4b986cc32b5ac65f6ed32e8824cb7c38e9f6809cec61fd26cf6ba4c83ee",
+      "size": 10003456
+    },
+    "MYVOCAL-Step60-Windows-Tests.exe": {
+      "sha256": "04ba7d82b7baf754572076f94e999d85e4374fc4060f181c70246345cf797b6f",
+      "size": 10507776
+    },
+    "MYVOCAL-Step60-Windows.exe": {
+      "sha256": "934119775d43cd012c0345eba810f1dde7743a639acaa53174a23071b05c8838",
+      "size": 7212032
+    },
+    "MYVOCAL-Step61-Windows-Tests.exe": {
+      "sha256": "59dffa8d0f4958da8f51970b119a8f1cfe3fd78dcf8238a3dccc336812780e48",
+      "size": 10507776
+    },
+    "MYVOCAL-Step61-Windows.exe": {
+      "sha256": "ace03e106c38f604c6d424fd2051616f992a471c727bfa76ea5d94716c0faa4b",
+      "size": 10031104
+    },
+    "MYVOCAL-Step62-Windows-Tests.exe": {
+      "sha256": "1ff37c9ab8a73d59318566ff7c12759b11222a4c586216dab715b38af3a5a917",
+      "size": 10507776
+    },
+    "MYVOCAL-Step62-Windows.exe": {
+      "sha256": "59de52ad3fea6647f5e0734796b0daffdf88bb99572dd43e0d8df225fd53ce8e",
+      "size": 10045952
+    },
+    "MYVOCAL-Step63-Windows-Tests.exe": {
+      "sha256": "fb2345099bab444917d827dc09f9edfa63df1932a4a0b1bd613336ccce908143",
+      "size": 10507776
+    },
+    "MYVOCAL-Step63-Windows.exe": {
+      "sha256": "510205898fc01e5bec32e845f6108c7b1305fd5bd17d3eee441b57b0f83caeaa",
+      "size": 10065408
+    },
+    "MYVOCAL-Step64-Windows-Tests.exe": {
+      "sha256": "dc77b667d667f07d732015a3bfb4e023c3c72067af505a9c71730508d8ce16fb",
+      "size": 10507776
+    },
+    "MYVOCAL-Step64-Windows.exe": {
+      "sha256": "18e40d7992c69e2bbb889fa302fb3dc9465dcc7f4851f107c3e8864d6868152e",
+      "size": 7264256
+    },
+    "MYVOCAL-Step65-Windows-Tests.exe": {
+      "sha256": "17bc4263c3f349155830c9838550649aaf0d068316d9a1afcf0d3b30787f79f4",
+      "size": 10507776
+    },
+    "MYVOCAL-Step65-Windows.exe": {
+      "sha256": "0ba23d04c0ce995a66f40bdd982611670b7c2ed2ff9f8f029ffdd4a81cdd890e",
+      "size": 7271936
+    },
+    "MYVOCAL-Step66-Windows-Tests.exe": {
+      "sha256": "14effbaa132bf653ff8e05d71824c2d32591960914ee09d11c7b280fd4c893ae",
+      "size": 10507776
+    },
+    "MYVOCAL-Step66-Windows.exe": {
+      "sha256": "b43e038f1cf6c0bf96166eeb9fd9cf100670647189881a4e1c0232ceb1ab4c06",
+      "size": 7283712
+    },
+    "MYVOCAL-Step67-Windows-Tests.exe": {
+      "sha256": "a4cdb20cefe8df65cec0a7f4b89a105be440a7b486c30c903f7e3f35e87c6b63",
+      "size": 10507776
+    },
+    "MYVOCAL-Step67-Windows.exe": {
+      "sha256": "409db43b5c1e2ec876cbe2b144f80118efb63d90bea7878d6329ca932d304d05",
+      "size": 7305728
+    },
+    "MYVOCAL-Step68-Windows-Tests.exe": {
+      "sha256": "f18824a27600355e9d5ba8b406b7d1599ce7a442e0a55044d960fac8cb328da8",
+      "size": 10507776
+    },
+    "MYVOCAL-Step68-Windows.exe": {
+      "sha256": "8e9b43f2de768167ef1edf288a6732a2f4fb10ddedf301f7811bc42b9dc8fa64",
+      "size": 7312896
+    },
+    "MYVOCAL-Step69-Windows-Tests.exe": {
+      "sha256": "79d648cbd8a4a771c21e7c03d647444d3d355f2ff50118005f601c4c514c78be",
+      "size": 10507776
+    },
+    "MYVOCAL-Step69-Windows.exe": {
+      "sha256": "012c7f7364301c77fc126435b53eb8cb9ce79866a935e88eb1a305f390aad369",
+      "size": 7325696
+    },
+    "MYVOCAL-Step70-Windows-Tests.exe": {
+      "sha256": "5f4d9ad973a0fee242471d2d86a78da6697de1236f5ed4dfbd4c71b8183da555",
+      "size": 10507776
+    },
+    "MYVOCAL-Step70-Windows.exe": {
+      "sha256": "fa1ba84df37a5ad231d35486ab71f6a43a224a52f7075d8f58dc490593bc050a",
+      "size": 7334912
+    },
+    "MYVOCAL-Step71-Windows-Tests.exe": {
+      "sha256": "c55b927e4d44510867a2734ef6c482ca5715e0e427ca8cd84f469a403cb0efff",
+      "size": 10507776
+    },
+    "MYVOCAL-Step71-Windows.exe": {
+      "sha256": "eff1fd6c78c871ca32a7223431f0458f66f1270baed31ad3f76ba21ae10a1d59",
+      "size": 7348736
+    },
+    "MYVOCAL-Step72-Windows-Tests.exe": {
+      "sha256": "a20062d1b4ccec039b8071050c6714da4dfb457ca5a204bc53694e53a99c1dd4",
+      "size": 10507776
+    },
+    "MYVOCAL-Step72-Windows.exe": {
+      "sha256": "0795cc35f5ef6abf03aa3b059f5f5bdaaf22449e99e6710a63bf85d067d7cef2",
+      "size": 7359488
+    },
+    "MYVOCAL-Step73-Windows-Tests.exe": {
+      "sha256": "6df181bbf10994dd20f9c9f1991b8c3979fc1fbf2b99020a8b96058c43143694",
+      "size": 10507776
+    },
+    "MYVOCAL-Step73-Windows.exe": {
+      "sha256": "d3b1de502efbebf6582bdc9b774c53df478233c3803c27ede62d0cce875ce691",
+      "size": 7371264
+    },
+    "MYVOCAL-Step74-Windows-Tests.exe": {
+      "sha256": "9bb8da0b534d34187f1937c7f8833ee6dd7ed3466fa0eada23b3b35c9cae0334",
+      "size": 10507776
+    },
+    "MYVOCAL-Step74-Windows.exe": {
+      "sha256": "373f75f82ac6afe375227e57ef5f69d7c999c52dce7afd3167805acb41bc1735",
+      "size": 7380480
+    },
+    "MYVOCAL-Step75-Windows-Tests.exe": {
+      "sha256": "8a2da79c35b7aecd25c230066ceb465eff232fea8676175c669c37b43489f3b1",
+      "size": 10507776
+    },
+    "MYVOCAL-Step75-Windows.exe": {
+      "sha256": "2c5e6626cbbac78374c05a6c07c8ee347f6df2fad5d2d9bb7d0dd76e4dd6c54a",
+      "size": 7384576
+    },
+    "MYVOCAL-Step76-Windows.exe": {
+      "sha256": "856ede2778b0e298732aca48437cb112be5c20df728af2013ef9ccb04d906830",
+      "size": 7399936
+    },
+    "MYVOCAL-Step77-Windows.exe": {
+      "sha256": "1cfd4241c54e5886a9157b8bd0abd310ded1a9ffd7baa769d4c7196918ced40b",
+      "size": 7598080
+    },
+    "MYVOCAL-Step78-Windows.exe": {
+      "sha256": "3220a006361e861729cc1b6d74676fb5bd2c5d07225569668d72d952c57ae676",
+      "size": 7659520
+    },
+    "MYVOCAL-Step79-Windows.exe": {
+      "sha256": "fec52b85540a15989613d41b351695eb843859e12b1cf49dc4b904a3e2c81fe5",
+      "size": 7700480
+    },
+    "MYVOCAL-Step80-Windows.exe": {
+      "sha256": "9b21a5205b59c83b594e23ee4549c2280c7ecbaccfa76bd6f0979d99b9ba1076",
+      "size": 7725056
+    },
+    "MYVOCAL-Step81-Windows.exe": {
+      "sha256": "bff67815e3368c8d9fbad10c58e8d5d66c0217dcb7685a3f04cfc6d39872ccb9",
+      "size": 7749632
+    },
+    "MYVOCAL-Step82-Windows.exe": {
+      "sha256": "f223fa314f2c1365d59ebb2efc0f93f99f5e57073a9ba5696a90a91942910cec",
+      "size": 7781376
+    },
+    "MYVOCAL-Step83-Windows.exe": {
+      "sha256": "d0e9f6783aa79e80bc6e71fc044e43d1d3e7d467b09cf4fd7406c5cb8a557050",
+      "size": 10734080
+    },
+    "MYVOCAL-Step84-Windows.exe": {
+      "sha256": "7bc8403c3234770ffb37d3710d94712c79f6e870848a5daf0aecf8a29d66b3d9",
+      "size": 10767872
+    },
+    "MYVOCAL-Step85-Windows.exe": {
+      "sha256": "1b5717b57f170ff4b500711560250b6ce67637059f95b2412173ca68b7c80378",
+      "size": 10777088
+    },
+    "MYVOCAL-Step86-Windows.exe": {
+      "sha256": "fab7b6270a4832373fdcc2b3bb60649231d57da70b309b9e06c31da8fed9446d",
+      "size": 10809856
+    },
+    "MYVOCAL-Step87-Windows.exe": {
+      "sha256": "780fd736f8de50f40465f14c2d8748e0ed7744e93019f2fa5d768cd8cba8f660",
+      "size": 10830336
+    },
+    "MYVOCAL-Step100-Windows.exe": {
+      "sha256": "199dab723740bb58ef8532e0cde468f8ff0efd93939fbb98cf4cb11606ab134e",
+      "size": 11021312
+    }
+  }
+}

@@ -4,7 +4,7 @@ import {putFile,getFile,removeFile} from './assetDb.js';
 export const CAPABILITY_AUDIT=[
  {key:'editor',name:'프로젝트 / 기본 음악 편집',state:'basic',detail:'프로젝트·트랙·가사·WAV 재생·기본 믹싱 작동. 정식 DAW 수준은 아님'},
  {key:'midi',name:'MIDI 작곡 / 피아노 롤',state:'basic',detail:'MIDI 음표 편집, 코드, 내장 합성음, MIDI 교환 구현'},
- {key:'composer',name:'AI 작사 / 작곡 / 편곡',state:'partial',detail:'외부 텍스트 AI 연동 옵션과 규칙 기반 MIDI 생성. 완성형 음악 생성 AI는 없음'},
+ {key:'composer',name:'AI 작사 / 작곡 / 편곡',state:'partial',detail:'가사 템플릿과 규칙 기반 MIDI 생성은 오프라인 사용 가능. 신경망 음악 생성 AI는 미구현'},
  {key:'voice',name:'목소리 녹음 / 분석 / 데이터셋',state:'partial',detail:'녹음·기초 피치·품질 검사·학습 자료 수집. 신경망 학습은 미구현'},
  {key:'singing',name:'실제 AI Voice Training / Singing',state:'blocked',detail:'외부 엔진 인터페이스·샘플 기반 미리보기만 있음. 학습된 모델과 추론 실행 환경이 필요'},
  {key:'characters',name:'캐릭터 / 사람 / 가상 가수',state:'partial',detail:'등록과 라이브러리 연결만 가능. Identity Lock 생성 보장은 불가'},

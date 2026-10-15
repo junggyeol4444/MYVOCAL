@@ -2,46 +2,59 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
-func TestAIProxyAuthorization(t *testing.T) {
-	a := &appServer{sessionKey: "token"}
-	x := httptest.NewRecorder()
-	r := httptest.NewRequest("POST", "http://127.0.0.1:58319/api/lyrics", bytes.NewBufferString(`{}`))
-	r.Host = "127.0.0.1:58319"
-	a.aiLyrics(x, r)
-	if x.Code != 403 {
-		t.Fatalf("expected forbidden, got %v", x.Code)
+// Even a valid-looking API key must not trigger an external request.
+// This endpoint has been removed from the local-only desktop server.
+func TestNoExternalLyricsRoute(t *testing.T) {
+	a := &appServer{sessionKey: "token", root: []byte("<html>offline</html>")}
+	for _, tt := range []struct{ method, path string }{
+		{http.MethodGet, "/api/lyrics"},
+		{http.MethodPost, "/api/lyrics"},
+		{http.MethodPost, "/api/lyrics?model=gpt-4o-mini"},
+	} {
+		r := httptest.NewRequest(tt.method, "http://127.0.0.1:58319"+tt.path, bytes.NewBufferString(`{"apiKey":"key-1234567890","prompt":"song"}`))
+		r.Header.Set("Origin", fixedOrigin)
+		r.Header.Set("X-MYVOCAL-Session", "token")
+		w := httptest.NewRecorder()
+		a.routes().ServeHTTP(w, r)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("%s %s: got %d, expected 404", tt.method, tt.path, w.Code)
+		}
 	}
 }
-func TestAIProxySuccessViaFakeUpstream(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer key-1234567890" {
-			t.Error("no API key header")
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"choices": []interface{}{map[string]interface{}{"message": map[string]string{"content": `{"title":"첫곡","lyrics":"[Verse 1] 테스트","bpm":120,"key":"C Major","chords":["C","G","Am","F"]}`}}}})
-	}))
-	defer srv.Close()
-	original := openaiChatURL
-	openaiChatURL = srv.URL
-	defer func() { openaiChatURL = original }()
-	a := &appServer{sessionKey: "token"}
-	payload := `{"apiKey":"key-1234567890","model":"gpt-4o-mini","prompt":"친구와 재회","title":"노래","genre":"Rock","mood":"희망적","key":"C Major","bpm":120,"bars":24}`
-	r := httptest.NewRequest("POST", "http://127.0.0.1:58319/api/lyrics", bytes.NewBufferString(payload))
-	r.Host = "127.0.0.1:58319"
-	r.Header.Set("Origin", "http://127.0.0.1:58319")
-	r.Header.Set("X-MYVOCAL-Session", "token")
-	x := httptest.NewRecorder()
-	a.aiLyrics(x, r)
-	if x.Code != 200 {
-		t.Fatalf("got %d: %s", x.Code, x.Body.String())
+
+func TestAppServesOfflineOnlyContentSecurityPolicy(t *testing.T) {
+	a := &appServer{root: []byte("<html>offline</html>")}
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "http://127.0.0.1:58319/", nil))
+	if w.Code != 200 {
+		t.Fatalf("root status %d", w.Code)
 	}
-	if bytes.Contains(x.Body.Bytes(), []byte("key-1234567890")) {
-		t.Error("key leaked in response")
+	policy := w.Header().Get("Content-Security-Policy")
+	for _, required := range []string{"connect-src 'self'", "default-src 'none'", "font-src 'self' data:", "frame-src 'none'", "object-src 'none'"} {
+		if !strings.Contains(policy, required) {
+			t.Fatalf("CSP missing %q: %s", required, policy)
+		}
+	}
+	if strings.Contains(policy, "https:") || strings.Contains(policy, "http:") || strings.Contains(policy, "*") {
+		t.Fatalf("CSP can reach remote origins: %s", policy)
+	}
+}
+
+func TestDedicatedBrowserDisablesBackgroundNetworking(t *testing.T) {
+	args, err := browserLaunchArgs(fixedOrigin, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	flags := strings.Join(args, " ")
+	for _, flag := range []string{"--disable-background-networking", "--disable-sync", "--disable-component-update", "--no-pings"} {
+		if !strings.Contains(flags, flag) {
+			t.Fatalf("missing no-network browser flag %q", flag)
+		}
 	}
 }

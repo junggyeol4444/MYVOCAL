@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {parseLipSyncLines,visemeAt,saveLipSync,phonemeViseme} from '../src/lib/characterLipSync.js';
+test('STEP85 Korean phonemes and half-open timed visemes',()=>{const x=parseLipSyncLines('0,0.3,ㅁ,마\n0.3,0.6,ㅏ,마');assert.equal(phonemeViseme('ㅁ'),'M');assert.equal(visemeAt(x,.15).viseme,'M');assert.equal(visemeAt(x,.45).viseme,'A');assert.equal(visemeAt(x,.6).viseme,'sil');assert.equal(saveLipSync({id:'c'},x).lipSync.cues.length,2);});
+test('STEP85 rejects overlap, invalid time and spoofed mapping',()=>{assert.throws(()=>parseLipSyncLines('0,1,a,x\n0.5,2,i,y'));assert.throws(()=>parseLipSyncLines('-1,2,a'));assert.throws(()=>parseLipSyncLines('0,Infinity,a'));});

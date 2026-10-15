@@ -1,4 +1,4 @@
-import {retainSectionGenreMix} from './sectionGenre.js';
+import {retainSectionGenreMix,sectionGenreMix} from './sectionGenre.js';
 // MYVOCAL Studio v0.4 — offline song draft and MIDI arrangement.
 // This is a rule-based local arranger, NOT a trained generative AI model.
 // All notes are original procedurally generated note patterns, not reproductions.
@@ -48,7 +48,36 @@ function chordsFor({bars,key,mood,genre}){
  const degrees=minor?(mood==='어두운'?[0,5,3,4]:[0,3,5,4]):mood==='웅장한'||highEnergy?[0,4,5,3]:[0,5,3,4];
  return Array.from({length:Math.floor(bars/2)},(_,i)=>({id:`ch_comp_${i}`,bar:1+i*2,bars:2,symbol:chordAt(degrees[i%4],root,minor)}));
 }
-export function buildMidiArrangement({chords,bars=24,key='C Major',genre='Pop',mood='희망적',seed=1}){
+// Existing projects have no section overrides; those render with the original
+// arrangement algorithm. Explicit per-section genres change local MIDI note
+// density/velocity only, not the original song's audio, lyrics, or user tracks.
+export function sectionMidiStyleMap(sections,bars,projectMix,genre='Pop') {
+ const length=Number(bars);
+ if(!Number.isSafeInteger(length)||length<1||length>512)throw new Error('MIDI 마디 범위가 올바르지 않습니다.');
+ const styles=Array(length).fill(null);
+ if(sections==null)return styles;
+ if(!Array.isArray(sections)||sections.length>128)throw new Error('곡 구간 목록이 올바르지 않습니다.');
+ let start=0;
+ for(const section of sections){
+  if(!section||typeof section!=='object'||Array.isArray(section)||!Number.isSafeInteger(section.bars)||section.bars<1||section.bars>512)
+   throw new Error('곡 구간의 마디 수가 올바르지 않습니다.');
+  const end=Math.min(length,start+section.bars);
+  if(section.genreMix!=null){
+   const mix=sectionGenreMix(section,projectMix,genre);
+   const share=pattern=>mix.reduce((value,item)=>value+(pattern.test(item.name)?item.weight:0),0);
+   const energetic=share(/rock|metal|punk|edm|house|techno|dance/i)>=45;
+   const gentle=share(/ballad|acoustic|lo-fi|jazz|cinematic|orchestral/i)>=50;
+   const style={bassStep:energetic?1:2,hatStep:energetic?.5:1,
+    melodySkip:energetic?.04:gentle?.30:.13,
+    velocityOffset:energetic?12:gentle?-12:0};
+   for(let bar=start;bar<end;bar++)styles[bar]=style;
+  }
+  start+=section.bars;
+  if(start>=length)break;
+ }
+ return styles;
+}
+export function buildMidiArrangement({chords,bars=24,key='C Major',genre='Pop',mood='희망적',seed=1,sections,projectMix}){
  const rand=random(seed),{root,minor}=parseKey(key),scale=minor?minorSteps:majorSteps;
  const tracks=[
   {role:'chords',name:'Composer · Chords',instrument:/rock|punk|metal/i.test(genre)?'guitar':'piano',volume:68,midiNotes:[]},
@@ -58,6 +87,7 @@ export function buildMidiArrangement({chords,bars=24,key='C Major',genre='Pop',m
  ];
  const [pad,bass,drums,melody]=tracks;
  const energize=/rock|edm|dance|punk|techno/i.test(genre||'')||mood==='경쾌한';
+ const barStyles=sectionMidiStyleMap(sections,bars,projectMix,genre);
  const midiBase=60+root;
  for(const c of chords){
   let chord;
@@ -65,21 +95,26 @@ export function buildMidiArrangement({chords,bars=24,key='C Major',genre='Pop',m
   const beat=(c.bar-1)*4,span=c.bars*4;
   for(const p of chord)pad.midiNotes.push(note(p,beat,span-.12,68));
   const base=chord[0]-24;
-  for(let b=0;b<span;b+=energize?1:2){bass.midiNotes.push(note(base,beat+b,.7,78));}
+  for(let b=0;b<span;){
+   const style=barStyles[Math.floor((beat+b)/4)];
+   bass.midiNotes.push(note(base,beat+b,.7,style?78+style.velocityOffset:78));
+   b+=style?style.bassStep:(energize?1:2);
+  }
  }
  for(let bar=0;bar<bars;bar++){
   const start=bar*4,intensity=bar>=Math.floor(bars*.65)?1.1:1;
-  for(const b of [0,2])drums.midiNotes.push(note(36,start+b,.16,95*intensity));
-  for(const b of [1,3])drums.midiNotes.push(note(38,start+b,.17,82*intensity));
-  for(let b=0;b<4;b+=(energize?.5:1))drums.midiNotes.push(note(42,start+b,.09,42+rand()*16));
+  const style=barStyles[bar];
+  for(const b of [0,2])drums.midiNotes.push(note(36,start+b,.16,(95+(style?.velocityOffset||0))*intensity));
+  for(const b of [1,3])drums.midiNotes.push(note(38,start+b,.17,(82+(style?.velocityOffset||0))*intensity));
+  for(let b=0;b<4;b+=(style?style.hatStep:(energize?.5:1)))drums.midiNotes.push(note(42,start+b,.09,42+rand()*16+(style?.velocityOffset||0)));
   if(bar===0||bar===bars-1)continue;
   for(let b=0;b<4;b+=1){
-   if(rand()<.13)continue;
+   if(rand()<(style?style.melodySkip:.13))continue;
    const chord=chords.find(c=>bar+1>=c.bar&&bar+1<c.bar+c.bars)||chords[0];
    const chordPitch=chord?chordPitches(chord.symbol,4):[midiBase];
    const tone=rand()<.6?chordPitch[Math.floor(rand()*chordPitch.length)]:(midiBase+scale[Math.floor(rand()*scale.length)]);
    const pitch=limit(tone+(rand()<.3?12:0),60,84);
-   const vel=70+Math.round(rand()*25);
+   const vel=70+Math.round(rand()*25)+(style?.velocityOffset||0);
    melody.midiNotes.push(note(pitch,start+b,rand()<.4?.5:.9,vel));
   }
  }
@@ -110,6 +145,17 @@ export function applyComposition(project,draft,{lyrics=true,chords=true,midi=tru
  if(!project||!draft)throw Error('프로젝트 및 생성 초안이 필요합니다.');
  const existing=Array.isArray(project.tracks)?project.tracks:[];
  const old=replace?existing.filter(t=>t.generatedBy!=='composer-v04'):existing;
- const newTracks=midi?(draft.midiTracks||[]).map((t,i)=>({id:`trk_composer_${Date.now()}_${i}`,name:t.name,instrument:t.instrument,type:t.role==='drums'?'rhythm':'instrument',generatedBy:'composer-v04',mute:false,solo:false,volume:t.volume,clips:[],midiNotes:t.midiNotes})):[];
- return {...project,...(lyrics?{lyrics:draft.lyrics}:{}),...(chords?{chords:draft.chords,sections:retainSectionGenreMix(project.sections,draft.sections)}:{}),...(settings?{bpm:draft.bpm,key:draft.key,genreMix:draft.genreMix?resolveGenreMix(draft.genreMix,draft.genre):resolveGenreMix(null,draft.genre)}:{}),tracks:[...old,...newTracks],compositionHistory:[...(project.compositionHistory||[]).slice(-9),{time:new Date().toISOString(),source:draft.source,title:draft.title,notes:newTracks.reduce((s,t)=>s+t.midiNotes.length,0)}]};
+ const mergedSections=chords?retainSectionGenreMix(project.sections,draft.sections):project.sections;
+ // Rebuild only procedural composer MIDI, and only when an applied section
+ // explicitly overrides its project genre. This avoids changing old projects,
+ // external MIDI, manual tracks, or previously authored audio/video assets.
+ const styled=Array.isArray(mergedSections)&&mergedSections.some(section=>section?.genreMix!=null);
+ const canRender=styled&&midi&&Array.isArray(draft.midiTracks)&&draft.midiTracks.length===4&&
+  draft.midiTracks.every(track=>['chords','bass','drums','melody'].includes(track.role))&&
+  Array.isArray(draft.chords)&&Number.isSafeInteger(draft.seed)&&Number.isSafeInteger(draft.bars);
+ const midiTracks=canRender?buildMidiArrangement({chords:draft.chords,bars:draft.bars,key:draft.key,
+  genre:draft.genre,mood:draft.mood,seed:draft.seed,sections:mergedSections,
+  projectMix:settings?draft.genreMix:project.genreMix}):(draft.midiTracks||[]);
+ const newTracks=midi?midiTracks.map((t,i)=>({id:`trk_composer_${Date.now()}_${i}`,name:t.name,instrument:t.instrument,type:t.role==='drums'?'rhythm':'instrument',generatedBy:'composer-v04',mute:false,solo:false,volume:t.volume,clips:[],midiNotes:t.midiNotes})):[];
+ return {...project,...(lyrics?{lyrics:draft.lyrics}:{}),...(chords?{chords:draft.chords,sections:mergedSections}:{}),...(settings?{bpm:draft.bpm,key:draft.key,genreMix:draft.genreMix?resolveGenreMix(draft.genreMix,draft.genre):resolveGenreMix(null,draft.genre)}:{}),tracks:[...old,...newTracks],compositionHistory:[...(project.compositionHistory||[]).slice(-9),{time:new Date().toISOString(),source:draft.source,title:draft.title,notes:newTracks.reduce((s,t)=>s+t.midiNotes.length,0)}]};
 }

@@ -1,0 +1,15 @@
+{
+  "format": "myvocal-character-vocal-cues",
+  "version": 1,
+  "characterId": "demo-singer",
+  "characterName": "Demo Singer (Synthetic)",
+  "exportedAt": "2026-10-13T00:00:00.000Z",
+  "cues": [
+    { "id": "lead-1", "shotId": "verse-shot", "startSec": 0, "endSec": 2, "part": "lead", "lyric": "예시 가사", "note": "수동 등록 예제" },
+    { "id": "spoken-1", "shotId": "verse-shot", "startSec": 2, "endSec": 3, "part": "spoken", "lyric": "안녕하세요", "note": "인접한 큐" }
+  ],
+  "automatedLipSync": false,
+  "renderedAudio": false,
+  "renderedVideo": false,
+  "note": "합성 예제입니다. demo-singer 캐릭터에 verse-shot 컷(0~3초 이상)이 있어야 복원됩니다."
+}

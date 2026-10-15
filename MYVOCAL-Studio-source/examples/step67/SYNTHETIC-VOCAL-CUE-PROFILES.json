@@ -1,0 +1,114 @@
+[
+  {
+    "id": "singer-a",
+    "name": "Singer A",
+    "assets": [],
+    "appearance": {
+      "hair": "Black"
+    },
+    "looks": [
+      {
+        "id": "look-singer-a",
+        "name": "Stage",
+        "outfit": "Blue Jacket",
+        "expression": "",
+        "pose": "",
+        "scene": "",
+        "accessories": "",
+        "notes": "",
+        "referenceAssetId": "",
+        "identityBasis": {
+          "hair": "Black",
+          "eyes": "",
+          "body": "",
+          "palette": ""
+        },
+        "version": 1,
+        "createdAt": "2026-10-13T02:32:07.562Z",
+        "reviewedAt": "2026-10-13T02:32:07.562Z"
+      }
+    ],
+    "updatedAt": "2026-10-13T03:40:21.543Z",
+    "shots": [
+      {
+        "id": "shot-singer-a",
+        "title": "Singer A performance",
+        "lookId": "look-singer-a",
+        "startSec": 0,
+        "endSec": 6,
+        "camera": "medium",
+        "direction": "Synthetic demo only",
+        "version": 1,
+        "createdAt": "2026-10-13T02:32:07.562Z",
+        "updatedAt": "2026-10-13T02:32:07.562Z"
+      }
+    ],
+    "vocalCues": [
+      {
+        "id": "cue-singer-a",
+        "shotId": "shot-singer-a",
+        "startSec": 0,
+        "endSec": 4,
+        "part": "lead",
+        "lyric": "테스트 리드 가사 메모",
+        "note": "합성 예제 · 실제 사용자 음성 아님"
+      }
+    ]
+  },
+  {
+    "id": "singer-b",
+    "name": "Singer B",
+    "assets": [],
+    "appearance": {
+      "hair": "Black"
+    },
+    "looks": [
+      {
+        "id": "look-singer-b",
+        "name": "Stage",
+        "outfit": "Blue Jacket",
+        "expression": "",
+        "pose": "",
+        "scene": "",
+        "accessories": "",
+        "notes": "",
+        "referenceAssetId": "",
+        "identityBasis": {
+          "hair": "Black",
+          "eyes": "",
+          "body": "",
+          "palette": ""
+        },
+        "version": 1,
+        "createdAt": "2026-10-13T02:32:07.562Z",
+        "reviewedAt": "2026-10-13T02:32:07.562Z"
+      }
+    ],
+    "updatedAt": "2026-10-13T03:40:21.543Z",
+    "shots": [
+      {
+        "id": "shot-singer-b",
+        "title": "Singer B performance",
+        "lookId": "look-singer-b",
+        "startSec": 3,
+        "endSec": 9,
+        "camera": "medium",
+        "direction": "Synthetic demo only",
+        "version": 1,
+        "createdAt": "2026-10-13T02:32:07.562Z",
+        "updatedAt": "2026-10-13T02:32:07.562Z"
+      }
+    ],
+    "vocalCues": [
+      {
+        "id": "cue-singer-b",
+        "shotId": "shot-singer-b",
+        "startSec": 4,
+        "endSec": 8,
+        "part": "harmony",
+        "lyric": "테스트 화음 메모",
+        "note": "합성 예제 · 실제 사용자 음성 아님"
+      }
+    ]
+  }
+]

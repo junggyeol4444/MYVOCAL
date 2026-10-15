@@ -1,6 +1,6 @@
 // Section 4: per-song-section genre overrides remain optional for legacy projects.
-// Overrides only change saved project metadata; the offline MIDI composer does not
-// yet render different genre arrangements per section.
+// Overrides are stored in project metadata and used by the local MIDI composer
+// when new procedural MIDI is applied. They never rewrite existing audio clips.
 import {resolveGenreMix,validateGenreMix,singleGenreMix} from './genreMix.js';
 
 export function sectionGenreMix(section,projectMix,legacyGenre='Rock') {

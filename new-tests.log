@@ -1,0 +1,334 @@
+TAP version 13
+# Subtest: empty selection has no problems
+ok 1 - empty selection has no problems
+  ---
+  duration_ms: 1.726113
+  type: 'test'
+  ...
+# Subtest: valid cue and shot have no warnings
+ok 2 - valid cue and shot have no warnings
+  ---
+  duration_ms: 1.515726
+  type: 'test'
+  ...
+# Subtest: review result identifies format and version
+ok 3 - review result identifies format and version
+  ---
+  duration_ms: 0.097517
+  type: 'test'
+  ...
+# Subtest: review reports no automated claims
+ok 4 - review reports no automated claims
+  ---
+  duration_ms: 0.284439
+  type: 'test'
+  ...
+# Subtest: report recognizes a missing cue as informational
+ok 5 - report recognizes a missing cue as informational
+  ---
+  duration_ms: 0.438641
+  type: 'test'
+  ...
+# Subtest: empty cast of 65 rejected
+ok 6 - empty cast of 65 rejected
+  ---
+  duration_ms: 1.972355
+  type: 'test'
+  ...
+# Subtest: non-array rejected
+ok 7 - non-array rejected
+  ---
+  duration_ms: 0.196166
+  type: 'test'
+  ...
+# Subtest: null rejected
+ok 8 - null rejected
+  ---
+  duration_ms: 0.100261
+  type: 'test'
+  ...
+# Subtest: missing ID rejected
+ok 9 - missing ID rejected
+  ---
+  duration_ms: 0.3981
+  type: 'test'
+  ...
+# Subtest: nested invalid cast record rejected
+ok 10 - nested invalid cast record rejected
+  ---
+  duration_ms: 0.306192
+  type: 'test'
+  ...
+# Subtest: duplicate character IDs create errors
+ok 11 - duplicate character IDs create errors
+  ---
+  duration_ms: 6.583129
+  type: 'test'
+  ...
+# Subtest: profile assets cannot be object
+ok 12 - profile assets cannot be object
+  ---
+  duration_ms: 0.506964
+  type: 'test'
+  ...
+# Subtest: profile looks cannot be object
+ok 13 - profile looks cannot be object
+  ---
+  duration_ms: 0.15927
+  type: 'test'
+  ...
+# Subtest: profile shots cannot be object
+ok 14 - profile shots cannot be object
+  ---
+  duration_ms: 0.288685
+  type: 'test'
+  ...
+# Subtest: profile cues cannot be object
+ok 15 - profile cues cannot be object
+  ---
+  duration_ms: 0.13243
+  type: 'test'
+  ...
+# Subtest: shot count bound enforced
+ok 16 - shot count bound enforced
+  ---
+  duration_ms: 0.274774
+  type: 'test'
+  ...
+# Subtest: cue count bound enforced
+ok 17 - cue count bound enforced
+  ---
+  duration_ms: 0.193742
+  type: 'test'
+  ...
+# Subtest: missing look flagged error
+ok 18 - missing look flagged error
+  ---
+  duration_ms: 0.127042
+  type: 'test'
+  ...
+# Subtest: missing reference flagged warning
+ok 19 - missing reference flagged warning
+  ---
+  duration_ms: 0.126461
+  type: 'test'
+  ...
+# Subtest: appearance changes flagged warning
+ok 20 - appearance changes flagged warning
+  ---
+  duration_ms: 0.184959
+  type: 'test'
+  ...
+# Subtest: missing shot for cue flagged error
+ok 21 - missing shot for cue flagged error
+  ---
+  duration_ms: 0.135915
+  type: 'test'
+  ...
+# Subtest: shortened shot flags outside cue
+ok 22 - shortened shot flags outside cue
+  ---
+  duration_ms: 0.223096
+  type: 'test'
+  ...
+# Subtest: bad shot duration flagged
+ok 23 - bad shot duration flagged
+  ---
+  duration_ms: 0.125069
+  type: 'test'
+  ...
+# Subtest: NaN shot time flagged
+ok 24 - NaN shot time flagged
+  ---
+  duration_ms: 0.130437
+  type: 'test'
+  ...
+# Subtest: string shot time flagged
+ok 25 - string shot time flagged
+  ---
+  duration_ms: 0.122615
+  type: 'test'
+  ...
+# Subtest: bad cue duration flagged
+ok 26 - bad cue duration flagged
+  ---
+  duration_ms: 0.20549
+  type: 'test'
+  ...
+# Subtest: millisecond precision enforced
+ok 27 - millisecond precision enforced
+  ---
+  duration_ms: 0.150277
+  type: 'test'
+  ...
+# Subtest: duplicate shot ID flagged
+ok 28 - duplicate shot ID flagged
+  ---
+  duration_ms: 0.174213
+  type: 'test'
+  ...
+# Subtest: overlapping shots flagged
+ok 29 - overlapping shots flagged
+  ---
+  duration_ms: 0.122144
+  type: 'test'
+  ...
+# Subtest: adjacent shots not flagged
+ok 30 - adjacent shots not flagged
+  ---
+  duration_ms: 0.121103
+  type: 'test'
+  ...
+# Subtest: duplicate cue ID flagged
+ok 31 - duplicate cue ID flagged
+  ---
+  duration_ms: 0.168845
+  type: 'test'
+  ...
+# Subtest: overlapping cues flagged
+ok 32 - overlapping cues flagged
+  ---
+  duration_ms: 0.217347
+  type: 'test'
+  ...
+# Subtest: adjacent cues not flagged
+ok 33 - adjacent cues not flagged
+  ---
+  duration_ms: 0.197558
+  type: 'test'
+  ...
+# Subtest: unsupported vocal part flagged
+ok 34 - unsupported vocal part flagged
+  ---
+  duration_ms: 0.140231
+  type: 'test'
+  ...
+# Subtest: blank lead lyric warns, not errors
+ok 35 - blank lead lyric warns, not errors
+  ---
+  duration_ms: 0.130877
+  type: 'test'
+  ...
+# Subtest: blank spoken lyric warns
+ok 36 - blank spoken lyric warns
+  ---
+  duration_ms: 0.117937
+  type: 'test'
+  ...
+# Subtest: blank adlib lyric allowed
+ok 37 - blank adlib lyric allowed
+  ---
+  duration_ms: 0.116215
+  type: 'test'
+  ...
+# Subtest: blank harmony lyric allowed
+ok 38 - blank harmony lyric allowed
+  ---
+  duration_ms: 0.117738
+  type: 'test'
+  ...
+# Subtest: invalid cue record flagged
+ok 39 - invalid cue record flagged
+  ---
+  duration_ms: 0.10651
+  type: 'test'
+  ...
+# Subtest: invalid shot record flagged
+ok 40 - invalid shot record flagged
+  ---
+  duration_ms: 0.131718
+  type: 'test'
+  ...
+# Subtest: different characters overlapping form duet pair
+ok 41 - different characters overlapping form duet pair
+  ---
+  duration_ms: 0.150778
+  type: 'test'
+  ...
+# Subtest: different characters adjacent not duet
+ok 42 - different characters adjacent not duet
+  ---
+  duration_ms: 0.153442
+  type: 'test'
+  ...
+# Subtest: three simultaneous characters create three pairs
+ok 43 - three simultaneous characters create three pairs
+  ---
+  duration_ms: 0.171318
+  type: 'test'
+  ...
+# Subtest: multiple characters with same shot ID still independent
+ok 44 - multiple characters with same shot ID still independent
+  ---
+  duration_ms: 0.181644
+  type: 'test'
+  ...
+# Subtest: audit is independent of cast order
+ok 45 - audit is independent of cast order
+  ---
+  duration_ms: 0.372853
+  type: 'test'
+  ...
+# Subtest: source characters are not mutated
+ok 46 - source characters are not mutated
+  ---
+  duration_ms: 0.414605
+  type: 'test'
+  ...
+# Subtest: report contains minimal metadata, not lyrics
+ok 47 - report contains minimal metadata, not lyrics
+  ---
+  duration_ms: 0.196907
+  type: 'test'
+  ...
+# Subtest: report never exports asset bytes
+ok 48 - report never exports asset bytes
+  ---
+  duration_ms: 0.162916
+  type: 'test'
+  ...
+# Subtest: report never exports MV direction
+ok 49 - report never exports MV direction
+  ---
+  duration_ms: 0.13271
+  type: 'test'
+  ...
+# Subtest: report has explicit no-render flags
+ok 50 - report has explicit no-render flags
+  ---
+  duration_ms: 0.136967
+  type: 'test'
+  ...
+# Subtest: report adds ISO export timestamp
+ok 51 - report adds ISO export timestamp
+  ---
+  duration_ms: 0.082425
+  type: 'test'
+  ...
+# Subtest: no source media payload in shot rows
+ok 52 - no source media payload in shot rows
+  ---
+  duration_ms: 0.142425
+  type: 'test'
+  ...
+# Subtest: UI wires review panel and JSON download
+ok 53 - UI wires review panel and JSON download
+  ---
+  duration_ms: 0.895
+  type: 'test'
+  ...
+# Subtest: audit module does not access network
+ok 54 - audit module does not access network
+  ---
+  duration_ms: 0.248916
+  type: 'test'
+  ...
+1..54
+# tests 54
+# suites 0
+# pass 54
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 107.267023

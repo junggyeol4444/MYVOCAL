@@ -1,0 +1,39 @@
+{
+  "format": "myvocal-character-production-handoff",
+  "version": 1,
+  "integrity": "SHA-256 checksum (not proof of source authenticity)",
+  "payload": {
+    "scope": "manually-authored-metadata-only",
+    "characterIds": [
+      "synthetic-actor"
+    ],
+    "shots": [
+      {
+        "characterId": "synthetic-actor",
+        "shotId": "shot-demo",
+        "startSec": 0,
+        "endSec": 8,
+        "cueCount": 1
+      }
+    ],
+    "issues": [],
+    "summary": {
+      "characters": 1,
+      "shots": 1,
+      "cues": 1,
+      "duetCuePairs": 0,
+      "errors": 0,
+      "warnings": 0,
+      "information": 0,
+      "reviewPassed": true
+    },
+    "capabilities": {
+      "autoFaceMatching": false,
+      "autoLipSync": false,
+      "generatedSinging": false,
+      "renderedVideo": false
+    }
+  },
+  "sha256": "1f4ea4289d1cb3081c03aab3652aa45e19353dda8b60d8ffa8332d9b03088b0a",
+  "note": "캐릭터/컷/보컬 큐 수동 계획의 최소 메타데이터입니다. 원본 미디어와 가사·연출 원문은 포함하지 않습니다. 통과는 영상·가창 제작 완료를 의미하지 않습니다."
+}

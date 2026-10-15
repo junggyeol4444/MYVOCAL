@@ -211,3 +211,65 @@
 .section-genre-draft{margin-top:12px;border:1px solid #413755;border-radius:9px;padding:14px;background:#111523}
 .section-genre-draft .hstack{margin-top:12px}
 @media(max-width:650px){.section-genre-editor{margin-left:0}.section-genre-controls select{max-width:100%}}
+
+.mv2-cliphelp{margin:4px 0 12px;color:#a9acc4;font-size:11px}.mv2-reset{white-space:nowrap;padding:6px 9px;background:#24283e;color:#d9cfff;border:1px solid #646080;border-radius:5px;cursor:pointer}.mv2-reset:hover{background:#333454}
+
+/* Step32: keep the additional fade controls accessible on narrower Windows desktop windows. */
+.mv2-list .mv2-cliprow{flex-wrap:wrap;padding:7px 0;row-gap:7px}
+.mv2-list .mv2-cliprow label{flex-shrink:0}
+
+/* Step33: audio fade curve selects, wraps on narrow displays. */
+.mv2-list .mv2-cliprow select{max-width:94px;padding:6px;background:#171b2a;color:#fff;border:1px solid #464b61;border-radius:5px;cursor:pointer}
+.mv2-list .mv2-cliprow select:focus-visible{outline:2px solid #a48dff;outline-offset:2px}
+
+/* Step34: checkbox must not inherit the narrow numeric clip editor input sizing. */
+.mv2-list .mv2-cliprow .mv2-clipmute input[type=checkbox]{width:17px!important;height:17px;min-width:17px;padding:0!important;accent-color:#a48dff;cursor:pointer}
+.mv2-list .mv2-cliprow .mv2-clipmute{cursor:pointer}
+
+/* Step39: optional WAV export-only sample-peak protection */
+.mv2-peakprotect{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:var(--text,#dbe3f7);cursor:pointer}
+.mv2-peakprotect input{accent-color:#a48dff;cursor:pointer}
+.mv2-peakprotect input:disabled{opacity:.55;cursor:default}
+
+/* Step40: local PCM bit-depth selector */
+.mv2-wav-depth{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-size:12px;color:var(--text,#dbe3f7)}
+.mv2-wav-depth select{background:#1b2031;border:1px solid #555b78;border-radius:5px;color:#f0eaff;padding:5px 7px;font-size:12px}
+.mv2-wav-depth select:disabled{opacity:.55}
+/* Step41: export sample-rate control; keep the expanded transport usable on narrow desktops. */
+.mv2-transport{flex-wrap:wrap}
+.mv2-wav-rate{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-size:12px;color:var(--text,#dbe3f7)}
+.mv2-wav-rate select{background:#1b2031;border:1px solid #555b78;border-radius:5px;color:#f0eaff;padding:5px 7px;font-size:12px}
+.mv2-wav-rate select:disabled{opacity:.55}
+
+/* Step42: WAV channel selector (export-only, no project state). */
+.mv2-wav-channels{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-size:12px;color:var(--text,#dbe3f7)}
+.mv2-wav-channels select{background:#1b2031;border:1px solid #555b78;border-radius:5px;color:#f0eaff;padding:5px 7px;font-size:12px}
+.mv2-wav-channels select:disabled{opacity:.55}
+
+/* Step43: optional output-only leading/trailing silence trim. */
+.mv2-wav-trim{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:var(--text,#dbe3f7);cursor:pointer}
+.mv2-wav-trim input{accent-color:#a48dff;cursor:pointer}
+.mv2-wav-trim input:disabled{opacity:.55;cursor:default}
+/* Step47: opt-in WAV selection controls; remain local to the export toolbar. */
+.mv2-wav-range,.mv2-wav-range-start,.mv2-wav-range-end{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:var(--text,#dbe3f7)}
+.mv2-wav-range input{accent-color:#a48dff}
+.mv2-wav-range-start input,.mv2-wav-range-end input{width:86px;max-width:100%;box-sizing:border-box;background:#1b2031;border:1px solid #555b78;border-radius:5px;color:#f0eaff;padding:5px 7px;font-size:12px;font-variant-numeric:tabular-nums}
+.mv2-wav-range-start input:disabled,.mv2-wav-range-end input:disabled{opacity:.55}
+
+/* Step65: metadata-only character cut timeline. */
+.shot-timeline { margin: 10px 0; padding: 9px; border: 1px solid var(--border, #494959); border-radius: 9px; }
+.shot-timeline-track { height: 32px; background: rgba(120,120,145,.16); border-radius: 6px; position: relative; overflow: hidden; }
+.shot-timeline-segment { box-sizing: border-box; position: absolute; top: 1px; bottom: 1px; padding: 4px 5px; border: 1px solid rgba(255,255,255,.4); background: #326b89; color: white; border-radius: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; }
+.shot-timeline-segment.needs-review { background: #925c2c; }
+.shot-timeline-segment span { overflow: hidden; text-overflow: ellipsis; display: block; }
+.shot-timeline small { display: block; padding-top: 5px; }
+
+/* Step66: metadata-only multi-character cast timeline. */
+.cast-board{border:1px solid var(--border,#494959);border-radius:12px;padding:15px;margin:14px 0 18px;background:rgba(80,74,123,.08)}
+.cast-board-head{display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:12px}
+.cast-board-head p{margin:6px 0;font-size:12px;line-height:1.5;color:var(--muted,#a7a8b9)}
+.cast-board-filter{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0}.cast-board-filter label{display:inline-flex;gap:5px;align-items:center;cursor:pointer;font-size:12px;overflow-wrap:anywhere}.cast-board-filter input{accent-color:#a48dff}
+.cast-board-timeline{margin:10px 0;max-height:320px;overflow:auto;border:1px solid rgba(140,140,170,.32);border-radius:8px}
+.cast-board-interval{display:flex;gap:12px;flex-wrap:wrap;border-bottom:1px solid rgba(140,140,170,.18);padding:8px 10px;font-size:12px;background:rgba(75,126,162,.14)}
+.cast-board-interval.needs-review{background:rgba(165,111,55,.23)}.cast-board-time{font-variant-numeric:tabular-nums;white-space:nowrap;min-width:150px;font-weight:600}
+.cast-board>small{display:block;line-height:1.6;overflow-wrap:anywhere}

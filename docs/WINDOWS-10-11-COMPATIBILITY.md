@@ -2,7 +2,7 @@
 
 **Target:** Windows 10 x64 and Windows 11 x64, both supported. Go desktop module is compiled for `windows/amd64`; no Windows 11-only API may become a required dependency.
 
-**Current reality:** GitHub-hosted `windows-2022` and `windows-2025` are Windows Server runners; they are only automated ABI/build/regression indicators. **They are not Windows 10 or 11 user-device tests.** No conclusion of actual client OS compatibility may be drawn from green runner tests alone.
+**Current reality:** Local cross-builds and Go tests verify build compatibility only. They are **not Windows 10 or 11 user-device tests**. Never claim client-device support has been proven until each operating system is tested on a real PC.
 
 **Real-device release gates (both OS versions, not yet performed):**
 1. Launch unsigned EXE and check application window/loopback server; test Edge or Chrome app-mode fallback when native WebView2 is unavailable.

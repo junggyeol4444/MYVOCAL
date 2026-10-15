@@ -9,13 +9,14 @@ import Workspace from './pages/Workspace';
 import Projects from './pages/Projects';
 import Voices from './pages/Voices';
 import Training from './pages/Training';
+import {planCreateSongVideo97,applyCreateSongVideo97} from './lib/createSongVideo97.js';
 import Characters from './pages/Characters';
 import Video from './pages/Video';
 import Learning from './pages/Learning';
 import Library from './pages/Library';
 import Settings from './pages/Settings';
 
-const labels={home:'대시보드',create:'AI로 노래 만들기',projects:'프로젝트',music:'Music Studio',voices:'Voice Studio',training:'Voice Training',characters:'Character Studio',video:'Music Video Studio',pv:'Vocal Synth PV',learning:'Learning Studio',library:'라이브러리',settings:'설정',workspace:'프로젝트 편집기'};
+const labels={home:'대시보드',create:'로컬 노래 만들기',projects:'프로젝트',music:'Music Studio',voices:'Voice Studio',training:'Voice Training',characters:'Character Studio',video:'Music Video Studio',pv:'Vocal Synth PV',learning:'Learning Studio',library:'라이브러리',settings:'설정',workspace:'프로젝트 편집기'};
 function fromHash(){const [,route,projectId]=location.hash.split('/');return {page:labels[route]?route:'home',projectId:projectId||''};}
 export default function App(){
  const [storageState,setStorageState]=useState(readDataState);
@@ -37,7 +38,7 @@ export default function App(){
  const add=(type,item)=>setData(d=>updateEntity(d,type,item));
  const remove=(type,id)=>setData(d=>deleteEntity(d,type,id));
  const editProject=project=>setData(d=>projectUpdate(d,project));
- const createProject=(options)=>{const project=newProject(options);setData(d=>updateEntity(d,'projects',project));navigate('workspace',project.id);notify('프로젝트 초안을 만들었습니다. (AI 생성은 아직 미연결)');return project;};
+ const createProject=(options)=>{let project=newProject(options);if(options.pipeline97){const plan=planCreateSongVideo97(project,options.options);project=applyCreateSongVideo97(project,plan);}setData(d=>updateEntity(d,'projects',project));navigate('workspace',project.id);notify(options.pipeline97?'STEP97 로컬 가사/MIDI/스토리보드 초안 저장 · 실제 AI Singing/MV 추론은 별도 확인 필요':'프로젝트 초안을 만들었습니다. (AI 생성은 아직 미연결)');return project;};
  const current=data.projects.find(p=>p.id===route.projectId);
  const recover=()=>{
   if(!confirm('손상된 데이터를 별도 복구 키에 보존한 다음 새 작업 공간으로 초기화합니다. 계속할까요?'))return;
@@ -79,7 +80,7 @@ export default function App(){
  return <div className="app-shell">
   <Sidebar page={route.page} navigate={navigate} isOpen={mobileMenu} close={()=>setMobileMenu(false)}/>
   <div className="app-main">
-   <header className="topbar"><div className="topbar-left"><button className="icon-btn mobile-toggle" aria-label="메뉴" onClick={()=>setMobileMenu(true)}><Icon name="menu"/></button><div className="breadcrumb"><span>MYVOCAL</span><Icon name="chevron" size={14}/><strong>{labels[route.page]||'Studio'}</strong></div></div><div className="topbar-right"><span className="online-dot"/><span className="topbar-state">로컬 작업 공간</span><span className="topbar-sep"/><Status>샘플 보컬 미리보기 · AI 학습 미연결</Status><div className="avatar">M</div></div></header>
+   <header className="topbar"><div className="topbar-left"><button className="icon-btn mobile-toggle" aria-label="메뉴" onClick={()=>setMobileMenu(true)}><Icon name="menu"/></button><div className="breadcrumb"><span>MYVOCAL</span><Icon name="chevron" size={14}/><strong>{labels[route.page]||'Studio'}</strong></div></div><div className="topbar-right"><span className="online-dot"/><span className="topbar-state">오프라인 로컬 작업 공간</span><span className="topbar-sep"/><Status>샘플 보컬 미리보기 · AI 학습 미연결</Status><div className="avatar">M</div></div></header>
    <main className="content">{content}</main>
    <footer className="footer"><span>© MYVOCAL STUDIO · PROTOTYPE 1.8</span><span>오디오·MIDI·가사 싱크·모델 호환성 조회 · 실제 AI 목소리 학습·영상 생성 미구현</span></footer>
   </div>

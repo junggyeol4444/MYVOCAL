@@ -2,7 +2,7 @@ import React from 'react';
 import {Icon,Button,Empty,SectionHead,Status} from '../components/UI';
 import {readableDate} from '../lib/schema';
 const modules=[
- {key:'create',icon:'spark',tag:'AI MUSIC',name:'AI로 노래 만들기',desc:'설명과 장르로 곡 제작 초안 시작',color:'purple'},
+ {key:'create',icon:'spark',tag:'LOCAL MUSIC',name:'로컬 노래 만들기',desc:'설명과 장르로 곡 제작 초안 시작',color:'purple'},
  {key:'voices',icon:'mic',tag:'VOICE STUDIO',name:'내 AI 가수 만들기',desc:'목소리 자료 등록 및 보컬 관리',color:'blue'},
  {key:'music',icon:'music',tag:'MUSIC STUDIO',name:'직접 작곡하기',desc:'트랙 · 가사 · 곡 구조 편집',color:'pink'},
  {key:'video',icon:'video',tag:'VIDEO STUDIO',name:'뮤직비디오 만들기',desc:'스토리보드와 연출 설정',color:'orange'},

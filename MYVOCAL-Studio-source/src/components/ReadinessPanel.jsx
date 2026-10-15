@@ -44,6 +44,7 @@ export default function ReadinessPanel(){
     <div><span>음성·이미지 파일 저장소 (IndexedDB)</span><Status ready={report.assetStorage.available}>{report.assetStorage.available?'읽기/쓰기 통과':'오류'}</Status><small>{report.assetStorage.note}</small></div>
     <div><span>Web Audio 재생 API</span><Status ready={report.webAudio}>{report.webAudio?'사용 가능':'미지원'}</Status></div>
     {report.desktop?.checks?.map(x=><div key={x.id}><span>{systemCheckLabels()[x.id]||x.id}</span><Status ready={x.available}>{x.available?'통과':'확인 필요'}</Status><small>{x.detail}</small></div>)}
+    <div><span>외부 인터넷 AI API</span><Status ready={report.desktop?.localOnly===true&&!report.desktop?.externalAPIEnabled}>{report.desktop?.localOnly===true&&!report.desktop?.externalAPIEnabled?'앱에서 비활성화됨':'로컬 실행 정책 확인 필요'}</Status></div>
     <div><span>프로그램이 관리하는 외부 가창 엔진</span><Status ready={!!report.desktop?.managedEngineRunning}>{report.desktop?.managedEngineRunning?'프로세스 실행 중':'실행 안 됨 / 미확인'}</Status></div>
     <div><span>내장 신경망 Singing AI</span><Status>미포함</Status></div>
     <div><span>내장 AI 뮤직비디오 생성기</span><Status>미포함</Status></div>

@@ -30,8 +30,6 @@ var resources embed.FS
 const appPort = "58319"
 const userAgent = "MYVOCAL-Studio-Windows-v1.8-step03o"
 
-var openaiChatURL = "https://api.openai.com/v1/chat/completions"
-
 type appServer struct {
 	mu          sync.Mutex
 	sessionKey  string
@@ -84,6 +82,7 @@ func (a *appServer) routes() *http.ServeMux {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", offlineContentSecurityPolicy)
 		w.Write(a.root)
 	})
 	mux.HandleFunc("/__myvocal_identity", a.identity)
@@ -91,8 +90,13 @@ func (a *appServer) routes() *http.ServeMux {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		io.WriteString(w, userAgent)
 	})
-	mux.HandleFunc("/api/lyrics", a.aiLyrics)
 	mux.HandleFunc("/api/system/readiness", a.systemReadiness)
+	mux.HandleFunc("/api/images/health", a.imageHealth)
+	mux.HandleFunc("/api/images/generate", a.imageGenerate)
+	mux.HandleFunc("/api/person-mv/generate", a.personMVGenerate)
+	mux.HandleFunc("/api/character-mv/generate", a.characterMVGenerate)
+	mux.HandleFunc("/api/video/health", a.videoHealth)
+	mux.HandleFunc("/api/video/generate", a.videoGenerate)
 	mux.HandleFunc("/api/openutau/inspect", a.openUtauInspect)
 	mux.HandleFunc("/api/singing/health", a.singingHealth)
 	mux.HandleFunc("/api/singing/capabilities", a.singingCapabilities)

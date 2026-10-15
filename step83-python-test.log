@@ -1,0 +1,12 @@
+test_http_bridge (test_cli_adapter.CliAdapterTest.test_http_bridge) ... 127.0.0.1 "GET /health HTTP/1.1" 200 -
+127.0.0.1 "GET /v1/capabilities HTTP/1.1" 200 -
+127.0.0.1 "POST /v1/sing HTTP/1.1" 200 -
+ok
+test_phoneme_hints_forwarded_to_cli_worker (test_cli_adapter.CliAdapterTest.test_phoneme_hints_forwarded_to_cli_worker) ... ok
+test_reject_unregistered_or_unauthorized (test_cli_adapter.CliAdapterTest.test_reject_unregistered_or_unauthorized) ... ok
+test_worker_wav (test_cli_adapter.CliAdapterTest.test_worker_wav) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 2.326s
+
+OK

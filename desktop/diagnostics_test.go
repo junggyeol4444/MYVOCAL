@@ -27,6 +27,9 @@ func TestReadinessDoesNotClaimAIGeneration(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
+	if !report.LocalOnly || report.ExternalAPIEnabled {
+		t.Fatal("desktop must report external API disabled and local-only mode enabled")
+	}
 	if report.BundledNeuralSinging || report.BundledVideoGenerator {
 		t.Fatal("unbundled AI models claimed available")
 	}

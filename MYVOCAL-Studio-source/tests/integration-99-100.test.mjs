@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {newProject} from '../src/lib/schema.js';
+import {auditIntegration99} from '../src/lib/integrationAudit99.js';import {acceptance100,ACCEPTANCE100_REQUIREMENTS} from '../src/lib/acceptance100.js';
+test('STEP99 produces blocked Windows GPU AI evidence even with valid project',()=>{const p=newProject();const a=auditIntegration99({characters:[]},p);assert.equal(a.format,'MYVOCAL_INTEGRATION_AUDIT99');assert.ok(a.blocked>=3);assert.ok(['windows','gpu','aiModels'].every(k=>a.items.find(i=>i.id===k).status==='blocked'));});
+test('STEP99 reports broken character links',()=>{const p=newProject({characterId:'missing'});const a=auditIntegration99({characters:[]},p);assert.equal(a.items.find(i=>i.id==='characterLinks').status,'blocked');});
+test('STEP100 requires unverified real hardware and model checks',()=>{const p=newProject();const g=acceptance100({characters:[]},p);assert.equal(g.ready,false);assert.ok(g.blocking.some(b=>b.id==='windows'));assert.deepEqual(ACCEPTANCE100_REQUIREMENTS,['windows','gpu','aiModels']);});
+test('STEP100 cannot pass with only hardware flags but missing project outputs',()=>{const p=newProject();const g=acceptance100({characters:[]},p,{windowsReal:true,gpuReal:true,aiModelsReal:true});assert.equal(g.ready,false);assert.ok(g.blocking.some(b=>b.id==='wav'));});

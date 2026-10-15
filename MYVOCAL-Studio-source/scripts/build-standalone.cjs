@@ -49,6 +49,10 @@ const jsxRuntime=`
 const sourceHtml=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const css=fs.readFileSync(path.join(src,'style.css'),'utf8');
 let html=sourceHtml.replace(/<link[^>]+href="https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)[^>]*>\s*/g,'').replace(/<script type="module" src="\/src\/main.jsx"><\/script>/,`<style>${css}</style><script>${react}\n${reactDom}\n${jsxRuntime}</script>`);
+// CSP applies even when the single-file HTML is opened directly from disk.
+// The desktop HTTP host additionally sets the same network-restrictive policy.
+const offlineCsp="default-src 'none'; connect-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; form-action 'self'; base-uri 'none'; frame-src 'none'; object-src 'none'";
+html=html.replace('</head>',`<meta http-equiv="Content-Security-Policy" content="${offlineCsp}" />\n</head>`);
 fs.writeFileSync(path.join(root,'MYVOCAL-Studio-v1.8.html'),html);
 
 console.log('Wrote standalone HTML:',html.length,'chars; modules:',Object.keys(modules).length);

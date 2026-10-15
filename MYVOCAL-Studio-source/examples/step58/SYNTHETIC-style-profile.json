@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "type": "my-music-style",
+  "id": "synthetic-step58-example",
+  "name": "Synthetic Example Profile",
+  "trainingPerformed": false,
+  "sources": [
+    {
+      "musicId": "synthetic-source",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "descriptors": {
+    "meanPeak": 0.7,
+    "meanRms": 0.22,
+    "activeFraction": 0.6
+  }
+}

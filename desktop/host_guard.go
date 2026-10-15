@@ -42,6 +42,10 @@ func browserLaunchArgs(url, profile string) ([]string, error) {
 		"--no-first-run",
 		"--no-default-browser-check",
 		"--disable-background-mode",
+		"--disable-background-networking",
+		"--disable-sync",
+		"--disable-component-update",
+		"--no-pings",
 		"--window-size=1480,920",
 		"--new-window",
 	}, nil

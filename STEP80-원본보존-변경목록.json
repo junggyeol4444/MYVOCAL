@@ -1,0 +1,29 @@
+{
+  "base": "MYVOCAL-Studio-Step79-LocalOnly.zip",
+  "stage": 80,
+  "oldFileCount": 512,
+  "unchangedFileCount": 502,
+  "modifiedExistingFiles": [
+    "source/LOCAL-DEVELOPMENT.md",
+    "source/MYVOCAL-Studio-source/MYVOCAL-Studio-v1.8.html",
+    "source/MYVOCAL-Studio-source/src/lib/imageToMv.js",
+    "source/MYVOCAL-Studio-source/src/lib/mvSceneImages.js",
+    "source/MYVOCAL-Studio-source/src/lib/mvStoryboard.js",
+    "source/MYVOCAL-Studio-source/src/lib/projectBundle.js",
+    "source/MYVOCAL-Studio-source/src/pages/Video.jsx",
+    "source/desktop/index.html",
+    "source/desktop/main.go",
+    "source/desktop/person_mv.go"
+  ],
+  "missingFiles": [],
+  "addedFiles": [
+    "MYVOCAL-Step80-Windows.exe",
+    "STEP79-검증보고서.md",
+    "source/MYVOCAL-Studio-source/docs/STEP80-CHARACTER-TO-MV.md",
+    "source/MYVOCAL-Studio-source/src/lib/characterToMv.js",
+    "source/MYVOCAL-Studio-source/tests/character-to-mv.test.mjs",
+    "source/desktop/character_mv_test.go"
+  ],
+  "modifiedFileCount": 10,
+  "addedFileCount": 6
+}

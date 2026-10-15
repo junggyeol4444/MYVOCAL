@@ -1,0 +1,1427 @@
+{
+  "release": "Step57",
+  "basedOn": "Step56 cumulative source",
+  "fileCount": 284,
+  "sha256": [
+    {
+      "path": "MYVOCAL-Step57-Windows-Tests.exe",
+      "sha256": "90ff0ac9993771e613b449d44ebe641c8df1e4b43769789b742df624085154c4",
+      "bytes": 10507776
+    },
+    {
+      "path": "MYVOCAL-Step57-Windows.exe",
+      "sha256": "94882907d6fe1e792d0b1a93ac2b5b016f1154856a6b86520316d105c20b80de",
+      "bytes": 7183360
+    },
+    {
+      "path": "STEP57-로컬개발-검증보고서.md",
+      "sha256": "4e84046b16b1a14624553a0cb5a9a996dc684a98fe89fccd944d9bc0cd39b4b9",
+      "bytes": 3515
+    },
+    {
+      "path": "source/LOCAL-DEVELOPMENT.md",
+      "sha256": "d529bed93f62766ee8ff756754b3731aa270683d7ebceb4022ff0a534920e96e",
+      "bytes": 15465
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/MYVOCAL-Studio-v1.7.html",
+      "sha256": "b79eaef131f5d46ed73f79a80476fcf362862fcd9fe9035dd2bc9998950877fe",
+      "bytes": 670240
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/MYVOCAL-Studio-v1.8.html",
+      "sha256": "c2cd20d880dd42425c32af026f397d37fe96cfb93b4c6f43cedc0c112b40fce6",
+      "bytes": 906646
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/README.md",
+      "sha256": "f0c399cb279084399b51e7adc8c5825eb697e2ae87982d862824f58b313f5f6f",
+      "bytes": 9925
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/BUILD-EXE.md",
+      "sha256": "112a912c8600508735ebe58cae6b63c080d5d9b70d2b85202335cc81fbb70eab",
+      "bytes": 1782
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/DEVELOPMENT.md",
+      "sha256": "30a680f2b5b8570ce049ca0f62f6bcfb4023b607896d6b979b7ed4d73eb4ecca",
+      "bytes": 4107
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/README-Windows.txt",
+      "sha256": "f4a6f5f9a174479713b3cf8fcc3d343162c3c6f8bd346b35e4e2da65591ca356",
+      "bytes": 1390
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP31-LOCAL-CLIP-EDITING.md",
+      "sha256": "4b7a99169e27b0a2cbd7b3a6242cb7e3b0e4d9a97ef80007536050b129841fbf",
+      "bytes": 1690
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP32-LOCAL-CLIP-FADES.md",
+      "sha256": "4722a68f265107b12c0e47912ad2520e2bfd842d8059060d92f2061fb8d25e30",
+      "bytes": 1202
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP33-LOCAL-FADE-CURVES.md",
+      "sha256": "c894be7614fd62aec66f88591bf26779030b3ae7b53a25856d4af61e08a71773",
+      "bytes": 1873
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP34-LOCAL-CLIP-LEVEL.md",
+      "sha256": "ce6df03a087b7d230bbe94472a1c1b6d270c3ba8a2fcc6285dee641a871a5dc1",
+      "bytes": 1963
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP35-LOCAL-CLIP-PAN.md",
+      "sha256": "d746cfc89b9c72e0cd5c3a0b4b55d02f0f24753d9a762a5b654485299afa32bb",
+      "bytes": 2614
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP36-LOCAL-CLIP-DUPLICATION.md",
+      "sha256": "006058a1cb4ff5d294bd80dd281265a7125788a6fa1b0e432339ec447ebc4b73",
+      "bytes": 2429
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP37-LOCAL-CLIP-SPLIT.md",
+      "sha256": "82e04c482e885778ab3eb9100694c4a1cec7705f0804157177394ba97a1c52c7",
+      "bytes": 3329
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP38-LOCAL-CLIP-UNDO-REDO.md",
+      "sha256": "0e52a9f7dac60808fe9fd2483406cdbf670231dfe58e6b5ed9025783ba26b70f",
+      "bytes": 2234
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP39-LOCAL-WAV-PEAK-GUARD.md",
+      "sha256": "353b25c8ead379d8f3f76b9a68cadc15a34e6f9d94aeb53653649c6fef26f9b7",
+      "bytes": 2536
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP40-LOCAL-WAV-24BIT.md",
+      "sha256": "017915149f97f88279885cea540be89c787227239946c27ab97a34df5c96ec4b",
+      "bytes": 1257
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP41-LOCAL-WAV-48KHZ.md",
+      "sha256": "aa34fcbe975549d496ee9519f0459f71bafc5b93e65e9a3d1bf9548d30ff9ec7",
+      "bytes": 1640
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP42-LOCAL-WAV-MONO.md",
+      "sha256": "91d6bf707ace2f7ca2cacb9aeb04f43e7667a987a57f82e378f6a4893f8b63b6",
+      "bytes": 2147
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP43-LOCAL-WAV-TRIM.md",
+      "sha256": "a47c2136f61aa24fa518eadeb9c67fb0460ad6766082e56161aadb2442171b17",
+      "bytes": 1740
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP44-LOCAL-WAV-EDGE-FADE.md",
+      "sha256": "d5ecae3cb9208fe8b91aab02642632231860f2d1ad554f8f1be3cc30d0df8b6a",
+      "bytes": 2047
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP45-LOCAL-WAV-PEAK-NORMALIZE.md",
+      "sha256": "c70b4d390415757ff62e956f60450fa333580d409ed131a4b3173ae362056e39",
+      "bytes": 1467
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP46-LOCAL-WAV-TPDF-DITHER.md",
+      "sha256": "21d6585ad2ac27a64c2642e1acc4d0eb50de2caba79b499990c14cf378a2a76e",
+      "bytes": 2108
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP47-WAV-RANGE.md",
+      "sha256": "21e8c93a8920e62914c11f70695aea03636cbb73adebfeac915a3efacb9a88bb",
+      "bytes": 2075
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP49-LOCAL-WAV-EXPORT-METER.md",
+      "sha256": "39e9be76b1e9711031fa64743dac120b8e0cdaf3f8e9afaab6fceab96323f0e3",
+      "bytes": 2079
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP56-ARRANGEMENT.md",
+      "sha256": "b9cdedb527bf2132e1883d426707d8755967d5e65b87a94461120fc368fc872a",
+      "bytes": 2362
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/STEP57-REFERENCE-ANALYSIS.md",
+      "sha256": "4ba2ea7b97fdf897e82ef21446f3a0cdba40e3d66a36b70e3c7797e19c478405",
+      "bytes": 2465
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-0.4.md",
+      "sha256": "79b39ddd04c97c2724c30302b55060a052b3b4afc562cd01d66feaca8a723038",
+      "bytes": 781
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-0.5.md",
+      "sha256": "c531032ff187be31690f4dbecc0ed4ae1916f922d72e78be4519c5888b954beb",
+      "bytes": 1123
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-0.6.md",
+      "sha256": "12708703a9f53ede4d9624077a74ea8e6653489e326993af9e43735fc44d6082",
+      "bytes": 2026
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-0.7.md",
+      "sha256": "b21ebb7bbed9640b9575756783ff5f06b234b8ba7a739b453d34ba859704404b",
+      "bytes": 907
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-0.8.md",
+      "sha256": "fda468c8efd143ef061d4720eefe77e708a70fdea89c6fa310fcdd184e567d94",
+      "bytes": 1070
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-0.9.md",
+      "sha256": "21778cb58515d15b2c6c1f3b90bb18277857cb094b6e68e40ad58ea0897cec72",
+      "bytes": 1584
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.0.md",
+      "sha256": "bbd6aeae894c9dd58b73b158f1cde31d50bf758003a200fe24e294bcf7b74a1f",
+      "bytes": 3371
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.1.md",
+      "sha256": "9292d4474f279f7fc60ea257f3eb5782237ac6808e3eb13d6d006dd66092ca9a",
+      "bytes": 1487
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.2.md",
+      "sha256": "b83db3e1919b3363aa8797e8d78896b5b0539b04ece1123411d44d0f8a1c493f",
+      "bytes": 692
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.3.md",
+      "sha256": "6ad41122516207e115b6855b06b3b795cb2937aa18daec7b3a1a50246255acd5",
+      "bytes": 3136
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.4.md",
+      "sha256": "6ce80593d65b741ac5dd9d9bece7630a5736f6483cf2444fa186036a0f973a51",
+      "bytes": 2538
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.5.md",
+      "sha256": "00665a8f653af2c7c86a7a8fc32a5fa48fa4586cf4ec94cca349c2466ba2571a",
+      "bytes": 3325
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.6.md",
+      "sha256": "cdb2cef2ffae4dc7e67bddf48e1eb2925359db4f0b2992b1b1470b49993e5091",
+      "bytes": 1319
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.7.md",
+      "sha256": "bd6df73bd120845ff008d09f3aec4738431fadc4d857a9954d3fdbd47e5d3bd0",
+      "bytes": 1569
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/VERSION-1.8.md",
+      "sha256": "af33acd568f378b9b8ea553887cd0ab767c39a608e001efbbc8c11387348b475",
+      "bytes": 2190
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/preview-v0.2.png",
+      "sha256": "dec69e76e735befb343826a676f02e9ae4d845e78f383f9b6e0693fc390c7ee8",
+      "bytes": 177761
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/docs/preview-v0.3.png",
+      "sha256": "292dbcbe55fdc116c22d68bcac21acbba73f1746af2d8a6b8a2e2e6791c4735d",
+      "bytes": 201933
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/examples/Step56-SYNTHETIC-DEMO-arrangement.mid",
+      "sha256": "6da968f59273ba9b512fad708b8476ed0714472368c1efc2e2e837fd2be9fc10",
+      "bytes": 823
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/examples/Step56-SYNTHETIC-DEMO-profile.json",
+      "sha256": "b9af0e70077ef50d4120dd057e4a65a65c1ac355bcb222add92d6abd6bb6ca7c",
+      "bytes": 558
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/index.html",
+      "sha256": "f0a7e3db76886c5c8eef0d647f75a69d63b1c27169b5cc8c06dd8452a90afd1c",
+      "bytes": 339
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/package.json",
+      "sha256": "b054f8e2210a23366d7ad2a068bf7459305adec1bfd4ed43ecef75ffea24075c",
+      "bytes": 476
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/scripts/build-standalone.cjs",
+      "sha256": "0ccfe8bf9579b9fa44ad2af1e79952a0a54dabf26ff5c73680e420ca35c5942c",
+      "bytes": 6054
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/scripts/demo-wav-dither-step46.mjs",
+      "sha256": "80aebb2166576a5df8851192e32ec46b348bb4fe818195dfd7a563781a19e9f9",
+      "bytes": 936
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/scripts/demo-wav-edge-step44.mjs",
+      "sha256": "59835f1e08cd49f150bb9dfb049001baa105aed386bdcb3c238b348e9f55d3e8",
+      "bytes": 1000
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/scripts/demo-wav-normalize-step45.mjs",
+      "sha256": "4cdfcfcb181c74de308b563094d2e0423f3fde836198b6775ddb259b5eaeb440",
+      "bytes": 1238
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/scripts/demo-wav-range-step47.mjs",
+      "sha256": "bc9b41c3d5d49a0eb6ef876e3e5f0b47d9b4d0c929d7707d4543c32846b0da34",
+      "bytes": 1769
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/scripts/step42-wav-demo.mjs",
+      "sha256": "c5050bf49a05ea4f043c2e47a23cb9614f66bd3bcda694586a04ce3ab760d434",
+      "bytes": 995
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/scripts/step43-wav-demo.mjs",
+      "sha256": "18ea890d502486564d5c2bcc14438e0df5ffacf50f8ef8d66a65a5bf34f4ee9d",
+      "bytes": 1323
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/App.jsx",
+      "sha256": "0fb124ed4a5db9959dd5830bc68f6ef2c95cec7a54a744450f99c30fa395492f",
+      "bytes": 7721
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/AudioWorkstation.jsx",
+      "sha256": "814dfab83296d46fc4b4927c2fed6102639fcc5ef25fc6004566704b24919d9b",
+      "bytes": 33977
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/EngineManager.jsx",
+      "sha256": "c16e0e694aec4bb35bbb0f2fd2975f911dbde9a80b3342a2ddae9f5245443170",
+      "bytes": 4284
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/GenreMixEditor.jsx",
+      "sha256": "7ff0bd80fb687a45a063a2ec899f08ad795a70de45c6eda0bd2952c2276713ff",
+      "bytes": 1989
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/LyricSync.jsx",
+      "sha256": "cdc4f910baf6c42306d3c4964c75ce6f059ce13f5c0d80fc1d5e4ae6ebe76330",
+      "bytes": 8002
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/MidiEditor.jsx",
+      "sha256": "d979eebcf1192cc268b265f4da51caaee9e3c1cbc1898dc3e7f7148b8abf3f5c",
+      "bytes": 16135
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/OpenUtauExchange.jsx",
+      "sha256": "48f706fe96f0df8f0b0e36f710cc8adee4abca8e495e1f9f173c157c8b5b2bc2",
+      "bytes": 22326
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/PhonemeEditor.jsx",
+      "sha256": "e31f3440c8b370e81131f4712b9d44363616f68336ef90e7e64feb92f9f345c5",
+      "bytes": 5610
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/ReadinessPanel.jsx",
+      "sha256": "09f4cf5d0668b32e12f8028862d8b776546d193a05c721fd022927586e8cdaca",
+      "bytes": 5296
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/ReferenceMusicPanel.jsx",
+      "sha256": "807d5fee1bbcdc5eb841a9c310db0714924235c5a55742b3db7136dd5fea8da9",
+      "bytes": 6421
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/SectionGenreEditor.jsx",
+      "sha256": "9030a16889ef5c9a1188b0258b690718316720caad8188896e85b1fafe38f10a",
+      "bytes": 2639
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/Sidebar.jsx",
+      "sha256": "5550c5793e725eb0674105fea2340bc9f0dd83bccf0c4576361b55370660c476",
+      "bytes": 1539
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/SingingWorkbench.jsx",
+      "sha256": "dc092913107ad34ab8544379e8470f3e8e3fb408eac7ac8f77178d1e6adc51de",
+      "bytes": 21539
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/Songwriter.jsx",
+      "sha256": "dc095d18294c0b669abd588aec00568e7477d0e39dc713c9282797df376b3794",
+      "bytes": 6667
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/StyleArrangementPanel.jsx",
+      "sha256": "35cae6d8e2e2242e79ec9957de9c09f60a2c89321f8d98eaa0c02550a9292096",
+      "bytes": 5637
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/UI.jsx",
+      "sha256": "a99e9924f40ad9ad77624bf6dc23d0f3c712013509ab83a098edb5aff1a29a00",
+      "bytes": 5232
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/components/VocalPreview.jsx",
+      "sha256": "f99f9e14214b50c3082552dd8f2e2767310b1a5d021aa5c04aa0b1e082922b1d",
+      "bytes": 7118
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/assetDb.js",
+      "sha256": "a79ee7571103bf21a8e0eadcbb06d8d9ec31c9a1726a38b2a933fcffe0b14acf",
+      "bytes": 1656
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/audioEngine.js",
+      "sha256": "3c894cbdd92ac6bd8a799d40879007f79e6f40b9bedbf1c509b113fbbf64c6b1",
+      "bytes": 11799
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/base64Safety.js",
+      "sha256": "0c80c13fa31f291cc529a67a9d6b57d74d29e4aab74f856cce1fb85dca0ea611",
+      "bytes": 1996
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/bundleSafety.js",
+      "sha256": "c427c8e3e8c28dc19dde9b2e01987ec4ebc7b80b2a91d23377a31d5b22a67ec9",
+      "bytes": 4758
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/clipArrangement.js",
+      "sha256": "31a29c6f588d1a878a38d944934257b426485354b126480e36a784156304471c",
+      "bytes": 4766
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/clipHistory.js",
+      "sha256": "2f1e9f9251149de05591c7b335f1b32b49b570141eb9f5bfc5a57bb0fc1fa5e4",
+      "bytes": 3305
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/clipTiming.js",
+      "sha256": "074f5812674a11b5f763e2d04284e600351157b98e28a970054de7fd641c1118",
+      "bytes": 12708
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/composer.js",
+      "sha256": "f0e8dd33b51329967d67b2e925b9d1d7daa18a4e1f40672e3d26cb1431ddac50",
+      "bytes": 12583
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/genreMix.js",
+      "sha256": "b4448d11d5c359518bef89ce28c90bace9c0fa58d916f3eb019570569fb4919a",
+      "bytes": 2366
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/genres.js",
+      "sha256": "56292198700c13252d0b1687ebbebe09b3a0e32aa0014ace5ed58466fb666870",
+      "bytes": 221
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/learningRights.js",
+      "sha256": "b38ae77b96428ae13c343d58836ac2b04198f81ee1bfda1bc1810fe00ed1726d",
+      "bytes": 1572
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/localVocalSampler.js",
+      "sha256": "a82a72955bfece0a09b924b87e5232f32100d5bfae058a53a8a4b57e4a3c2429",
+      "bytes": 8209
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/lyricAlignment.js",
+      "sha256": "3ffb108ed13bf6a9494be03d3499f7a19c146ca05779f0a077ce2d23ca6d9630",
+      "bytes": 7423
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/midiEngine.js",
+      "sha256": "0662ec38aee7965670efe4cd18d927a8e254f342bd61f9aa05cd1193602bbfb1",
+      "bytes": 4093
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/midiFile.js",
+      "sha256": "62672ed0dd9fd8396db9fc1a6453580eeb352c0a320a8067cb1880163e40520b",
+      "bytes": 5312
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/mixPeak.js",
+      "sha256": "c86161da90c690b15157cce2400640270c3e3988242abaa4331555558406fc3c",
+      "bytes": 2824
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/musicLibrary.js",
+      "sha256": "2e14ae3800ea4255cf3182ca6d0704fd7362c30bbfd250dd023e74b2782825bd",
+      "bytes": 2214
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/musicStructureAnalysis.js",
+      "sha256": "82f783686fd4861bd666801e13ac5bec9eb4a9a9a55a46f78e58c7833edfb14a",
+      "bytes": 2297
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/musicStyleProfile.js",
+      "sha256": "cff60448a8c92d4d5d0e50ee4f1aaf9557a75fba53d86f3861a79cfece859a6c",
+      "bytes": 2781
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/offlineVocalGuide.js",
+      "sha256": "192d11a75f815acadbccadfa52465f4cb18e4bf282ff6791c1da800c6f49835e",
+      "bytes": 17413
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/openUtauExchange.js",
+      "sha256": "3377998b8be7fa249900c8ba0ba93a02ff8147c12a64d75b5c3e36fae39082bd",
+      "bytes": 5823
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/openUtauWorkflow.js",
+      "sha256": "7f45924fec986708b1ca20940575886ef6e4644a0f8fa5ad96f5d4795ec12f71",
+      "bytes": 6002
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/phonemePlan.js",
+      "sha256": "993cde5dbc006faa423dcaab188b961bafd173fd4fc32d2afbf04853c65bf661",
+      "bytes": 5716
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/projectBundle.js",
+      "sha256": "7d152fdb6b2e726760f8933c09736df56008143172f4d557ecbabe2a3f8373ec",
+      "bytes": 5971
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/readiness.js",
+      "sha256": "808ce56a6b4dedebe37b7bcda892877e6d1da30aa2c4395d77b964693175891b",
+      "bytes": 3071
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/referenceMusicAnalysis.js",
+      "sha256": "5788f84e04f8234189e35bb2fb784d01c1db2b949c15273e55deece8e4e3d8a4",
+      "bytes": 5911
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/schema.js",
+      "sha256": "8665e317dd0eb480b9b9cdbe57f9a5bd89f2607cdc342444f55e9526c8197d38",
+      "bytes": 3206
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/sectionGenre.js",
+      "sha256": "8544ff1f8e63466397c6c1ae08000886f68e7fd7285c1a7fb74738d7c11bcfb1",
+      "bytes": 2182
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/singingBridge.js",
+      "sha256": "bc4de132cb1e046e4cb00941258129cc5b6e6a13dbb54148dbf88a756ff0893a",
+      "bytes": 3832
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/singingOutputValidation.js",
+      "sha256": "9d3142066322abd4be5664dbcbf1e901c73d4fdad7d4bfb28ede0452add9c1e6",
+      "bytes": 2301
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/singingRender.js",
+      "sha256": "84ef545b3ee84ffc4eb8295d0c1adaabcfbbf3d518f819d5c04b617b506ac374",
+      "bytes": 5422
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/store.js",
+      "sha256": "998ed5cc7e77d23298d0dc1a22b378c8aaff6ea8776adeaf175d4b2c5ff3e7a6",
+      "bytes": 3435
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/styleArrangement.js",
+      "sha256": "daefb241c0b7040144edbbc4e70a901b399629a26ecf967934cd9318c2a68d4b",
+      "bytes": 8213
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/styleComposition.js",
+      "sha256": "838b46f313d1e06b560f32f7bcd9e1236a2c3373cfe2a632aa5c2d152bc0217e",
+      "bytes": 3763
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/voiceAnalysis.js",
+      "sha256": "e160094a8ebf7102f9791f8e206b55eb8f7e6be713454f4e4d3e401f2ae4d889",
+      "bytes": 6407
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/voiceDataset.js",
+      "sha256": "26965d5ebee4c64ea90a1c4b673d4c4f1d482b32680357777286fe8d31658a37",
+      "bytes": 5922
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/voiceTraining.js",
+      "sha256": "13ffdade764154316e879bd47dedad68fdcebb734fa58b0fcdad5c45aea3b870",
+      "bytes": 8621
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/voicebankAliases.js",
+      "sha256": "9aafcf66f098a0e06c787cea50d4cc80b4bc880e4c7dfc55c193965e784a9d1c",
+      "bytes": 5094
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/voicebankInventory.js",
+      "sha256": "a78cfdae8331bb00b28fed1a90f2f1bdce6a455901f6ad545dd578fa7789d5ed",
+      "bytes": 4040
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/wavExportMeter.js",
+      "sha256": "562d4cc09951504574614d569c82cd6a1f0912cb66797017301571ee8f7cfa37",
+      "bytes": 3017
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/wavExportRange.js",
+      "sha256": "04bf8a9b8d40d527de7aab01ca29eef5c2667bd6ccd364cd68316cd482f50678",
+      "bytes": 1819
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/wavNormalize.js",
+      "sha256": "5deb811721b4f787ca660a2326d5db741b2ef26bb4f231be0588c41d764f8573",
+      "bytes": 2926
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/wavPcm.js",
+      "sha256": "b42df7408cec80082dd3b196ca97701c35e40d3955ad3d3ddff2dfb770a4a30d",
+      "bytes": 6815
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/wavTrim.js",
+      "sha256": "e307b129ad32fdcdeae9d2f2b547feee9357ea28310f485887264251d6198bfd",
+      "bytes": 2367
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/lib/zipStore.js",
+      "sha256": "d1f19b860ad70f32f7ac12291735c187d6408b181c9052707cf60bae51f0f11e",
+      "bytes": 2083
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/main.jsx",
+      "sha256": "06aca73441cc7d445383c6e6c11287a0bd176f4e1f2b93929900f63a4bfc5c1a",
+      "bytes": 179
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/AutoCreate.jsx",
+      "sha256": "63662c08809966bea1dfa44268b181cdcee62c297870cbe0740a2066fa4529ec",
+      "bytes": 5361
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Characters.jsx",
+      "sha256": "14ba9076ba430e63d49c5f88d2988bfea41b2642fa6351c54fae1ec818323a84",
+      "bytes": 5167
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Dashboard.jsx",
+      "sha256": "95d48f9283f2efb670cdc9cc159b5e9669e9ae68cd8adb9922f2191c29418de6",
+      "bytes": 4825
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Learning.jsx",
+      "sha256": "44a5d33594b8ea615f7c52f73317c6787685f80ec52fbc8a32d1927d1fd7eed6",
+      "bytes": 5168
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Library.jsx",
+      "sha256": "3bbc93c3ce120d81da7c19f5ca3b52522ff21c4ab20640a86d2cb366deac689b",
+      "bytes": 5398
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Projects.jsx",
+      "sha256": "60219292522e56c05c6fd7aeaee6618eb0dac0d8411b6eced5213d9b07265e90",
+      "bytes": 3299
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Settings.jsx",
+      "sha256": "3f6763f88925b4a616efc069ea3b51c75aefaf0c82ea9c2fe03eeb2c3a4187c4",
+      "bytes": 5798
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Training.jsx",
+      "sha256": "efcabbcaf30ec65ce4a6d37120e429292def7ee9a9fadd4fcd7bcb771841353e",
+      "bytes": 11542
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Video.jsx",
+      "sha256": "fb976835acee0433a4353e95f103f6a2e5174eddae9c240d15d27233adfee230",
+      "bytes": 6014
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Voices.jsx",
+      "sha256": "2bb6114550d37f344165570c44232607355ee2b9e2600b08fb8b65421949d7f1",
+      "bytes": 19818
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/pages/Workspace.jsx",
+      "sha256": "11c8d615da771cb09791e56bc542050f816c0dee6d9954aa3109e7375a73d5f0",
+      "bytes": 9727
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/src/style.css",
+      "sha256": "a7fbfa816cd5775be381de028b8dd9bbb8e2dc33121835689a90baba8508574b",
+      "bytes": 69979
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/base64-safety.test.mjs",
+      "sha256": "65729bec42ef4cdccc03e0688ac260500566077b73a1dc9f99de6298b1ca3495",
+      "bytes": 1932
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/bundle-safety.test.mjs",
+      "sha256": "13582f5ebab9f0f1dd3c0f32ba2d2fc30985daa3d1811f3a00d899245d54fc1a",
+      "bytes": 5030
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-duplicate.test.mjs",
+      "sha256": "5449bc673ef0a9e44b13bb810ded6221e8378601c18de3e34a95b7bdedeae729",
+      "bytes": 4939
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-fade-curves.test.mjs",
+      "sha256": "61e02eadc1eb0e82d182fdd13e80c4ed34fc5ec3b8a974acf577159242c89e73",
+      "bytes": 6505
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-fades.test.mjs",
+      "sha256": "676b0619d7792e240c5bc04cb2b39c900243e0e9d43c2b42b92cdff8f51ad4d2",
+      "bytes": 6317
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-history.test.mjs",
+      "sha256": "7bc770009617f8c7a1068e2e410e2aab1776cd433d457c0af4d23a444645434d",
+      "bytes": 7713
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-level-integration.test.mjs",
+      "sha256": "a109ea0d7e6b716d106e3232c699029206516b77249a2e2e0febca7d9e251238",
+      "bytes": 11171
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-level.test.mjs",
+      "sha256": "b16ae34c17bfb5b29566b43c6f63de6bbe60e56e01c9d4b7f6d882b3ef18f23d",
+      "bytes": 5147
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-pan-integration.test.mjs",
+      "sha256": "bf0c720893ddd9cb511917c18626911abe6d1c450876889fabacac002e080f50",
+      "bytes": 12868
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-pan.test.mjs",
+      "sha256": "6c76cd65c8f617ee6b3be8a30f97769d2c8162f3f87f48209a9a766873bcbae6",
+      "bytes": 3978
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-split.test.mjs",
+      "sha256": "c054053b174c8347775b40f51c4f6984f53461b41131b58a26498884fb0510e2",
+      "bytes": 7202
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/clip-timing.test.mjs",
+      "sha256": "8f526ad48b0e81faf6bb006d4aec1aeccd3eab9a3bbd5b555b9cb03ad06b715a",
+      "bytes": 5121
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/composer.test.mjs",
+      "sha256": "77f842c6cb34364df792455b40b12fceef40663ae69970b06ee206ed2822b2ea",
+      "bytes": 3042
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/genre-mix.test.mjs",
+      "sha256": "3b1f9da934590586aaef4ac2afd988cbb664cb14177bda696d7847ff48f9cc48",
+      "bytes": 3663
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/learning-rights.test.mjs",
+      "sha256": "5164b5055760a15c95f962869b34dc65320989ee1e56d13a4ffc9dfad82e01a5",
+      "bytes": 1994
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/local-vocal-sampler.test.mjs",
+      "sha256": "d48f8abd5dd30080c472239337d2ba51721c946343fc399948cc98be4abc202a",
+      "bytes": 4274
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/lyric-alignment.test.mjs",
+      "sha256": "e747c74e8f20eb1dfb73ce017ac1202dd725e76565b57cf29b99664e94a3579f",
+      "bytes": 4118
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/midi.test.mjs",
+      "sha256": "d9a39e299f427d39e5e5491a19c042084d4e204a19abdfdf1f66b8592cd249db",
+      "bytes": 2042
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/mix-peak.test.mjs",
+      "sha256": "46243dd7d639096694e7dfb99be4696757c60b8d196f7d77bd08740e3e112f5c",
+      "bytes": 2905
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/music-library.test.mjs",
+      "sha256": "748537772423fcc6b32e433aa2ecc51fa6784e589969b04839bcce1877766479",
+      "bytes": 2229
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/music-structure-analysis.test.mjs",
+      "sha256": "85c77f59bf7bcc837dc3cda2ab3f30f6a65fe80ccb68789ff1d2836359e25dd8",
+      "bytes": 1933
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/music-style-profile.test.mjs",
+      "sha256": "e9df31552d3ab4a47d4477a501fc93ab4476fcb7a73f499e05661bf8dcf98570",
+      "bytes": 2740
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/offline-desktop-policy.test.mjs",
+      "sha256": "ebe49707e61a8f7f14f3c207dba7b1347c602fc375d7a76357dd58a92fd36807",
+      "bytes": 1972
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/offline-guide-placement.test.mjs",
+      "sha256": "09902e756964dc359c26327164d60936286824fb408888ebf39811dcb4ee543a",
+      "bytes": 3794
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/offline-guide-selection.test.mjs",
+      "sha256": "2201823faab42ab6ccfbfbb2ab9c0167e38c58aa97e0d8b77d0bc52fe74607d5",
+      "bytes": 6339
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/offline-phoneme-timing.test.mjs",
+      "sha256": "6e63932bd34e83f650be69b645387c987143706a1d9b9a329c409cdf19853d23",
+      "bytes": 5100
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/offline-vocal-guide.test.mjs",
+      "sha256": "a9b9a36669518024f7c4adf29cb5710349cf53abd480bd4b86ea5beed8f0bb85",
+      "bytes": 10454
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/openutau-exchange.test.mjs",
+      "sha256": "9855e595f9c4195faf44793492edab1522e2135c20707a18511338601cdad591",
+      "bytes": 2365
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/openutau-workflow.test.mjs",
+      "sha256": "a69c49528d1818dcaa39d92e41f6c7c0ec35e494d350a28196048d7d1760b087",
+      "bytes": 5358
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/phoneme-plan.test.mjs",
+      "sha256": "939c627ec41da42d2254fca6bb6bcfb827a61c48f770a40a9b02c0b833fb8fce",
+      "bytes": 4636
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/readiness.test.mjs",
+      "sha256": "644ab131ad8f5c8adc3440d09c876e95a8ec03db1550ec788a90c2e1f01de077",
+      "bytes": 1016
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/reference-music-analysis.test.mjs",
+      "sha256": "2cccc805446d89bfb4d93f1621c9408c55eaa763b95bf76541d225a2b691fe7a",
+      "bytes": 5194
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/section-arrangement.test.mjs",
+      "sha256": "2c7379c68563c96900073898767c447280fa46781d6958278435a6c9f415b2f4",
+      "bytes": 5945
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/section-genre.test.mjs",
+      "sha256": "68ff823b6e28d80ac995dc042d2b871a74990694fc35879a3ba52d10b670c636",
+      "bytes": 5332
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/singing-bridge.test.mjs",
+      "sha256": "e8c5606d9c65c8f4b9e0e45a7d2923d07433104d0ab660dcb80c9cab11dce467",
+      "bytes": 1916
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/singing-output-validation.test.mjs",
+      "sha256": "ccccc822f443cdcbc13dae51ed4c0551eb4fb620e810d060ffec25f8f16d6e86",
+      "bytes": 2283
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/singing-render.test.mjs",
+      "sha256": "3a325e03f5a6fcb40ec18f467f0c08055bd24b5bac276f57ec1be13dd01b874e",
+      "bytes": 2368
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/standalone-parity.test.mjs",
+      "sha256": "4767a5ec8d2b6e140e07386cfa5b50875481179bd8d000a7f12f9cdd69fdc97a",
+      "bytes": 754
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/storage-safety.test.mjs",
+      "sha256": "6f39b8c1ff662703be65a6ce476070ac20a111a7840d6abc7124cd030f3cfb4e",
+      "bytes": 3249
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/style-arrangement.test.mjs",
+      "sha256": "b86144ed27c102d7a709670082a61df22bad8df6a160a86708cd8cfcbdeefab9",
+      "bytes": 4734
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/style-composition.test.mjs",
+      "sha256": "af1399b700d7dbec7f6749a0ec86f3614d4df67824f2407ac2edabfd7b624a16",
+      "bytes": 2384
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/voice-analysis.test.mjs",
+      "sha256": "ce3bce01be7d8216a85fe04b0e846fcaa778697d0123c8958ff64d7a08981079",
+      "bytes": 1475
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/voice-dataset.test.mjs",
+      "sha256": "6a1c476b313170018f3e4fd97d6a3d3f2ec5bf1e579dd36433cf68f083068a3c",
+      "bytes": 3094
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/voice-training.test.mjs",
+      "sha256": "4a9ecd14a8235f71406a3811129d62b61db2fecc5570390842f887a0021798ea",
+      "bytes": 3402
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/voicebank-aliases.test.mjs",
+      "sha256": "861e405a61f2ce6126bdab6fc86028deafe177fd7f82e1fb7d038e704f85bb7f",
+      "bytes": 3007
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/voicebank-inventory.test.mjs",
+      "sha256": "0c245a73965f80725b6da80c30b771bb915bb0d7e54ab5ca040c1b8636fb17b1",
+      "bytes": 2414
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/voicebank-state.test.mjs",
+      "sha256": "af3c720353a75f7ac398c45abea6143d9c829d32e6c8513eeaaef445a589bb9d",
+      "bytes": 1080
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-dither-integration.test.mjs",
+      "sha256": "3a7279856b13cf0c7119f38ba7bf1162ddf03b537f1313b2a6b8b5c3cc7972b3",
+      "bytes": 4253
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-dither.test.mjs",
+      "sha256": "19996526fd822392d4191cad622b26836a29cfb09853b3de878bb8337b86b5fe",
+      "bytes": 5241
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-edge-fade-integration.test.mjs",
+      "sha256": "af32cb28f79c30e48eedcf2fa2d5a1ca8462ce4d4fcd1a9821b788b33ae93bdf",
+      "bytes": 3780
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-edge-fade.test.mjs",
+      "sha256": "9d177b4db8b147f532cb5ae5df55f0eb201a1ae34e3e6ef0441f9643edd6d069",
+      "bytes": 4900
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-export-meter-integration.test.mjs",
+      "sha256": "a57616ddd3661fcf7fd1b5ef51af909389c90bf98d7a1b9d51963ac4766433fa",
+      "bytes": 3605
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-export-meter.test.mjs",
+      "sha256": "bd3a17f7440ad237377a4c87576764a0529a73db690cc7f31363410db65b9e51",
+      "bytes": 4040
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-export-range-integration.test.mjs",
+      "sha256": "605c5f3788b023e72f53ec9321accfcb2a7f60f87f7556fa82e8f0f0c653417b",
+      "bytes": 5920
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-export-range.test.mjs",
+      "sha256": "3b558632bb028364edd07b7ef99a0bf09b8b25b5f699d7e3f9f8485750ced073",
+      "bytes": 5458
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-float32-integration.test.mjs",
+      "sha256": "b73d9c5994f7d1c387dce0b000da35d193962a821a12aa8058595c8489ea999e",
+      "bytes": 3740
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-float32.test.mjs",
+      "sha256": "ea64483fe649496a92d6c56f5aec0602631bcbc4fbb18d2551c78876948c78bc",
+      "bytes": 4885
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-mono-integration.test.mjs",
+      "sha256": "17b2deb396a217cb7b774b2696135aefb5c3e961a3027df44badbc38de3ed364",
+      "bytes": 3763
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-mono.test.mjs",
+      "sha256": "75622be7dd558c5116532a0bf1388cac4e77a54bb49f600d4243c7cf0789f1e8",
+      "bytes": 4610
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-normalize-integration.test.mjs",
+      "sha256": "d50cbcd7f4c1fa75ba5f71c9370ff8db1f657dd092dff3985c20263d9c5f5cbb",
+      "bytes": 4314
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-normalize.test.mjs",
+      "sha256": "4fa8ab68f3218071b2b1de591cd56170bcbcd62b22803de99d9e8888edaff5c1",
+      "bytes": 5416
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-pcm.test.mjs",
+      "sha256": "b52a443e6bbbf4bc0f5e6aa0805b832296abce80237f1454f1499cc0d75a6fee",
+      "bytes": 4938
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-trim-integration.test.mjs",
+      "sha256": "7b57b7d9a8e065a0073c85b5c959853302f24b9dec8c93ce78d541e61d541816",
+      "bytes": 3985
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tests/wav-trim.test.mjs",
+      "sha256": "89a85eb31ca6439952e3def4da9028c52c95508cc957df76c3be09d5e31aa646",
+      "bytes": 6025
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/third_party/react-MIT-LICENSE.txt",
+      "sha256": "f657f99d3fb9647db92628e96007aabb46e5f04f33e49999075aab8e250ca7ce",
+      "bytes": 1080
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/third_party/react-dom.umd.min.js",
+      "sha256": "c7a65157caebd9af7e108f1f1eb8b6e2c8fafb141d0f4c2a4d4dfd851c52ec9e",
+      "bytes": 102890
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/third_party/react.umd.min.js",
+      "sha256": "de59b0d4504aa0350c13775fec9b78859f3eda83dea21d60dded98bb7866d54a",
+      "bytes": 6588
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tools/demo_singing_engine.py",
+      "sha256": "a5d24d935e56743a943f4d75127d076f7efdad4c1dffc31c49dc6101fd046c53",
+      "bytes": 3708
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tools/generate-offline-phoneme-demo.mjs",
+      "sha256": "9d09b773fa35888db66fc498f670e72179d443567202754cc916016fc385ee6a",
+      "bytes": 1615
+    },
+    {
+      "path": "source/MYVOCAL-Studio-source/tools/generate-step56-demo.mjs",
+      "sha256": "f37b4080d2b53db126f712c7899f229fdeb4a03a5103a291ec2c8d6fb947a886",
+      "bytes": 1485
+    },
+    {
+      "path": "source/desktop/NOTICE.txt",
+      "sha256": "871a12cf7433e1c43c8f28d0fc1a1b195984bc30bad2e5f41991836d9dcc284b",
+      "bytes": 191
+    },
+    {
+      "path": "source/desktop/STEP03c-README.md",
+      "sha256": "34ef7521bae225ee1615e4588d6a6214e83e02b7046be9637ebbbee7b61fc4b4",
+      "bytes": 2123
+    },
+    {
+      "path": "source/desktop/STEP03d-README.md",
+      "sha256": "1a2bcffc5433bdf56418c8406cfaf443c22a0fb339186416724e425062ee0de2",
+      "bytes": 2856
+    },
+    {
+      "path": "source/desktop/STEP03e-README.md",
+      "sha256": "39cd825a4a6d44a88c295f12a6bf54a963c4183c0bffaf7703947090085517b5",
+      "bytes": 898
+    },
+    {
+      "path": "source/desktop/STEP03f-README.md",
+      "sha256": "0609d886f4675f93093c88547b3335a44c2fe7f08d77bea38501d3759c912bd6",
+      "bytes": 1657
+    },
+    {
+      "path": "source/desktop/STEP03g-README.md",
+      "sha256": "c9609365c5290e930285a37fb98b516ca19d404560e912aed8327f57d8c91ed9",
+      "bytes": 1013
+    },
+    {
+      "path": "source/desktop/STEP03h-README.md",
+      "sha256": "11b30b9f0df2d8f0eb11a1481ba65b71214b8a46ab45ff280961c2d1fd760e55",
+      "bytes": 872
+    },
+    {
+      "path": "source/desktop/STEP03i-README.md",
+      "sha256": "1caed4e45b6566d79c8dbe9be084abcc8c1445dd6a6989b4829caba5d83e7515",
+      "bytes": 717
+    },
+    {
+      "path": "source/desktop/STEP03j-README.md",
+      "sha256": "e9eeb5756bcbd4f065bd70a16341e50d9eff5d4c8011d61a9568bb80ed101029",
+      "bytes": 1237
+    },
+    {
+      "path": "source/desktop/STEP03k-README.md",
+      "sha256": "2c381e2ae44cc1afae0385cef1d22eb7b324d0d736d0dc88deab83cfdfdaebab",
+      "bytes": 1315
+    },
+    {
+      "path": "source/desktop/STEP03l-README.md",
+      "sha256": "c04247487ffd470c34764980999ab49b450f02773fc7b7dcf876f33bcf0f710e",
+      "bytes": 1402
+    },
+    {
+      "path": "source/desktop/STEP03m-README.md",
+      "sha256": "497edb3ead8b0f5ebadcb34c59ecac98890f92b2642d6fbb6ed1bb437cbfa108",
+      "bytes": 903
+    },
+    {
+      "path": "source/desktop/STEP03n-README.md",
+      "sha256": "a96d95a841ca75f1b066982ac8bbeb5a796c9eee7b449e4e4e53c7d6d6a4ec15",
+      "bytes": 940
+    },
+    {
+      "path": "source/desktop/STEP03o-README.md",
+      "sha256": "7d777319fd9091b133bc15e18f26f9b8ddc4e57001bfd97c233a1b57a482c20b",
+      "bytes": 902
+    },
+    {
+      "path": "source/desktop/ai.go",
+      "sha256": "d5905d054ce6d2eb439dfec44ba3c86ba6ff658327cd46d23c97273ff8604741",
+      "bytes": 555
+    },
+    {
+      "path": "source/desktop/ai_test.go",
+      "sha256": "37dcc91cae456961dfd83ad82de6836a701b94e722737338c70bb73a1114a707",
+      "bytes": 2147
+    },
+    {
+      "path": "source/desktop/browser_profile.go",
+      "sha256": "e57880d665b6c76b4a85035e2527719b71ff5eb81f371122af791fcf567bc766",
+      "bytes": 5586
+    },
+    {
+      "path": "source/desktop/browser_profile_test.go",
+      "sha256": "11f08d0be4eacbe46f7ad972bd284221d1525528c7871d9969f1fe6f0b9abbba",
+      "bytes": 5225
+    },
+    {
+      "path": "source/desktop/build-windows.bat",
+      "sha256": "aa64340842375884ac5f8f7f68109faf2d5e9e2160ada3f89deee706c5a9b3fb",
+      "bytes": 400
+    },
+    {
+      "path": "source/desktop/capabilities.go",
+      "sha256": "d46f6c9b1dfde0cac0f0befcba4bdc6535f0e1801ce53dc6c7f2a4dc0c3d0b0c",
+      "bytes": 3835
+    },
+    {
+      "path": "source/desktop/capabilities_test.go",
+      "sha256": "b5b8c990c642dee9c876647cbed46fc0fe1adc616fce0638b26cbc8bfb6dcdac",
+      "bytes": 2045
+    },
+    {
+      "path": "source/desktop/concurrent_launch_test.go",
+      "sha256": "2f38d270e7e44df078cf1bf0607f1b792c206cce678e281be80541c88c995be6",
+      "bytes": 1577
+    },
+    {
+      "path": "source/desktop/diagnostics.go",
+      "sha256": "e9b2a4b67ddbd59408a3ba075f7123e1e64b469f1b5a3311fd3a2168a9a4a7a3",
+      "bytes": 2829
+    },
+    {
+      "path": "source/desktop/diagnostics_test.go",
+      "sha256": "9015b0fee92dcbaa693c81eae6e4957e9d6fd7f81d168e656a708f617972c9d6",
+      "bytes": 1253
+    },
+    {
+      "path": "source/desktop/dialog_other.go",
+      "sha256": "612e14da2609fb2eaf33fd018f54535cc0af8c6a55964dbf288ac4deebc0dfa5",
+      "bytes": 105
+    },
+    {
+      "path": "source/desktop/dialog_windows.go",
+      "sha256": "7c878fd7825c486d615f165a379fd59109ce2b58d0549482f1972378350f720c",
+      "bytes": 374
+    },
+    {
+      "path": "source/desktop/engine_manager.go",
+      "sha256": "427379ea7dd72da385776ec39b058bcfae482df1cc198ae511716e09d81b648c",
+      "bytes": 5439
+    },
+    {
+      "path": "source/desktop/engine_manager_test.go",
+      "sha256": "12d45e8fa54130c6c510ca6e8a925b2723f7726335eeb62b4c828622786105dc",
+      "bytes": 2413
+    },
+    {
+      "path": "source/desktop/go.mod",
+      "sha256": "56e8e4425499a92419f0f24193e487e6ecafa5c19e82f8ce6be6fd5d26697e3b",
+      "bytes": 39
+    },
+    {
+      "path": "source/desktop/host_guard.go",
+      "sha256": "30499f4fa86cbbff67e95e837d934dbac1a272e9ddf07508f45f6a8986b5c3de",
+      "bytes": 2655
+    },
+    {
+      "path": "source/desktop/host_guard_test.go",
+      "sha256": "1cf0c9fcb1c1fe0bc7fd807e58b2dc2dff3f1e64080328ae6c10da72aaf558a7",
+      "bytes": 2179
+    },
+    {
+      "path": "source/desktop/host_mode.go",
+      "sha256": "6de17dd1c9ddaf9a7af3fc61ea6fe430d48eb93ec068a8cd48e5178d9b1608f2",
+      "bytes": 5905
+    },
+    {
+      "path": "source/desktop/host_mode_test.go",
+      "sha256": "e084ce1160c697133e9608f69ed8778976b8a831972cff3bf07caa86492888a3",
+      "bytes": 5245
+    },
+    {
+      "path": "source/desktop/index.html",
+      "sha256": "c2cd20d880dd42425c32af026f397d37fe96cfb93b4c6f43cedc0c112b40fce6",
+      "bytes": 906646
+    },
+    {
+      "path": "source/desktop/instance.go",
+      "sha256": "e7c7067a9cedf62744ce9aeb48693f55fc901940f9c8e9ab36dc90b38753e98f",
+      "bytes": 3622
+    },
+    {
+      "path": "source/desktop/instance_test.go",
+      "sha256": "c1fc2e6c725a7585780bd47e0c53e10186c1cc5e02e1248cb9fe942bd4a78c00",
+      "bytes": 2639
+    },
+    {
+      "path": "source/desktop/lifecycle_test.go",
+      "sha256": "e6ed00938637ee9f5dad0835bfcf0d31dff9fe14be574ecabcadc704a3cdf93b",
+      "bytes": 775
+    },
+    {
+      "path": "source/desktop/loader_pe.go",
+      "sha256": "8fa809c84f0911b3423ef60ce12f1a477d5005629795299bc5d9db76c4318b1f",
+      "bytes": 2695
+    },
+    {
+      "path": "source/desktop/loader_pe_test.go",
+      "sha256": "aef1faef9ed82f2430e61c0038748fa9a0e64b50f00577f47108c162efe39408",
+      "bytes": 2726
+    },
+    {
+      "path": "source/desktop/main.go",
+      "sha256": "08091725e9542f4643184e6970f537ef05cffafca916f385d9f2a8ea34572e8a",
+      "bytes": 9715
+    },
+    {
+      "path": "source/desktop/native_com_windows_test.go",
+      "sha256": "12378f5839aaa7e85d057b5e3bf24b31c6ec03d97f5e871e1d4f6c9dbe58a07f",
+      "bytes": 11496
+    },
+    {
+      "path": "source/desktop/native_lifecycle.go",
+      "sha256": "2e1242e569a962579769a3fdf07fd25a0a295f646214f92d1bc6849dacf9d77c",
+      "bytes": 1707
+    },
+    {
+      "path": "source/desktop/native_lifecycle_test.go",
+      "sha256": "af3e267061b5a7add0760b790b7e813f2c04d149e30d607fcbf2cba6db41b561",
+      "bytes": 2330
+    },
+    {
+      "path": "source/desktop/native_policy.go",
+      "sha256": "98c977822e280014982e24fb14cd8ba08a27a0aee5e878d6b485000f5a186696",
+      "bytes": 456
+    },
+    {
+      "path": "source/desktop/native_policy_test.go",
+      "sha256": "9ab4ba5e0f11f2f3c3aae30071410fb08af9a5125de6831ffe56ae6f3793a9a5",
+      "bytes": 1523
+    },
+    {
+      "path": "source/desktop/native_webview_other.go",
+      "sha256": "fea5b148ccebdebcb81219ccabec8c99594b13533ecc8046b97ec1c4d525468b",
+      "bytes": 255
+    },
+    {
+      "path": "source/desktop/native_webview_windows.go",
+      "sha256": "cd3b28f0b6ec7d8d7332c64e072b7a25733c39b8a27e4018f7f76955af37633e",
+      "bytes": 26409
+    },
+    {
+      "path": "source/desktop/offline_policy.go",
+      "sha256": "fa6d2f1b4675dcec49f9f6d72f9aac7887889c86539f585d825163d9342f4d49",
+      "bytes": 828
+    },
+    {
+      "path": "source/desktop/openutau.go",
+      "sha256": "eaa5863578f10f4d4fbfef0283f76562bbc1a12b520d148f0af713496e349cfc",
+      "bytes": 2391
+    },
+    {
+      "path": "source/desktop/openutau_test.go",
+      "sha256": "08a3b496feacc17af54bcc07d4c85c3ca549247c560bd744b148f053952c1ef5",
+      "bytes": 1406
+    },
+    {
+      "path": "source/desktop/path_chain_guard.go",
+      "sha256": "a9bbdf10a641dd98ca39aa13b83e26776d22f4294ee86ad2ff81b0678a71474d",
+      "bytes": 2585
+    },
+    {
+      "path": "source/desktop/path_chain_guard_other.go",
+      "sha256": "07c503331bb5006ce2718b5bab153a8dde594c0259202633292a816929facdfa",
+      "bytes": 106
+    },
+    {
+      "path": "source/desktop/path_chain_guard_test.go",
+      "sha256": "c1701f1fa521d140a39817a2bcd2c49ab9998f98adcb302b667ce488d456e4db",
+      "bytes": 4165
+    },
+    {
+      "path": "source/desktop/path_chain_guard_windows.go",
+      "sha256": "cbdc36a54796be0faa4e8221f99b8c5cd1baab6bef1f4e7b9f9b1f20a586122d",
+      "bytes": 652
+    },
+    {
+      "path": "source/desktop/profile_guard_test.go",
+      "sha256": "61dc67359429d5fa8b9405e360c8b6f4ac459ed91e5396619440fe6bc64b2f24",
+      "bytes": 3592
+    },
+    {
+      "path": "source/desktop/session_key_test.go",
+      "sha256": "28efc72ee9eac605315ad94d3bed76484526a8a3d44f73f6e08f74cfe12c34e5",
+      "bytes": 855
+    },
+    {
+      "path": "source/desktop/singing.go",
+      "sha256": "d106a5822726ea8458c06350138b5ac7667d1e38a109d82696b67de6cc213c4f",
+      "bytes": 7322
+    },
+    {
+      "path": "source/desktop/singing_test.go",
+      "sha256": "fa7d48cd8345dced0adfd627aeac072c6a252cae492b8d5c22f875d6cd0c2ae7",
+      "bytes": 4159
+    },
+    {
+      "path": "source/desktop/stable_origin_test.go",
+      "sha256": "031066a4375c4ca30e3b595b84b1bbfabd4f2a214abd6970c1a5e45f1fe27944",
+      "bytes": 897
+    },
+    {
+      "path": "source/docs/LOCAL-OFFLINE-EXECUTION.md",
+      "sha256": "80ee41b928a70c43fc572e74f9f85a9d7c3362e03013f2166804f4638495d447",
+      "bytes": 3458
+    },
+    {
+      "path": "source/docs/MYVOCAL-66-ORIGINAL.md",
+      "sha256": "8c061276b9cd6cf09a66541a1f335c8a5ab0aec0eba87f2b9f0a7cf3b7279a07",
+      "bytes": 44913
+    },
+    {
+      "path": "source/docs/PROJECT-COMPLETION-ESTIMATE.md",
+      "sha256": "8d3da10429faad4a06f398d07055f5265394aefe07810dd27046b4f022aa1d61",
+      "bytes": 3617
+    },
+    {
+      "path": "source/docs/WINDOWS-10-11-COMPATIBILITY.md",
+      "sha256": "6edc0f433ec2f918c6b1104d010e9839ed184c8eebb3c1b099cbdf2c8ed3b99b",
+      "bytes": 1862
+    },
+    {
+      "path": "source/tools/__pycache__/cli_singing_adapter.cpython-313.pyc",
+      "sha256": "64f10a9918b549574bef6de2f88c8578e3e9e771858d803a53483c1f14d54e2d",
+      "bytes": 15792
+    },
+    {
+      "path": "source/tools/__pycache__/demo_singing_engine.cpython-313.pyc",
+      "sha256": "e80ebd98e69f00b4583da7c06d69caa0cf704a2df871027dc1293cd759aecb14",
+      "bytes": 7856
+    },
+    {
+      "path": "source/tools/__pycache__/test_cli_adapter.cpython-313.pyc",
+      "sha256": "38b6ac54cb21002e76596a8474242f3d3c0c95ba0b17b62ecb8a88f4b6ee03e7",
+      "bytes": 6736
+    },
+    {
+      "path": "source/tools/cli_singing_adapter.py",
+      "sha256": "5bdda96befe95b824ac7156b9875d61f8c523db47b95f901d4adf1dab9c32632",
+      "bytes": 8866
+    },
+    {
+      "path": "source/tools/config.example.json",
+      "sha256": "3600adfe84711063b1fb96c32364b3430d561d2a67a951bfb7f80c775284cf50",
+      "bytes": 346
+    },
+    {
+      "path": "source/tools/demo_singing_engine.py",
+      "sha256": "a5d24d935e56743a943f4d75127d076f7efdad4c1dffc31c49dc6101fd046c53",
+      "bytes": 3708
+    },
+    {
+      "path": "source/tools/generate-local-clip-curves-demo.mjs",
+      "sha256": "3c790405d025f925f06d4af581170f41e20b897e87a4a06c07d5afb3d5c15261",
+      "bytes": 1439
+    },
+    {
+      "path": "source/tools/generate-local-clip-fade-demo.mjs",
+      "sha256": "651bbbb6434c57e93bd8020e95bcfd936c82a55cf2a9a1e212d3a46f15f538e2",
+      "bytes": 1325
+    },
+    {
+      "path": "source/tools/generate-local-clip-level-demo.mjs",
+      "sha256": "8a5ddae3e194f6b328501ff9ae0136174aac8bcc4ba88acd275811e1ac07988b",
+      "bytes": 1648
+    },
+    {
+      "path": "source/tools/generate-local-clip-pan-demo.mjs",
+      "sha256": "477c7a527c42e21cab70e8c1551af154cc4adf1794dc9dbf1a60da206f63fbe6",
+      "bytes": 1630
+    },
+    {
+      "path": "source/tools/generate-local-wav-meter-demo.mjs",
+      "sha256": "b8e15f76b84c0a124a89e59323327f442a348f807d33f084c37e45f13998cfe2",
+      "bytes": 1391
+    },
+    {
+      "path": "source/tools/generate-local-wav-rate-demo.mjs",
+      "sha256": "2c1c6a4912c058c863a7b99fa6ee13e82e66dd2e131695b50a76b26aa6a0b2ff",
+      "bytes": 929
+    },
+    {
+      "path": "source/tools/generate-local-wav24-demo.mjs",
+      "sha256": "c7c1b765c3e4a5f0b0faa7a10b6e583bfbccb5c7848cb9ac5b2f79a15d9a64bd",
+      "bytes": 904
+    },
+    {
+      "path": "source/tools/generate-offline-onset-demo.mjs",
+      "sha256": "6bbfd611295350eebd443020b34737b4482685e0f0ccb1a52f39193cf8849513",
+      "bytes": 966
+    },
+    {
+      "path": "source/tools/generate-offline-placement-demo.mjs",
+      "sha256": "7e24fe0f10edfc668d058c29f359a0a01af624a897cbed8a98a8e89b0a252f75",
+      "bytes": 1900
+    },
+    {
+      "path": "source/tools/generate-offline-vowel-demo.mjs",
+      "sha256": "4c06bace3e7c2ee563c3548bc15f5c37fd8c5700972294dc6e78d2e09289eba9",
+      "bytes": 1021
+    },
+    {
+      "path": "source/tools/sample_worker_NO_AI.py",
+      "sha256": "4468a36194a43945bb9fd8d281840904db0a1b7ee142769692766b2ab056f494",
+      "bytes": 469
+    },
+    {
+      "path": "source/tools/test_cli_adapter.py",
+      "sha256": "05f73d80f5807e7799f8e8bd978c05b7efb917d7900e7cf1efb34cf4a1b1e90d",
+      "bytes": 3281
+    }
+  ]
+}

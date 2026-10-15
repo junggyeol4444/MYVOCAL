@@ -25,6 +25,8 @@ type readinessReport struct {
 	BundledNeuralSinging  bool             `json:"bundledNeuralSinging"`
 	BundledVideoGenerator bool             `json:"bundledVideoGenerator"`
 	ManagedEngineRunning  bool             `json:"managedEngineRunning"`
+	LocalOnly             bool             `json:"localOnly"`
+	ExternalAPIEnabled    bool             `json:"externalAPIEnabled"`
 }
 
 func browserDetected() bool {
@@ -79,6 +81,8 @@ func (a *appServer) systemReadiness(w http.ResponseWriter, r *http.Request) {
 		BundledNeuralSinging:  false,
 		BundledVideoGenerator: false,
 		ManagedEngineRunning:  managed,
+		LocalOnly:             true,
+		ExternalAPIEnabled:    false,
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

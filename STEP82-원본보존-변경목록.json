@@ -1,0 +1,40 @@
+{
+  "basePackage": "MYVOCAL-Studio-Step81-LocalOnly.zip",
+  "originalFiles": 534,
+  "preservedFiles": 534,
+  "byteIdentical": 529,
+  "modifiedExistingFiles": [
+    {
+      "file": "source/MYVOCAL-Studio-source/MYVOCAL-Studio-v1.8.html",
+      "oldSHA256": "f6ed4d978b3f7ed22e1b2dd13717c059e48071c9185d662902f9920881b6fe9a",
+      "newSHA256": "2cb895e642bc2bd0eb3618acca290251a98e2debdd94d71cda06d742b3d61a88"
+    },
+    {
+      "file": "source/MYVOCAL-Studio-source/src/components/CharacterLayerEditor.jsx",
+      "oldSHA256": "2b2552216249ab5be21223fe872d07669f4ac736b03f27a25aeef2c48cb18a6c",
+      "newSHA256": "7ff8cd6280cf95ef0420171d328ac0941b9eaec0faa8d2517f5cd5d2d84b5de9"
+    },
+    {
+      "file": "source/MYVOCAL-Studio-source/src/lib/projectBundle.js",
+      "oldSHA256": "df2c0e0ab04aa42a513bdba58df8d7ab18ee4167365c41442a002dfd40e30cc3",
+      "newSHA256": "b24c69107b2ed69ddb3da83d5493d8eed9788770df64757fe68abc741eba5d79"
+    },
+    {
+      "file": "source/MYVOCAL-Studio-source/src/pages/Characters.jsx",
+      "oldSHA256": "fbf2e8b28cb04d2424d2b8175560eb4c5ee1cbb4a6acdb0b06616f44cbf10a3d",
+      "newSHA256": "cb8eb83343dc27b7ee6c8a5b2a32bae0329a59378e25c684d22e2892a03fcee2"
+    },
+    {
+      "file": "source/desktop/index.html",
+      "oldSHA256": "f6ed4d978b3f7ed22e1b2dd13717c059e48071c9185d662902f9920881b6fe9a",
+      "newSHA256": "2cb895e642bc2bd0eb3618acca290251a98e2debdd94d71cda06d742b3d61a88"
+    }
+  ],
+  "removed": [],
+  "newFilesBeforeReport": [
+    "MYVOCAL-Step82-Windows.exe",
+    "source/MYVOCAL-Studio-source/src/components/CharacterAnimationEditor.jsx",
+    "source/MYVOCAL-Studio-source/src/lib/characterAnimation2d.js",
+    "source/MYVOCAL-Studio-source/tests/character-animation2d.test.mjs"
+  ]
+}

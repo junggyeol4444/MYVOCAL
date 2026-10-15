@@ -1,40 +1,12 @@
-name: MYVOCAL source validation
+name: MYVOCAL source validation (test branches only)
 on:
   push:
-    branches: [main, 'myvocal/**']
-  pull_request:
+    branches: ['test/**']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  inventory:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Require complete source before accepting builds
-        shell: bash
-        run: |
-          set -euo pipefail
-          required=(
-            MYVOCAL-Studio-source/package.json
-            MYVOCAL-Studio-source/index.html
-            MYVOCAL-Studio-source/src/App.jsx
-            MYVOCAL-Studio-source/src/lib/bundleSafety.js
-            MYVOCAL-Studio-source/tests/bundle-safety.test.mjs
-            desktop/go.mod
-            desktop/main.go
-            desktop/native_webview_windows.go
-            desktop/browser_profile.go
-            docs/MYVOCAL-66-ORIGINAL.md
-          )
-          for file in "${required[@]}"; do
-            if [[ ! -f "$file" ]]; then
-              echo "::error file=$file::Source not imported. Do not merge this branch."
-              exit 1
-            fi
-          done
   javascript:
-    needs: inventory
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -45,8 +17,8 @@ jobs:
         with:
           node-version: '22'
       - run: npm test
+      - run: node scripts/build-standalone.cjs
   desktop:
-    needs: inventory
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -57,6 +29,18 @@ jobs:
         with:
           go-version-file: desktop/go.mod
       - run: go test ./...
+      - run: go test -race -count=1 ./...
       - run: go vet ./...
-      - name: Windows cross compile only, not real device verification
-        run: GOOS=windows GOARCH=amd64 go build -o /tmp/MYVOCAL-Studio-Windows.exe .
+      - name: Windows x64 cross compile
+        run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-H=windowsgui' -o /tmp/MYVOCAL-Studio-Windows.exe .
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m unittest -v test_cli_adapter

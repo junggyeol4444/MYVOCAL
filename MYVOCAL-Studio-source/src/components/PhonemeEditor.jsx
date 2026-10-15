@@ -27,8 +27,8 @@ export default function PhonemeEditor({project:p,onChange,notify}){
     {current.warnings?.length>0&&<Notice>변환하지 못한 문자 또는 너무 짧은 음표 {current.warnings.length}건: {current.warnings.slice(0,3).join(' / ')}</Notice>}
    </>}
   </Panel>
-  <Panel title="실제 Singing 엔진과의 관계" description="이 타임라인은 외부 가창 엔진에 전달하는 발음 보조 데이터입니다.">
-   <Notice>한글 자모는 실제 발음 기호(IPA)가 아닙니다. 연음·된소리·비음화·발음 축약을 자동 처리하지 않습니다. 각 음소 길이도 규칙 기반 추정이므로 직접 수정한 다음 엔진 측에서 변환해야 합니다. 이 기능만으로 노랫소리가 생성되지는 않습니다.</Notice>
+  <Panel title="내장 오프라인 가이드 및 외부 Singing 엔진과의 관계" description="저장한 자모 시간 구간은 내장 오프라인 가이드의 음절 길이와 시작 위치에도 반영하며, 외부 엔진에는 참고 데이터로 전달합니다.">
+   <Notice>한글 자모는 실제 발음 기호(IPA)가 아닙니다. 연음·된소리·비음화·발음 축약을 자동 처리하지 않습니다. 각 음소 길이는 규칙 기반 추정입니다. 내장 오프라인 가이드는 저장된 한글 초성·중성·종성 시간에 맞춰 규칙 기반 합성 신호를 만들지만 실제 음소 발음이나 신경망 가창은 아닙니다. 영문 등 지원하지 않는 문자는 기존 균등 배분을 사용합니다.</Notice>
   </Panel>
  </>;
 }

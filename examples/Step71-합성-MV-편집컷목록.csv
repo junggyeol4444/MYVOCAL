@@ -1,0 +1,4 @@
+﻿scene_id,start_sec,end_sec,duration_sec,title,character_id,camera,description
+"intro","0","4","4","Intro","","wide","합성 테스트용 수동 스토리보드"
+"verse","4","12","8","Verse","","wide","합성 테스트용 수동 스토리보드"
+"chorus","12","20","8","Chorus","","wide","합성 테스트용 수동 스토리보드"

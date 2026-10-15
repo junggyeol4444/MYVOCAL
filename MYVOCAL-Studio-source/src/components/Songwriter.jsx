@@ -1,6 +1,6 @@
 import React,{useState} from 'react';
 import {Button,Notice,Panel} from './UI';
-import {generateOfflineDraft,normalizeRemoteProposal,applyComposition,songMoods,songLengths} from '../lib/composer';
+import {generateOfflineDraft,applyComposition,songMoods,songLengths} from '../lib/composer';
 import GenreMixEditor from './GenreMixEditor';
 import {resolveGenreMix,validateGenreMix,genreMixText} from '../lib/genreMix';
 
@@ -13,25 +13,10 @@ export default function Songwriter({project:p,onChange,notify}){
  const [bars,setBars]=useState(24);
  const [variation,setVariation]=useState(0);
  const [draft,setDraft]=useState(null);
- const [busy,setBusy]=useState(false);
- const [apiKey,setApiKey]=useState('');
- const [model,setModel]=useState('gpt-4o-mini');
  const [error,setError]=useState('');
- const [tab,setTab]=useState('offline');
  const [parts,setParts]=useState({lyrics:true,chords:true,midi:true,settings:true,replace:true});
  const opts=()=>{const mix=validateGenreMix(genreMix);return {prompt,title:p.title,genre:mix[0].name,genreMix:mix,mood,key,bpm:Number(bpm),bars:Number(bars),variation};};
  const draftOffline=()=>{try{setError('');const d=generateOfflineDraft(opts());setDraft(d);setVariation(n=>n+1);notify('로컬 작곡 초안을 만들었습니다. 적용하기 전에는 프로젝트가 변경되지 않습니다.');}catch(e){setError(e.message);}};
- const draftRemote=async()=>{
-  if(!apiKey.trim()){setError('API 키를 입력해 주세요. API 키는 프로젝트에 저장되지 않습니다.');return;}
-  let mix;try{mix=validateGenreMix(genreMix)}catch(e){setError(e.message);return;}
-  setError('');setBusy(true);
-  try{
-   const res=await fetch('/api/lyrics',{method:'POST',headers:{'Content-Type':'application/json','X-MYVOCAL-Session':window.__MYVOCAL_SESSION_KEY||''},body:JSON.stringify({apiKey,model,prompt,title:p.title,genre:genreMixText(mix),mood,key,bpm:Number(bpm),bars:Number(bars)})});
-   const body=await res.json().catch(()=>({error:'서버 응답을 읽을 수 없습니다.'}));
-   if(!res.ok)throw Error(body.error||`AI 요청 실패 (HTTP ${res.status})`);
-   const d=normalizeRemoteProposal(body,opts());setDraft(d);notify('AI 가사/코드 제안이 도착했습니다. MIDI는 로컬 작곡 규칙으로 생성됩니다.');
-  }catch(e){setError(`AI 호출 실패: ${e.message}. Windows EXE에서만 API 호출이 지원됩니다.`);}finally{setBusy(false);}
- };
  const apply=()=>{
   if(!draft)return;
   const existing=(p.tracks||[]).filter(t=>t.generatedBy==='composer-v04');
@@ -41,15 +26,15 @@ export default function Songwriter({project:p,onChange,notify}){
  };
  const notes=draft?.midiTracks?.reduce((s,t)=>s+t.midiNotes.length,0)||0;
  return <div className="mv4-composer">
-  <div className="mv4-switch" role="tablist"><button role="tab" aria-selected={tab==='offline'} className={tab==='offline'?'active':''} onClick={()=>setTab('offline')}>로컬 자동 작곡 · 인터넷 불필요</button><button role="tab" aria-selected={tab==='ai'} className={tab==='ai'?'active':''} onClick={()=>setTab('ai')}>실제 AI 작사 · API 연결</button></div>
+  <Notice>로컬 전용 작곡 모드 · 인터넷이나 외부 AI API가 필요하지 않습니다. AI 신경망 음악 생성이 아니라 규칙 기반 작곡입니다.</Notice>
   <div className="mv4-grid">
    <div className="panel mv4-compose-form">
-    <div className="panel-top"><div><h3>{tab==='offline'?'로컬 작곡 도우미':'OpenAI 작사/코드 제안'}</h3><p>{tab==='offline'?'규칙 기반 초안 · MIDI 4개 트랙 · 원본 작품 복제 없음':'외부 AI가 가사와 코드를 제안하고 MIDI는 로컬 엔진이 생성'}</p></div><span className="hint-pill">v0.9</span></div>
+    <div className="panel-top"><div><h3>로컬 작곡 도우미</h3><p>규칙 기반 초안 · MIDI 4개 트랙 · 원본 작품 복제 없음</p></div><span className="hint-pill">v0.9</span></div>
     <label className="mv4-label">곡 설명 / 가사 주제<textarea value={prompt} onChange={e=>setPrompt(e.target.value)} maxLength={800} rows={4} placeholder="노래의 분위기, 이야기, 후렴 연출을 설명해 주세요"/></label>
     <GenreMixEditor mix={genreMix} onChange={setGenreMix}/><div className="mv4-form-row"><label className="mv4-label">감정<select value={mood} onChange={e=>setMood(e.target.value)}>{songMoods.map(v=><option key={v}>{v}</option>)}</select></label></div>
     <div className="mv4-form-row"><label className="mv4-label">조성<select value={key} onChange={e=>setKey(e.target.value)}>{['C Major','G Major','D Major','A Major','E Major','F Major','Bb Major','A Minor','E Minor','B Minor','D Minor','G Minor','F# Minor'].map(k=><option key={k}>{k}</option>)}</select></label><label className="mv4-label">BPM<input value={bpm} type="number" min="40" max="240" onChange={e=>setBpm(e.target.value)}/></label><label className="mv4-label">마디<select value={bars} onChange={e=>setBars(+e.target.value)}>{songLengths.map(n=><option value={n} key={n}>{n} 마디</option>)}</select></label></div>
-    {tab==='offline'?<><Notice>로컬 방식은 AI 모델이 아닙니다. 입력한 설정을 바탕으로 가사 템플릿, 화성, 멜로디, 리듬을 규칙으로 만들며 실제 WAV로 재생·내보낼 수 있습니다.</Notice><Button variant="primary" className="full-width" icon="spark" onClick={draftOffline}>작곡 초안 생성 · 다른 변형 만들기</Button></>
-     :<><div className="mv4-secret-box"><label className="mv4-label">OpenAI API 키 (프로젝트에 저장하지 않음)<input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} autoComplete="off" placeholder="sk-..."/></label><label className="mv4-label">모델 ID<input value={model} onChange={e=>setModel(e.target.value)} maxLength={80} placeholder="gpt-4o-mini"/></label></div><Notice>실제 OpenAI API 호출에는 인터넷과 본인 API 키 및 별도 API 이용 요금이 필요합니다. 입력한 키는 외부 OpenAI 서버로 요청할 때만 사용하며 저장하지 않습니다. AI가 만든 것은 가사/코드 제안이며, MIDI는 로컬 규칙 기반입니다.</Notice><Button variant="primary" className="full-width" icon="spark" disabled={busy||!prompt.trim()} onClick={draftRemote}>{busy?'AI 응답을 기다리는 중…':'AI 가사·코드 제안 받기'}</Button></>}
+    <Notice>곡 설정과 장르 혼합·구간별 장르를 기반으로 가사 템플릿, 화성, 멜로디, 리듬을 PC에서 생성합니다. 외부 API 호출은 없습니다.</Notice>
+    <Button variant="primary" className="full-width" icon="spark" onClick={draftOffline}>로컬 작곡 초안 생성 · 다른 변형 만들기</Button>
     {error&&<div className="mv4-error" role="alert">{error}</div>}
    </div>
    <div className="panel mv4-preview">
@@ -58,8 +43,8 @@ export default function Songwriter({project:p,onChange,notify}){
       <div className="mv4-preview-parts"><h4>코드 진행</h4><div className="mv4-chordchips">{draft.chords.slice(0,12).map((ch,i)=><span key={i}>{ch.symbol} <small>{ch.bar}마디</small></span>)}</div></div>
       <div className="mv4-preview-parts"><h4>트랙 미리보기</h4><div className="mv4-tracklist">{draft.midiTracks.map(t=><div key={t.role}><span>{t.name}</span><strong>{t.midiNotes.length} Notes</strong></div>)}</div></div>
       <div className="mv4-preview-parts"><h4>가사 초안</h4><pre className="mv4-lyrics-preview">{draft.lyrics}</pre></div>
-      <div className="mv4-apply"><h4>프로젝트에 적용할 항목</h4><div className="mv4-checks">{[['lyrics','가사'],['chords','코드·곡 구조'],['midi','MIDI 트랙'],['settings','BPM·조성·장르'],['replace','이전에 자동 생성한 트랙 교체']].map(([k,label])=><label key={k}><input type="checkbox" checked={parts[k]} onChange={e=>setParts(a=>({...a,[k]:e.target.checked}))}/>{label}</label>)}</div><Button variant="primary" className="full-width" icon="check" onClick={apply}>선택 항목 프로젝트에 적용</Button><p className="mv4-disclaimer">기존 수동 MIDI·오디오 트랙은 지우지 않습니다. 적용 후 다른 편집 탭에서 추가로 수정할 수 있습니다.</p></div>
-    </>:<div className="mv4-placeholder"><strong>아직 초안이 없습니다.</strong><p>왼쪽에서 로컬 또는 API 방식을 선택해 생성하세요.</p></div>}
+      <div className="mv4-apply"><h4>프로젝트에 적용할 항목</h4><div className="mv4-checks">{[['lyrics','가사'],['chords','코드·곡 구조'],['midi','MIDI 트랙'],['settings','BPM·조성·장르'],['replace','이전에 자동 생성한 트랙 교체']].map(([k,label])=><label key={k}><input type="checkbox" checked={parts[k]} onChange={e=>setParts(a=>({...a,[k]:e.target.checked}))}/>{label}</label>)}</div><Button variant="primary" className="full-width" icon="check" onClick={apply}>선택 항목 프로젝트에 적용</Button><p className="mv4-disclaimer">기존 수동 MIDI·오디오 트랙은 지우지 않습니다. 곡 구조에서 구간별 장르를 지정했다면 적용 시 로컬 MIDI의 리듬·음표 밀도에 반영합니다. 미리보기는 적용 전 초안입니다.</p></div>
+    </>:<div className="mv4-placeholder"><strong>아직 초안이 없습니다.</strong><p>왼쪽에서 로컬 작곡 초안을 생성하세요.</p></div>}
    </div>
   </div>
   {p.compositionHistory?.length>0&&<div className="panel mv4-history"><h3>작곡 적용 기록</h3>{[...p.compositionHistory].reverse().map((x,i)=><div key={i}><span>{x.source==='openai-lyrics'?'AI 제안 + MIDI':'로컬 작곡'}</span><strong>{x.title}</strong><small>{x.notes} 음표 · {new Date(x.time).toLocaleString('ko-KR')}</small></div>)}</div>}

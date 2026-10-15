@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {analyzeMusicStructure as analyze} from '../src/lib/musicStructureAnalysis.js';
+const config = {sampleRate: 8000};
+test('silence has no active regions', () => { const r=analyze({samples:new Float32Array(8000),...config}); assert.equal(r.durationSeconds,1); assert.equal(r.rms,0); assert.deepEqual(r.activeRegions,[]); });
+test('detects non-silent region', () => { const x=new Float32Array(8000); x.fill(0.5,1600,4800); const r=analyze({samples:x,...config}); assert.equal(r.activeRegions.length,1); assert.ok(r.peak===0.5); });
+test('supports stereo',()=> { const r=analyze({samples:new Float32Array([1,-1,0,0]),sampleRate:8000,channels:2}); assert.equal(r.durationSeconds,2/8000); assert.equal(r.peak,1); });
+test('rejects invalid samples',()=>assert.throws(()=>analyze({samples:[1,2],...config})));
+test('rejects NaN',()=>assert.throws(()=>analyze({samples:new Float32Array([NaN]),...config})));
+test('rejects Infinity',()=>assert.throws(()=>analyze({samples:new Float32Array([Infinity]),...config})));
+test('rejects partial frames',()=>assert.throws(()=>analyze({samples:new Float32Array(3),channels:2,...config})));
+test('rejects invalid sample rate',()=>assert.throws(()=>analyze({samples:new Float32Array(3),sampleRate:0})));
+test('rejects invalid channel count',()=>assert.throws(()=>analyze({samples:new Float32Array(3),channels:0,...config})));
+test('rejects invalid window',()=>assert.throws(()=>analyze({samples:new Float32Array(3),windowSeconds:0,...config})));
+test('empty signal is valid',()=>{const r=analyze({samples:new Float32Array(),...config}); assert.equal(r.durationSeconds,0); assert.deepEqual(r.windows,[]);});
+test('does not fabricate musical metadata',()=>{const r=analyze({samples:new Float32Array(800),...config}); assert.equal(r.bpm,null); assert.equal(r.key,null); assert.equal(r.chords,null); assert.equal(r.genre,null);});
