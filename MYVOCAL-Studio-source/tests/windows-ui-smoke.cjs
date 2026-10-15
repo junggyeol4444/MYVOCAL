@@ -68,7 +68,7 @@ async function run() {
     restored.on('pageerror', e => pageErrors.push(String(e)));
     await restored.goto(`${base}/#/projects`, { waitUntil: 'domcontentloaded' });
     await restored.locator('input[type="file"][accept*=".myvocal.json"]').setInputFiles({ name: 'MYVOCAL-backup.json', mimeType: 'application/json', buffer: backup });
-    await restored.getByText('STEP100 Windows UI 실사용 검증', { exact: true }).waitFor({ timeout: 20000 });
+    await restored.getByText('STEP100 Windows UI 실사용 검증 (복원)', { exact: true }).waitFor({ timeout: 20000 });
     await restored.screenshot({ path: join(screenshotDir, '03-restored-project.png'), fullPage: true });
     assert.deepEqual(pageErrors, [], 'browser must not have unhandled page errors');
     console.log('PASS: Windows browser UI create / Step97 / edit / persistent reload / final tab / backup / restore');
