@@ -11,7 +11,7 @@ const root = resolve(__dirname, '..');
 const screenshotDir = process.env.MYVOCAL_UI_ARTIFACT_DIR || join(root, 'ui-test-artifacts');
 mkdirSync(screenshotDir, { recursive: true });
 const port = Number(process.env.MYVOCAL_UI_PORT || '4175');
-const base = `http://127.0.0.1:${port}`;
+const base = process.env.MYVOCAL_UI_ORIGIN || `http://127.0.0.1:${port}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function waitServer() {
@@ -23,9 +23,9 @@ async function waitServer() {
 }
 
 async function run() {
-  const vite = spawn(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+  const vite = process.env.MYVOCAL_UI_ORIGIN ? null : spawn(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
   let serverOutput = '';
-  for (const stream of [vite.stdout, vite.stderr]) stream.on('data', d => { serverOutput += String(d).slice(-5000); });
+  if (vite) for (const stream of [vite.stdout, vite.stderr]) stream.on('data', d => { serverOutput += String(d).slice(-5000); });
   let browser;
   try {
     await waitServer();
@@ -76,9 +76,11 @@ async function run() {
     await context.close();
   } finally {
     if (browser) await browser.close();
-    vite.kill();
-    if (vite.exitCode === null) await new Promise(resolve => { vite.once('close', resolve); setTimeout(resolve, 2000); });
-    if (vite.exitCode && vite.exitCode !== 0) console.error(serverOutput.slice(-3000));
+    if (vite) {
+      vite.kill();
+      if (vite.exitCode === null) await new Promise(resolve => { vite.once('close', resolve); setTimeout(resolve, 2000); });
+      if (vite.exitCode && vite.exitCode !== 0) console.error(serverOutput.slice(-3000));
+    }
   }
 }
 run().catch(e => { console.error(e); process.exitCode = 1; });

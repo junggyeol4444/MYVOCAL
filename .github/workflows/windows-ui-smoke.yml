@@ -21,6 +21,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
       - name: Install project and Edge automation driver
         shell: pwsh
         run: |
@@ -29,6 +32,35 @@ jobs:
       - name: Click through full end-user workflow in Microsoft Edge
         shell: pwsh
         run: node tests/windows-ui-smoke.cjs
+      - name: Build actual Windows x64 executable from source
+        shell: pwsh
+        run: |
+          Push-Location ../desktop
+          go build -trimpath -ldflags='-H windowsgui' -o ../MYVOCAL-Step100-CI-Windows.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+      - name: Launch real Windows executable and click its offline UI
+        shell: pwsh
+        run: |
+          $env:MYVOCAL_TEST_HTTP = '1'
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'MYVOCAL-Step100-CI-Windows.exe'
+          $process = Start-Process -FilePath $exe -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 40; $i++) {
+              try {
+                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:58319/__myvocal_status' -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200 -and $response.Content -match 'MYVOCAL') { $ready = $true; break }
+              } catch { Start-Sleep -Seconds 1 }
+            }
+            if (-not $ready) { throw 'Actual Windows EXE did not serve the MYVOCAL offline UI' }
+            $env:MYVOCAL_UI_ORIGIN = 'http://127.0.0.1:58319'
+            $env:MYVOCAL_UI_ARTIFACT_DIR = (Join-Path (Get-Location) 'ui-test-artifacts/executable')
+            node tests/windows-ui-smoke.cjs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
       - name: Upload screenshots and backup verification evidence
         if: always()
         uses: actions/upload-artifact@v4
