@@ -1,0 +1,47 @@
+name: Bootstrap native Windows source (test branch only)
+on:
+  push:
+    branches: ['test/step100-validation']
+    paths: ['native/.staging/READY']
+permissions:
+  contents: write
+jobs:
+  restore-native-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Decode checked-in source transport into actual native files
+        run: |
+          python3 - <<'PY'
+          import base64,io,lzma,tarfile,pathlib,sys
+          root=pathlib.Path('.').resolve()
+          staging=root/'native/.staging'
+          chunks=sorted(staging.glob('part-*.txt'))
+          if len(chunks)!=7: raise RuntimeError('source transport incomplete')
+          packed=base64.b64decode(''.join(p.read_text() for p in chunks),validate=True)
+          data=lzma.decompress(packed)
+          with tarfile.open(fileobj=io.BytesIO(data),mode='r:') as tar:
+              for item in tar.getmembers():
+                  path=pathlib.PurePosixPath(item.name)
+                  if item.issym() or item.islnk() or item.name.startswith('/') or '..' in path.parts: raise RuntimeError('unsafe source archive')
+                  if not item.name.startswith('native/') and item.name!='.github/workflows/native-windows.yml':raise RuntimeError('unexpected path '+item.name)
+              tar.extractall(root,filter='data')
+          for f in list(staging.iterdir()): f.unlink()
+          staging.rmdir()
+          print('Recovered native sources',len(data),'bytes')
+          PY
+      - name: Commit native source files to test branch only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add native .github/workflows/native-windows.yml
+          git commit -m "native: unpack actual Win32 source and user-operation tests on test branch"
+          git push origin HEAD:test/step100-validation
+      - name: Verify source engine and offline Win32 cross-build
+        run: |
+          cd native
+          go test -v ./...
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags='-H windowsgui' -o /tmp/MYVOCAL-Native-Windows.exe .
+          file /tmp/MYVOCAL-Native-Windows.exe
