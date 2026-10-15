@@ -1,0 +1,38 @@
+name: MYVOCAL Windows user-operated browser UI validation
+on:
+  push:
+    branches: ['test/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-ui:
+    name: Real browser clicks on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    defaults:
+      run:
+        working-directory: MYVOCAL-Studio-source
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install project and Edge automation driver
+        shell: pwsh
+        run: |
+          npm install
+          npm install --no-save playwright-core
+      - name: Click through full end-user workflow in Microsoft Edge
+        shell: pwsh
+        run: node tests/windows-ui-smoke.cjs
+      - name: Upload screenshots and backup verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-${{ matrix.os }}
+          path: MYVOCAL-Studio-source/ui-test-artifacts/
+          retention-days: 14
