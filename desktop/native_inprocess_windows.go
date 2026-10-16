@@ -15,6 +15,7 @@ import (
  "syscall"
  "unsafe"
  "runtime"
+ "log"
 )
 
 var nativeShlwapi=syscall.NewLazyDLL("shlwapi.dll")
@@ -97,6 +98,59 @@ func nativeWriteWebResponse(state *nativeWebViewState,args unsafe.Pointer,status
  if !comSucceeded(hr){return fmt.Errorf("WebView2 put_Response failed 0x%08x",uint32(hr))}
  return nil
 }
+// Native COM event arguments and deferrals are owned by the WebView2 STA.
+// Only the handler's pure-Go request processing runs on a worker. This avoids
+// blocking the WebView2 message pump during local image/voice/video generation.
+const nativeMaxPendingResources=8
+
+type nativePendingResource struct {
+ args unsafe.Pointer
+ deferral unsafe.Pointer
+}
+type nativeResourceResult struct{
+ id uint64
+ result inprocessResponse
+ err error
+}
+
+// Called only on the owning STA, including during shutdown.
+func nativeCompleteResource(state *nativeWebViewState, pending nativePendingResource, result inprocessResponse, workErr error) {
+ if !state.Shutdown && state.Environment!=nil {
+  if workErr!=nil {
+   result=inprocessResponse{Status:http.StatusInternalServerError,Header:http.Header{"Content-Type":[]string{"text/plain; charset=utf-8"}},Body:[]byte("MYVOCAL in-process request failed")}
+  }
+  if err:=nativeWriteWebResponse(state,pending.args,result.Status,result.Header,result.Body);err!=nil {
+   // We must complete the deferral even if building a response failed.
+   // Never attempt a network fallback, because direct mode has no listener.
+   log.Printf("WebView2 resource response error: %v",err)
+  }
+ }
+ nativeCOMCall(pending.deferral,3) // ICoreWebView2Deferral.Complete
+ nativeCOMCall(pending.deferral,2) // IUnknown.Release
+ nativeCOMCall(pending.args,2)     // event args retained by AddRef
+}
+func nativeDrainResourceQueue(state *nativeWebViewState){
+ if state==nil||state.ResourceReady==nil{return}
+ for{
+  select{
+  case result:=<-state.ResourceReady:
+   pending,ok:=state.ResourcePending[result.id]
+   if !ok {continue} // completed on shutdown or duplicate message
+   delete(state.ResourcePending,result.id)
+   nativeCompleteResource(state,pending,result.result,result.err)
+  default:return
+  }
+ }
+}
+func nativeAbortPendingResources(state *nativeWebViewState){
+ if state==nil{return}
+ for id,pending:=range state.ResourcePending{
+  delete(state.ResourcePending,id)
+  nativeCompleteResource(state,pending,inprocessResponse{},errors.New("window closed"))
+ }
+ // Go-only worker results may still arrive, but cannot access any COM object.
+}
+
 func nativeWebResourceRequested(this *comHandler,sender,args unsafe.Pointer)uintptr{
  state:=nativeCallbackOwner(this)
  if state==nil{return 0x80004003}
@@ -123,19 +177,34 @@ func nativeWebResourceRequested(this *comHandler,sender,args unsafe.Pointer)uint
  var content unsafe.Pointer
  hr=nativeCOMCall(request,7,nativeCOMPointer(unsafe.Pointer(&content)))
  if !comSucceeded(hr){return 0x80004005}
- payload,err:=nativeRequestBody(content)
- if err==nil{
-  response,dispatchErr:=dispatchInprocessRequest(state.RequestHandler,method,uri,headers,payload)
-  if dispatchErr==nil{
-   err=nativeWriteWebResponse(state,args,response.Status,response.Header,response.Body)
-  }else{err=dispatchErr}
+ payload,readErr:=nativeRequestBody(content)
+ if state.ResourceReady==nil{return 0x80004005}
+ // WebView2 requires a deferral if processing outlives this STA callback.
+ // Limit in-flight requests so unresponsive local engines cannot exhaust RAM.
+ var deferral unsafe.Pointer
+ hr=nativeCOMCall(args,6,nativeCOMPointer(unsafe.Pointer(&deferral)))
+ if !comSucceeded(hr)||deferral==nil{return 0x80004005}
+ nativeCOMCall(args,1) // retain event args until its deferral completes on STA
+ state.ResourceNext++
+ id:=state.ResourceNext
+ state.ResourcePending[id]=nativePendingResource{args:args,deferral:deferral}
+ if readErr!=nil || len(state.ResourcePending)>nativeMaxPendingResources {
+  code:=http.StatusRequestEntityTooLarge
+  if readErr==nil{code=http.StatusServiceUnavailable}
+  nativeDrainResourceQueue(state)
+  pending:=state.ResourcePending[id]
+  delete(state.ResourcePending,id)
+  nativeCompleteResource(state,pending,inprocessResponse{Status:code,Header:http.Header{"Content-Type":[]string{"text/plain; charset=utf-8"}},Body:[]byte(http.StatusText(code))},nil)
+  return 0
  }
- if err!=nil{
-  // In-process mode has no listener. Return an explicit error page instead
-  // of falling back to the operating-system network stack.
-  err=nativeWriteWebResponse(state,args,500,http.Header{"Content-Type":[]string{"text/plain; charset=utf-8"}},[]byte("MYVOCAL in-process request failed"))
- }
- if err!=nil{return 0x80004005}
+ handler:=state.RequestHandler
+ go func(){
+  result,dispatchErr:=dispatchInprocessRequest(handler,method,uri,headers,payload)
+  // This buffered channel is exclusively drained on the owning STA. At most
+  // nativeMaxPendingResources workers can be active at one time.
+  state.ResourceReady<-nativeResourceResult{id:id,result:result,err:dispatchErr}
+  nativePostSTAEvent(state,wmNativeResourceReady)
+ }()
  return 0
 }
 func nativeRegisterResourceInterceptor(state *nativeWebViewState)error{

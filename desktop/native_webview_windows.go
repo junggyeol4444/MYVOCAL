@@ -29,6 +29,7 @@ const (
 	wmDestroy               = 0x0002
 	wmNativeStartupTimeout  = 0x8051 // WM_APP + private STA thread-queue watchdog message
 	wmNativeWrongThread     = 0x8052 // STA thread-queue COM violation message
+ wmNativeResourceReady   = 0x8053 // Go worker response; handled by owning STA
 	nativeStartupTimeout    = 45 * time.Second
 	wsOverlappedWindow      = 0x00CF0000
 	cwUseDefault            = 0x80000000
@@ -130,6 +131,9 @@ type nativeWebViewState struct {
  RequestHandler                    http.Handler
  ResourceToken                     uint64
  ResourceSubscribed                bool
+ ResourcePending                   map[uint64]nativePendingResource
+ ResourceReady                     chan nativeResourceResult
+ ResourceNext                      uint64
 	NavToken, PopupToken             uint64
 	NavSubscribed, PopupSubscribed   bool
 	Shutdown                         bool
@@ -535,6 +539,7 @@ func nativeShutdownWebView(state *nativeWebViewState) {
 	}
 	state.Shutdown = true // set first: COM calls can re-enter the window proc
 	state.Life.beginClose()
+ nativeAbortPendingResources(state) // Deferrals complete and COM refs release on owner STA
 	webview, controller, environment := state.WebView, state.Controller, state.Environment
 	state.WebView, state.Controller, state.Environment = nil, nil, nil
 	nav, popup, resource := state.NavSubscribed, state.PopupSubscribed, state.ResourceSubscribed
@@ -569,7 +574,7 @@ func nativeShutdownWebView(state *nativeWebViewState) {
 // Hwnd=0; it is never sent to a potentially recycled window handle. Consume
 // stale or invalid-token private messages without mutating the active state.
 func nativeHandleSTAThreadMessage(state *nativeWebViewState, msg *nativeMsg) bool {
-	if msg == nil || msg.Hwnd != 0 || (msg.Message != wmNativeWrongThread && msg.Message != wmNativeStartupTimeout) {
+	if msg == nil || msg.Hwnd != 0 || (msg.Message != wmNativeWrongThread && msg.Message != wmNativeStartupTimeout && msg.Message != wmNativeResourceReady) {
 		return false
 	}
 	if state == nil || state != nativeActive || !nativeSessionMessageMatches(state.MessageToken, msg.WParam, state.Window.Load() != 0) {
@@ -577,6 +582,8 @@ func nativeHandleSTAThreadMessage(state *nativeWebViewState, msg *nativeMsg) boo
 	}
 	hwnd := state.Window.Load() // read only on the owner STA
 	switch msg.Message {
+ case wmNativeResourceReady:
+  nativeDrainResourceQueue(state)
 	case wmNativeWrongThread:
 		if !state.Life.isClosing() {
 			if state.Failure == nil {
@@ -655,6 +662,10 @@ func runNativeWebView2(url, profile string, inprocess http.Handler) error {
 		return err
 	}
 	state := &nativeWebViewState{URL: url, STAThreadID: uint32(tid), MessageToken: token,RequestHandler:inprocess}
+ if inprocess!=nil{
+  state.ResourcePending=make(map[uint64]nativePendingResource)
+  state.ResourceReady=make(chan nativeResourceResult,nativeMaxPendingResources+1)
+ }
 	nativeActive = state
 	defer func() {
 		// WebView2 environment/controller creation is asynchronous. A window
