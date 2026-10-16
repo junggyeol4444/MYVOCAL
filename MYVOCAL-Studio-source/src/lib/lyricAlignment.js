@@ -14,9 +14,19 @@ export function lyricUnits(text){
  return lines.flatMap(line=>line.match(/[가-힣]|[A-Za-z]+(?:['’][A-Za-z]+)?|[0-9]+|[ぁ-ゟァ-ヿ一-龯]+/gu)||[]).slice(0,4096);
 }
 export function midiVocalTracks(project){return (project?.tracks||[]).filter(t=>Array.isArray(t.midiNotes)&&t.midiNotes.length>0&&t.instrument!=='drums');}
+// An existing hand-written vocal MIDI always wins. For auto-created songs,
+// use the Composer's real lead melody, never its chord/bass/piano accompaniment.
+// Selecting a specific track in the lyric editor still overrides this default.
+export function preferredVocalMidiTrack(project){
+ const tracks=midiVocalTracks(project);
+ return tracks.find(t=>t.type==='vocal')||
+  tracks.find(t=>t.generatedBy==='composer-v04'&&(t.composerRole==='melody'||t.name==='Composer · Melody'))||
+  tracks.find(t=>/lead melody|vocal melody|보컬 멜로디/i.test(t.name||''))||
+  tracks[0]||null;
+}
 export function alignmentSource(project,trackId){
  const tracks=midiVocalTracks(project);
- const track=tracks.find(t=>t.id===trackId)||tracks.find(t=>t.type==='vocal'||/vocal|보컬/i.test(t.name||''))||tracks[0];
+ const track=tracks.find(t=>t.id===trackId)||preferredVocalMidiTrack(project);
  if(!track)throw Error('먼저 MIDI 피아노 롤에 보컬 멜로디 음표를 입력해 주세요.');
  const notes=normalizeSingingNotes(track.midiNotes).sort((a,b)=>a.startBeat-b.startBeat||a.pitch-b.pitch);
  if(!notes.length)throw Error('해당 트랙에 유효한 MIDI 음표가 없습니다.');
