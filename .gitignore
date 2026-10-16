@@ -1,0 +1,12 @@
+# Development output; do not commit generated test results
+/node_modules/
+/MYVOCAL-Studio-source/node_modules/
+/MYVOCAL-Studio-source/dist/
+**/__pycache__/
+*.pyc
+/*.log
+/*.exit
+/MYVOCAL-Studio.exe
+/MYVOCAL-Studio-Windows.exe
+/MYVOCAL-Windows-Tests.exe
+/MYVOCAL-Studio-Windows.zip
