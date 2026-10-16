@@ -99,7 +99,7 @@ test('WebM recorder actually captures a whole video timeline and returns recorde
   addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
   emit(name,e={}){for(const fn of this.listeners[name]||[])fn(e);}
   start(){this.state='recording';}
-  stop(){this.state='inactive';stops++;this.emit('dataavailable',{data:new Blob(['real-recorded-webm-data-not-just-json'])});this.emit('stop');}
+  stop(){this.state='inactive';stops++;this.emit('dataavailable',{data:new Blob(['real-recorded-webm-data-not-just-json'.repeat(12)])});this.emit('stop');}
  }
  const context={fillRect(){},drawImage(){frames++;},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
  const tracks=[{stop(){}}];
@@ -137,7 +137,7 @@ test('recorded WebM includes the real existing music mix as an audio stream',asy
   addEventListener(n,fn){(this.listeners[n]??=[]).push(fn);}
   emit(n,e={}){(this.listeners[n]||[]).forEach(fn=>fn(e));}
   start(){this.state='recording';assert.equal(this.stream.getTracks().length,2);}
-  stop(){this.state='inactive';this.emit('dataavailable',{data:new Blob(['recorded-webm-video-audio-data'])});this.emit('stop');}
+  stop(){this.state='inactive';this.emit('dataavailable',{data:new Blob(['recorded-webm-video-audio-data'.repeat(12)])});this.emit('stop');}
  }
  class AudioContext{
   currentTime=0;
