@@ -16,7 +16,7 @@ import Learning from './pages/Learning';
 import Library from './pages/Library';
 import Settings from './pages/Settings';
 
-const labels={home:'대시보드',create:'로컬 노래 만들기',projects:'프로젝트',music:'Music Studio',voices:'Voice Studio',training:'Voice Training',characters:'Character Studio',video:'Music Video Studio',pv:'Vocal Synth PV',learning:'Learning Studio',library:'라이브러리',settings:'설정',workspace:'프로젝트 편집기'};
+const labels={home:'대시보드',create:'AI로 노래 만들기',projects:'프로젝트',music:'Music Studio',voices:'Voice Studio',training:'Voice Training',characters:'Character Studio',video:'Music Video Studio',pv:'Vocal Synth PV',learning:'Learning Studio',library:'라이브러리',settings:'설정',workspace:'프로젝트 편집기'};
 function fromHash(){const [,route,projectId]=location.hash.split('/');return {page:labels[route]?route:'home',projectId:projectId||''};}
 export default function App(){
  const [storageState,setStorageState]=useState(readDataState);
@@ -38,7 +38,7 @@ export default function App(){
  const add=(type,item)=>setData(d=>updateEntity(d,type,item));
  const remove=(type,id)=>setData(d=>deleteEntity(d,type,id));
  const editProject=project=>setData(d=>projectUpdate(d,project));
- const createProject=(options)=>{let project=newProject(options);if(options.pipeline97){const plan=planCreateSongVideo97(project,options.options);project=applyCreateSongVideo97(project,plan);}setData(d=>updateEntity(d,'projects',project));navigate('workspace',project.id);notify(options.pipeline97?'STEP97 로컬 가사/MIDI/스토리보드 초안 저장 · 실제 AI Singing/MV 추론은 별도 확인 필요':'프로젝트 초안을 만들었습니다. (AI 생성은 아직 미연결)');return project;};
+ const createProject=(options)=>{let project=newProject(options);if(options.pipeline97){const plan=planCreateSongVideo97(project,options.options);project=applyCreateSongVideo97(project,plan);}setData(d=>updateEntity(d,'projects',project));navigate('workspace',project.id);notify(options.pipeline97?'가사·MIDI·영상 장면 초안을 만들었습니다. 편집기에서 재생·수정하세요. AI 가창·영상 생성은 아직 미연결입니다.':'빈 프로젝트를 만들었습니다.');return project;};
  const current=data.projects.find(p=>p.id===route.projectId);
  const recover=()=>{
   if(!confirm('손상된 데이터를 별도 복구 키에 보존한 다음 새 작업 공간으로 초기화합니다. 계속할까요?'))return;

@@ -1,7 +1,7 @@
 import React from 'react';
 import {Icon} from './UI';
 const groups=[
- {label:'WORKSPACE',items:[['home','홈','home'],['create','로컬 노래 만들기','spark'],['projects','내 프로젝트','folder']]},
+ {label:'WORKSPACE',items:[['home','홈','home'],['create','AI로 노래 만들기','spark'],['projects','내 프로젝트','folder']]},
  {label:'STUDIOS',items:[['music','Music Studio','music'],['voices','Voice Studio','mic'],['training','Voice Training','wave'],['characters','Character Studio','user'],['video','Video Studio','video'],['pv','Vocal Synth PV','wave'],['learning','Learning Studio','book']]},
  {label:'MANAGE',items:[['library','라이브러리','layers'],['settings','로컬 설정','settings']]}
 ];
