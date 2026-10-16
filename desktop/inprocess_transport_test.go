@@ -3,6 +3,7 @@ package main
 import (
  "bytes"
  "net/http"
+ "strings"
  "testing"
 )
 
@@ -39,4 +40,11 @@ func TestInprocessDispatchPreservesRequestBody(t *testing.T){
  })
  response,e:=dispatchInprocessRequest(h,"POST",fixedOrigin+"/api/singing/render",http.Header{"X-Myvocal-Session":[]string{"ok"}},[]byte("hello"))
  if e!=nil||response.Status!=201||string(response.Body)!="{\"ok\":true}"||response.Header.Get("Content-Type")!="application/json"{t.Fatalf("%#v %v",response,e)}
+}
+
+func TestInprocessHandlerPanicDoesNotCrashNativeHost(t *testing.T) {
+ handler:=http.HandlerFunc(func(http.ResponseWriter,*http.Request){panic("user-supplied input unexpectedly triggered a handler panic")})
+ response,err:=dispatchInprocessRequest(handler,"GET",fixedOrigin+"/api/test",nil,nil)
+ if err==nil||response.Status!=0||len(response.Body)!=0{t.Fatalf("panic was not safely contained: %#v %v",response,err)}
+ if strings.Contains(err.Error(),"user-supplied"){t.Fatal("handler panic details leaked")}
 }
