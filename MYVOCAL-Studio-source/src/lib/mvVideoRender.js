@@ -123,13 +123,17 @@ export function drawMvVideoFrame(canvas,plan,assets,seconds,{captions=[],showCap
  }
  const caption=showCaptions?captionAtTime(captions,seconds):null;
  if(caption?.text){
-  // Burn the same exact MIDI-text cue timing into the recorded canvas that
-  // is shown in preview. No claim is made about audio phonemes or lip-sync.
-  const top=Math.max(12,height-161),bandHeight=54;
+  // Burn the exact saved lyric phrase, including long user-edited text.
+  // Canvas and WebM use identical cue timing; this is not phoneme alignment.
+  const chars=Array.from(String(caption.text));
+  const lines=[];
+  for(let i=0;i<chars.length;i+=28)lines.push(chars.slice(i,i+28).join(''));
+  const fontSize=lines.length>1?18:25,step=lines.length>1?23:30;
+  const bandHeight=lines.length*step+14,top=Math.max(12,height-108-bandHeight);
   ctx.fillStyle='rgba(5,9,18,.84)';
   ctx.fillRect(15,top,width-30,bandHeight);
-  ctx.textAlign='center';ctx.font='bold 25px sans-serif';ctx.fillStyle='#ffffff';
-  ctx.fillText(frameTitle(caption.text),width/2,top+36,width-46);
+  ctx.textAlign='center';ctx.font=`bold ${fontSize}px sans-serif`;ctx.fillStyle='#ffffff';
+  lines.forEach((line,index)=>ctx.fillText(line,width/2,top+step*(index+1),width-46));
   ctx.textAlign='left';
  }
  return scene?.id||null;
