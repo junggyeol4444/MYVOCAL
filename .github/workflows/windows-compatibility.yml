@@ -18,6 +18,20 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: desktop/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build current UI for desktop EXE
+        working-directory: MYVOCAL-Studio-source
+        shell: pwsh
+        run: |
+          npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'npm test failed' }
+          node scripts/build-standalone.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone build failed' }
+          Copy-Item -LiteralPath MYVOCAL-Studio-v1.8.html -Destination ../desktop/index.html -Force
       - name: Go desktop tests
         working-directory: desktop
         run: go test ./...

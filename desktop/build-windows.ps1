@@ -5,6 +5,20 @@ $dll = Join-Path $root 'WebView2Loader.dll'
 $zip = Join-Path $root 'MYVOCAL-Studio-Windows.zip'
 if (-not (Get-Command 'go' -ErrorAction SilentlyContinue)) { throw 'Go 1.23+ is required.' }
 
+Push-Location (Join-Path $root 'MYVOCAL-Studio-source')
+try {
+    if (-not (Get-Command 'npm' -ErrorAction SilentlyContinue)) { throw 'Node.js and npm are required to build the UI.' }
+    & npm install --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw 'UI dependency installation failed.' }
+    & npm test
+    if ($LASTEXITCODE -ne 0) { throw 'JavaScript tests failed.' }
+    & node scripts/build-standalone.cjs
+    if ($LASTEXITCODE -ne 0) { throw 'UI build failed.' }
+    Copy-Item -LiteralPath 'MYVOCAL-Studio-v1.8.html' -Destination (Join-Path $root 'desktop/index.html') -Force
+} finally {
+    Pop-Location
+}
+
 Push-Location $PSScriptRoot
 try {
     & go test ./...

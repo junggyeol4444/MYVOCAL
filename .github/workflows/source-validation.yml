@@ -19,6 +19,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm test
       - run: node scripts/build-standalone.cjs
+      - name: Validate workspace archive test coverage
+        run: node --test tests/full-workspace-backup.test.mjs
   desktop:
     runs-on: ubuntu-latest
     defaults:
