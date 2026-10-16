@@ -649,3 +649,56 @@ test('completed WebM survives an exception from the final progress callback',asy
  assert.equal(trackStops,1,'media tracks must be released');
  assert.deepEqual(p,original,'source project remains unchanged');
 });
+
+test('completed music WebM returns even when AudioContext.close never settles',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ let elapsed=0,encoderStops=0,trackStops=0,closeCalls=0;
+ const tracks=[{kind:'video',stop(){trackStops++;}}];
+ const stream={
+  getVideoTracks:()=>tracks.filter(t=>t.kind==='video'),
+  getTracks:()=>tracks,
+  addTrack:t=>tracks.push(t)
+ };
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8,opus';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,data={}){for(const fn of this.listeners[name]||[])fn(data);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';encoderStops++;
+   this.emit('dataavailable',{data:new Blob(['encoded-music-video'.repeat(24)])});
+   this.emit('stop');
+  }
+ }
+ class AudioContext{
+  currentTime=0;
+  async resume(){}
+  async decodeAudioData(){return {duration:12};}
+  createMediaStreamDestination(){
+   return {stream:{getAudioTracks:()=>[{kind:'audio',stop(){trackStops++;}}]}};
+  }
+  createBufferSource(){return {connect(){},start(){},stop(){}};}
+  close(){closeCalls++;return new Promise(()=>{});}
+ }
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const env={MediaRecorder:Recorder,AudioContext,performance:{now:()=>elapsed},
+  requestAnimationFrame:fn=>{elapsed+=1000;queueMicrotask(fn);return elapsed;},
+  cancelAnimationFrame(){}};
+ let timer;
+ try{
+  const result=await Promise.race([
+   recordMvWebm(plan,{assets:new Map()},{
+    includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([82,73,70,70])]),
+    env,canvasFactory:()=>({getContext:()=>ctx,captureStream:()=>stream})
+   }),
+   new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('AudioContext.close blocked completed WebM')),750);})
+  ]);
+  assert.ok(result.blob.size>100,'the already encoded WebM must be returned');
+  assert.equal(result.includesAudio,true);
+  assert.equal(encoderStops,1,'recorder must be stopped');
+  assert.equal(trackStops,2,'both video and audio tracks must be stopped');
+  assert.equal(closeCalls,1,'audio cleanup must still be initiated');
+  assert.deepEqual(p,original,'original project data must be unchanged');
+ }finally{clearTimeout(timer);}
+});

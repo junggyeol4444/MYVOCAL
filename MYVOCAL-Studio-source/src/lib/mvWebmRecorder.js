@@ -181,6 +181,7 @@ export async function recordMvWebm(plan,prepared,{
   try{audioSource?.stop();}catch{}
   stopStream();
   // A disposed AudioContext may throw before returning a Promise.
-  if(audioContext){try{await audioContext.close();}catch{}}
+  // A browser audio close can remain pending; do not hold a completed WebM hostage.
+  if(audioContext){try{void Promise.resolve(audioContext.close()).catch(()=>{});}catch{}}
  }
 }
