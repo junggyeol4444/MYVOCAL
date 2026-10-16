@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {newProject} from '../src/lib/schema.js';
+import {planCreateSongVideo97,applyCreateSongVideo97} from '../src/lib/createSongVideo97.js';
+import {alignmentSource,isAlignmentStale} from '../src/lib/lyricAlignment.js';
+import {projectPreviewNotes} from '../src/lib/localVocalSampler.js';
+import {renderOfflineVocalGuideSelection} from '../src/lib/offlineVocalGuide.js';
+const made=()=>{const p=newProject({title:'MYVOCAL song',prompt:'친구를 다시 만나는 노래'});return applyCreateSongVideo97(p,planCreateSongVideo97(p,{lyrics:true,composition:true,arrangement:true,storyboard:true}));};
+test('song creation uses lead melody rather than chord track for lyric sync',()=>{const p=made(),lead=p.tracks.find(t=>t.composerRole==='melody');assert.equal(p.vocalAlignment.trackId,lead.id);assert.equal(alignmentSource(p).track.id,lead.id);assert.equal(isAlignmentStale(p,p.vocalAlignment),false);assert.deepEqual(projectPreviewNotes(p),alignmentSource(p).notes);});
+test('fresh song emits audible, correctly positioned vocal guide WAV',async()=>{const p=made(),alignment=p.vocalAlignment;const result=renderOfflineVocalGuideSelection(alignment,null,1,1);assert.ok(result.blob.size>44);assert.equal(result.rendered,1);const bytes=new Uint8Array(await result.blob.arrayBuffer());assert.equal(String.fromCharCode(...bytes.slice(0,4)),'RIFF');assert.ok(bytes.slice(44).some(v=>v!==0));});
