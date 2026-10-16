@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {validateGenreMix,resolveGenreMix,singleGenreMix,genreMixText,addGenreToMix,removeGenreFromMix} from '../src/lib/genreMix.js';
 import {newProject} from '../src/lib/schema.js';
-import {generateOfflineDraft,applyComposition} from '../src/lib/composer.js';
+import {generateOfflineDraft,applyComposition,COMPOSER_PARTS} from '../src/lib/composer.js';
 
 const mixed=[{name:'Ballad',weight:50},{name:'Rock',weight:30},{name:'Orchestral',weight:20}];
 test('accepts the product-specification mixed genre example without changing percentages',()=>{
@@ -37,7 +37,7 @@ test('offline composer computes BPM from genre weights and produces deterministi
  // Ballad [64,96], Rock [98,156], Orchestral/Pop [86,132] -> weighted midpoint 100.
  assert.equal(d.bpm,100);
  assert.deepEqual(d.genreMix,mixed);assert.equal(d.genre,'Ballad');
- assert.equal(d.midiTracks.length,4);
+ assert.equal(d.midiTracks.length,COMPOSER_PARTS.length);
  assert.deepEqual(d.midiTracks,generateOfflineDraft(opts).midiTracks);
  assert.notDeepEqual(d.midiTracks,generateOfflineDraft({...opts,genreMix:[{name:'Rock',weight:100}]}).midiTracks);
 });
