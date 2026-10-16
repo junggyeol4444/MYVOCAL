@@ -702,3 +702,39 @@ test('completed music WebM returns even when AudioContext.close never settles',a
   assert.deepEqual(p,original,'original project data must be unchanged');
  }finally{clearTimeout(timer);}
 });
+
+test('abort during canvas captureStream rejects without starting the WebM encoder',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ const controller=new AbortController();
+ let encoderStarts=0,trackStops=0,encoderStops=0;
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  start(){encoderStarts++;this.state='recording';}
+  stop(){encoderStops++;this.state='inactive';}
+ }
+ const env={MediaRecorder:Recorder,performance:{now:()=>0},
+  requestAnimationFrame:()=>1,cancelAnimationFrame(){}};
+ const canvas={
+  getContext:()=>({fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})}),
+  captureStream(){
+   controller.abort();
+   const tracks=[{kind:'video',stop(){trackStops++;}}];
+   return {getVideoTracks:()=>tracks,getTracks:()=>tracks};
+  }
+ };
+ let timer;
+ try{
+  await assert.rejects(Promise.race([
+   recordMvWebm(plan,{assets:new Map()},{
+    signal:controller.signal,env,canvasFactory:()=>canvas
+   }),
+   new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('missed abort during captureStream')),350);})
+  ]),/영상 저장을 취소했습니다/);
+ }finally{clearTimeout(timer);}
+ assert.equal(encoderStarts,0,'cancelled export must not start an encoder');
+ assert.equal(encoderStops,0,'inactive encoder need not be stopped');
+ assert.equal(trackStops,1,'captured video track must be released');
+ assert.deepEqual(p,original,'saved project must remain unchanged');
+});
