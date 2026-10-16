@@ -125,10 +125,12 @@ function applyChorusArrangement11(project,windows,selected){
     if(i%3!==0||!playableNote(n)||!within11(n,windows))continue;
     const pitches=getChords(n.startBeat);
     if(!pitches)continue;
-    const choices=pitches.flatMap(p=>[p-12,p,p+12]).filter(p=>p>=36&&p<=n.pitch-3&&p<=127);
-    if(!choices.length)continue;
-    const pitch=Math.max(...choices),key=`${n.startBeat}:${pitch}`;
-    if(occupied.has(key))continue;
+    const choices=[...new Set(pitches.flatMap(p=>[p-12,p,p+12]))]
+      .filter(p=>p>=36&&p<=n.pitch-3&&p<=127).sort((a,b)=>b-a);
+    // A second "add harmony" request picks a new chord tone, not a duplicate.
+    const pitch=choices.find(p=>!occupied.has(`${n.startBeat}:${p}`));
+    if(pitch===undefined)continue;
+    const key=`${n.startBeat}:${pitch}`;
     if(touched>=256)break;
     occupied.add(key);
     updated.push({id:nextNoteId11(ids,'harmony'),pitch,startBeat:n.startBeat,
@@ -144,9 +146,10 @@ function applyChorusArrangement11(project,windows,selected){
      if(!(end>start)||!Number.isFinite(start)||!Number.isFinite(end))continue;
      let pitches;
      try{pitches=chordPitches(c.symbol,4);}catch{continue;}
-     const pitch=pitches.at(-1);
+     // Each repeated request can add the next chord voice to the string pad.
+     const pitch=[...pitches].reverse().find(p=>!occupied.has(`${start}:${p}`));
+     if(pitch===undefined)continue;
      const key=`${start}:${pitch}`;
-     if(occupied.has(key))continue;
      if(touched>=256)break;
      occupied.add(key);
      updated.push({id:nextNoteId11(ids,'strings'),pitch,startBeat:start,
