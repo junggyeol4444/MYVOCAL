@@ -1,3 +1,4 @@
+import {alignLyricNotes} from './lyricAlignment.js';
 // STEP97: an executable local orchestration of existing composer/storyboard pieces.
 // Selected AI-only tasks remain blocked; they are not marked "generated".
 import {generateOfflineDraft,applyComposition} from './composer.js';
@@ -20,6 +21,12 @@ export function applyCreateSongVideo97(project,plan){
  const x=plan.options||{};if(!Object.keys(x).every(k=>ORDER.includes(k)))throw Error('허용되지 않은 작업 항목입니다.');
  const compose=!!(x.lyrics||x.composition||x.arrangement);
  let next=compose?applyComposition(project,plan.draft,{lyrics:!!x.lyrics,chords:!!x.composition,midi:!!x.arrangement,settings:!!x.composition,replace:false}):{...project};
+ // An auto-created song needs a real sung-melody timeline, not just a
+ // backing chord track. Keep any user-authored alignment untouched.
+ if(x.lyrics&&x.arrangement&&!project.vocalAlignment){
+  const alignment=alignLyricNotes(next);
+  next={...next,vocalAlignment:alignment};
+ }
  if(x.storyboard&&plan.canStoryboard){
   const duration=plan.draft.bars*4*60/(Number(next.bpm)||120);
   const names=['Intro','Verse','Chorus','Bridge','Final Chorus','Outro'];
