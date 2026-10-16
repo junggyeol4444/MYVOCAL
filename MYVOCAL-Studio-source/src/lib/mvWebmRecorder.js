@@ -166,7 +166,8 @@ export async function recordMvWebm(plan,prepared,{
    }catch(e){finish(e);}
   });
   const blob=await result;
-  onProgress(100);
+  // Completion status is best-effort; keep the successfully encoded WebM.
+  try{onProgress(100);}catch{}
   return {blob,fileName:'MYVOCAL-MusicVideo.webm',seconds:plan.durationSec,mimeType:'video/webm',includesAudio:audioEnabled,includesCaptions:!!showCaptions&&captions.length>0};
  }finally{
   // Frame cancellation is best-effort: failure must not skip media cleanup.

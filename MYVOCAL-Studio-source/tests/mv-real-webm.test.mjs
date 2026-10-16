@@ -615,3 +615,37 @@ test('a synchronous AudioContext close error preserves finished WebM and release
  assert.equal(contextCloses,1);
  assert.deepEqual(p,original,'the original project must remain unchanged');
 });
+
+test('completed WebM survives an exception from the final progress callback',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ let elapsed=0,encoderStops=0,trackStops=0,completionCalls=0;
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,data={}){for(const fn of this.listeners[name]||[])fn(data);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';encoderStops++;
+   this.emit('dataavailable',{data:new Blob(['completed-webm-data'.repeat(25)])});
+   this.emit('stop');
+  }
+ }
+ const env={MediaRecorder:Recorder,performance:{now:()=>elapsed},
+  requestAnimationFrame:fn=>{elapsed+=1000;queueMicrotask(fn);return elapsed;},
+  cancelAnimationFrame(){}
+ };
+ const result=await recordMvWebm(plan,{assets:new Map()},{
+  env,canvasFactory:()=>({
+   getContext:()=>({fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})}),
+   captureStream:()=>({getVideoTracks:()=>[{}],getTracks:()=>[{stop(){trackStops++;}}]})
+  }),
+  onProgress(percent){if(percent===100){completionCalls++;throw Error('progress panel already disposed');}}
+ });
+ assert.ok(result.blob.size>100,'successful recording bytes must still be returned');
+ assert.equal(result.mimeType,'video/webm');
+ assert.equal(completionCalls,1,'final completion update was attempted');
+ assert.equal(encoderStops,1);
+ assert.equal(trackStops,1,'media tracks must be released');
+ assert.deepEqual(p,original,'source project remains unchanged');
+});
