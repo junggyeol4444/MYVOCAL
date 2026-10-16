@@ -2,6 +2,7 @@
 // assets; scenes without media become explicitly labeled storyboard cards.
 // Not a generative video, lip-sync, or neural inference engine.
 import {auditMvStoryboard} from './mvStoryboard.js';
+import {captionAtTime} from './mvLyricCaptions.js';
 
 export const MV_VIDEO_WIDTH=640;
 export const MV_VIDEO_HEIGHT=360;
@@ -93,7 +94,7 @@ function cover(ctx,source,width,height){
  ctx.drawImage(source,(width-outW)/2,(height-outH)/2,outW,outH);
  return true;
 }
-export function drawMvVideoFrame(canvas,plan,assets,seconds){
+export function drawMvVideoFrame(canvas,plan,assets,seconds,{captions=[],showCaptions=false}={}){
  const ctx=canvas?.getContext?.('2d'),width=canvas?.width,height=canvas?.height;
  if(!ctx||!(width>0&&height>0))throw Error('영상을 그릴 화면이 없습니다.');
  const scene=findMvVideoScene(plan,seconds);
@@ -119,6 +120,17 @@ export function drawMvVideoFrame(canvas,plan,assets,seconds){
   ctx.textAlign='left';ctx.fillText(frameTitle(scene.title),22,height-40,width-44);
   ctx.font='13px sans-serif';ctx.fillStyle='#dee4ee';
   ctx.fillText(`${scene.start.toFixed(2)}s — ${scene.end.toFixed(2)}s`,22,height-17,width-44);
+ }
+ const caption=showCaptions?captionAtTime(captions,seconds):null;
+ if(caption?.text){
+  // Burn the same exact MIDI-text cue timing into the recorded canvas that
+  // is shown in preview. No claim is made about audio phonemes or lip-sync.
+  const top=Math.max(12,height-161),bandHeight=54;
+  ctx.fillStyle='rgba(5,9,18,.84)';
+  ctx.fillRect(15,top,width-30,bandHeight);
+  ctx.textAlign='center';ctx.font='bold 25px sans-serif';ctx.fillStyle='#ffffff';
+  ctx.fillText(frameTitle(caption.text),width/2,top+36,width-46);
+  ctx.textAlign='left';
  }
  return scene?.id||null;
 }
