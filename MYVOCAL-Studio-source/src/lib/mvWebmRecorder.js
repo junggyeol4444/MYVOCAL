@@ -15,6 +15,24 @@ export function assertMvExportEnvironment(env=globalThis){
  if(typeof env.requestAnimationFrame!=='function')
   throw Error('영상 녹화에 필요한 화면 프레임 기능이 없습니다.');
 }
+// Abort pending audio preparation without waiting for a delayed mixdown,
+// decode or suspended AudioContext. This cannot interrupt synchronous work.
+function awaitMvAudioPreparation(work,signal){
+ if(signal?.aborted)return Promise.reject(Error('영상 저장을 취소했습니다.'));
+ if(!signal)return Promise.resolve().then(work);
+ return new Promise((resolve,reject)=>{
+  const cleanup=()=>signal.removeEventListener('abort',abort);
+  const abort=()=>{cleanup();reject(Error('영상 저장을 취소했습니다.'));};
+  signal.addEventListener('abort',abort,{once:true});
+  Promise.resolve().then(()=>{
+   if(signal.aborted)throw Error('영상 저장을 취소했습니다.');
+   return work();
+  }).then(
+   value=>{cleanup();resolve(value);},
+   error=>{cleanup();reject(error);}
+  );
+ });
+}
 export async function recordMvWebm(plan,prepared,{
  renderAudio=null,includeAudio=false,showCaptions=false,captions=[],signal,onProgress=()=>{},
  canvasFactory=()=>document.createElement('canvas'),env=globalThis
@@ -39,15 +57,15 @@ export async function recordMvWebm(plan,prepared,{
    const C=env.AudioContext||env.webkitAudioContext;
    if(!C)throw Error('오디오가 포함된 영상 저장을 지원하지 않습니다.');
    audioContext=new C();
-   await audioContext.resume(); // initiated by the user's click, not background work
+   await awaitMvAudioPreparation(()=>audioContext.resume(),signal); // initiated by the user's click
   }
   if(signal?.aborted)throw Error('영상 저장을 취소했습니다.');
   drawMvVideoFrame(canvas,plan,allAssets,0,{captions,showCaptions});
   if(audioEnabled){
-   const wav=await renderAudio();
+   const wav=await awaitMvAudioPreparation(renderAudio,signal);
    if(!wav?.size)throw Error('노래 WAV를 생성하지 못했습니다.');
-   const raw=await wav.arrayBuffer();
-   const decoded=await audioContext.decodeAudioData(raw.slice(0));
+   const raw=await awaitMvAudioPreparation(()=>wav.arrayBuffer(),signal);
+   const decoded=await awaitMvAudioPreparation(()=>audioContext.decodeAudioData(raw.slice(0)),signal);
    if(!decoded?.duration)throw Error('생성한 음악을 읽지 못했습니다.');
    audioDestination=audioContext.createMediaStreamDestination();
    audioSource=audioContext.createBufferSource();

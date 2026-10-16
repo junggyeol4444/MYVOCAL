@@ -240,3 +240,53 @@ test('MV export and preview both pass cancellation signals to scene media loader
  assert.ok(ui.includes('loadMvVideoAssets(plan,{loadFile:getFile,signal:controller.signal})'));
  assert.ok(ui.includes('controller.abort();resources?.dispose()'));
 });
+
+test('cancelling while existing WAV mixdown is pending releases audio resources immediately',async()=>{
+ const controller=new AbortController();
+ let started;
+ const mixing=new Promise(resolve=>{started=resolve;});
+ let audioCloses=0,mediaStarted=0,sourceProject=project();
+ const original=structuredClone(sourceProject);
+ class AudioContext{
+  async resume(){}
+  async close(){audioCloses++;}
+ }
+ const env={MediaRecorder:{isTypeSupported:()=>true},AudioContext,requestAnimationFrame(){}};
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const canvas={getContext:()=>ctx,captureStream(){mediaStarted++;throw Error('recording should not start');}};
+ const pending=recordMvWebm(planMvVideoRender(sourceProject),{assets:new Map()},{
+  includeAudio:true,renderAudio:()=>{started();return new Promise(()=>{});},
+  signal:controller.signal,env,canvasFactory:()=>canvas
+ });
+ await mixing;
+ controller.abort();
+ await assert.rejects(pending,/영상 저장을 취소했습니다/);
+ assert.equal(audioCloses,1,'AudioContext closes after cancelling pending sound preparation');
+ assert.equal(mediaStarted,0,'WebM recording must not start after cancellation');
+ assert.deepEqual(sourceProject,original,'original project is not mutated');
+});
+
+test('cancelling while AudioContext decode is pending does not wait for decoder',async()=>{
+ const controller=new AbortController();
+ let decoding;
+ const started=new Promise(resolve=>{decoding=resolve;});
+ let closes=0,recorderStarted=0;
+ class AudioContext{
+  async resume(){}
+  decodeAudioData(){decoding();return new Promise(()=>{});}
+  async close(){closes++;}
+ }
+ const env={MediaRecorder:{isTypeSupported:()=>true},AudioContext,requestAnimationFrame(){}};
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const pending=recordMvWebm(planMvVideoRender(project()),{assets:new Map()},{
+  includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([1,2,3])]),
+  signal:controller.signal,env,canvasFactory:()=>({
+   getContext:()=>ctx,captureStream(){recorderStarted++;throw Error('unexpected recording');}
+  })
+ });
+ await started;
+ controller.abort();
+ await assert.rejects(pending,/영상 저장을 취소했습니다/);
+ assert.equal(closes,1);
+ assert.equal(recorderStarted,0);
+});
