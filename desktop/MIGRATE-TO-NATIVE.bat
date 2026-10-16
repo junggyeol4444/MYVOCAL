@@ -1,13 +1,17 @@
 @echo off
 setlocal
-cd /d "%~dp0.."
-if exist "MYVOCAL-Studio-Windows.exe" (
-  "MYVOCAL-Studio-Windows.exe" --migrate-native
+set "ROOT=%~dp0"
+if exist "%ROOT%MYVOCAL-Studio-Windows.exe" (
+  "%ROOT%MYVOCAL-Studio-Windows.exe" --migrate-native
   exit /b %errorlevel%
 )
-if exist "MYVOCAL-Studio.exe" (
-  "MYVOCAL-Studio.exe" --migrate-native
+if exist "%ROOT%MYVOCAL-Studio.exe" (
+  "%ROOT%MYVOCAL-Studio.exe" --migrate-native
   exit /b %errorlevel%
 )
-echo MYVOCAL Studio EXE was not found next to the desktop folder.
+if exist "%ROOT%..\MYVOCAL-Studio.exe" (
+  "%ROOT%..\MYVOCAL-Studio.exe" --migrate-native
+  exit /b %errorlevel%
+)
+echo MYVOCAL Studio EXE was not found. Extract the entire Windows ZIP before running migration.
 exit /b 1
