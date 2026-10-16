@@ -1,4 +1,4 @@
-import React,{useEffect,useMemo,useRef,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {Button,Notice,Panel} from './UI';
 import {getFile} from '../lib/assetDb.js';
 import {audioEnd,mixdownWav} from '../lib/audioEngine.js';
@@ -20,7 +20,8 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  try{plan=planMvVideoRender(project,characters);}catch(e){planError=e.message;}
  const assetsSignature=JSON.stringify((project?.scenes||[]).map(s=>[s.id,s.imageAssetId,s.videoClipAssetId,s.videoGeneration?.mime]));
  const musicExists=project&&audioEnd(project)>0;
- useEffect(()=>()=>{mounted.current=false;abort.current?.abort();},[]);
+ const sceneTimeline=JSON.stringify(plan?.scenes.map(s=>[s.id,s.start,s.end,s.title])||[]);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;abort.current?.abort();};},[]);
  useEffect(()=>{
   let alive=true,resources=null;
   setPrepared(null);setLoadError('');
@@ -50,7 +51,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
    }else video.pause();
   }
   try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0);}catch{}
- },[prepared,assetsSignature,positionSeconds,playing,activeScene?.id,project?.id]);
+ },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id]);
  const startExport=async()=>{
   if(!plan||busy)return;
   const controller=new AbortController();abort.current=controller;
