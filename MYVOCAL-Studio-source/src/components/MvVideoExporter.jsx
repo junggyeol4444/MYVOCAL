@@ -4,6 +4,7 @@ import {getFile} from '../lib/assetDb.js';
 import {AudioEngine,audioEnd,mixdownWav} from '../lib/audioEngine.js';
 import {planMvVideoRender,loadMvVideoAssets,findMvVideoScene,drawMvVideoFrame,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT} from '../lib/mvVideoRender.js';
 import {recordMvWebm,assertMvExportEnvironment} from '../lib/mvWebmRecorder.js';
+import {buildMvLyricCaptions} from '../lib/mvLyricCaptions.js';
 
 function saveMovie(blob,project){
  const name=String(project.title||'myvocal').replace(/[^가-힣A-Za-z0-9_-]/g,'_').slice(0,64);
@@ -15,11 +16,13 @@ function saveMovie(blob,project){
 export default function MvVideoExporter({project,characters=[],positionSeconds=0,playing=false,notify}){
  const canvas=useRef(null),abort=useRef(null),mounted=useRef(true),previewAudio=useRef(null);
  const [prepared,setPrepared]=useState(null),[loadError,setLoadError]=useState('');
- const [busy,setBusy]=useState(false),[progress,setProgress]=useState(0),[includeSound,setIncludeSound]=useState(true);
+ const [busy,setBusy]=useState(false),[progress,setProgress]=useState(0),[includeSound,setIncludeSound]=useState(true),[showCaptions,setShowCaptions]=useState(true);
  let plan=null,planError='';
  try{plan=planMvVideoRender(project,characters);}catch(e){planError=e.message;}
  const assetsSignature=JSON.stringify((project?.scenes||[]).map(s=>[s.id,s.imageAssetId,s.videoClipAssetId,s.videoGeneration?.mime]));
  const musicExists=project&&audioEnd(project)>0;
+ const lyricCaptions=buildMvLyricCaptions(project);
+ const captionsEnabled=showCaptions&&lyricCaptions.status==='ready';
  const sceneTimeline=JSON.stringify(plan?.scenes.map(s=>[s.id,s.start,s.end,s.title])||[]);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;abort.current?.abort();previewAudio.current?.stop();};},[]);
  useEffect(()=>{
@@ -60,8 +63,8 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
     }else if(video.paused)video.play()?.catch(()=>{});
    }else video.pause();
   }
-  try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0);}catch{}
- },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id]);
+  try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0,{captions:lyricCaptions.captions,showCaptions:captionsEnabled});}catch{}
+ },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,project?.vocalAlignment?.sourceKey]);
  const startExport=async()=>{
   if(!plan||busy)return;
   const controller=new AbortController();abort.current=controller;
@@ -74,11 +77,12 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
    const useAudio=!!includeSound&&musicExists;
    const result=await recordMvWebm(plan,resources,{
     includeAudio:useAudio,renderAudio:()=>mixdownWav(project,{bitDepth:16,channels:2,sampleRate:44100}),
+    showCaptions:captionsEnabled,captions:lyricCaptions.captions,
     signal:controller.signal,onProgress:n=>{if(mounted.current)setProgress(n);}
    });
    if(controller.signal.aborted)throw Error('영상 저장을 취소했습니다.');
    saveMovie(result.blob,project);
-   notify(`장면 ${plan.scenes.length}개 · ${plan.durationSec.toFixed(1)}초짜리 실제 WebM 영상을 저장했습니다. 음악 ${useAudio?'포함':'제외'}.`);
+   notify(`장면 ${plan.scenes.length}개 · ${plan.durationSec.toFixed(1)}초짜리 실제 WebM 영상을 저장했습니다. 음악 ${useAudio?'포함':'제외'} · 싱크 가사 자막 ${captionsEnabled?'포함':'제외'}.`);
   }catch(e){notify('MV 영상 저장 실패: '+e.message);}
   finally{resources?.dispose();if(mounted.current){setBusy(false);setProgress(0);}abort.current=null;}
  };
@@ -95,9 +99,11 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
   {!prepared&&!loadError&&<p className="muted">장면 이미지·영상 파일 확인 중…</p>}
   <div className="hstack" style={{gap:12,flexWrap:'wrap',alignItems:'center'}}>
    <label className="muted"><input type="checkbox" disabled={!musicExists||busy} checked={includeSound&&musicExists} onChange={e=>setIncludeSound(e.target.checked)}/> 기존 곡의 음악·보컬 믹스 포함 {musicExists?'':'(재생 가능한 음악 없음)'}</label>
+   <label className="muted"><input type="checkbox" aria-label="가사 싱크 자막 영상 포함" disabled={lyricCaptions.status!=='ready'||busy} checked={captionsEnabled} onChange={e=>setShowCaptions(e.target.checked)}/> 싱크된 가사 자막 포함 {lyricCaptions.status==='ready'?(`(${lyricCaptions.captions.length}개 구간)`):'(가사 싱크 확인 필요)'}</label>
    <Button icon="download" variant="primary" disabled={!prepared||!!loadError||busy} onClick={startExport}>{busy?`WebM 기록 중 ${progress}%`:'전체 MV WebM 저장'}</Button>
    {busy&&<Button onClick={()=>abort.current?.abort()}>저장 취소</Button>}
   </div>
+  <p className="muted">{lyricCaptions.note}</p>
   {busy&&<progress aria-label="MV 영상 저장 진행률" max="100" value={progress} style={{width:'100%',marginTop:12}}/>}
   <p className="muted">640×360 · 12fps · 최대 5분 · 실시간 녹화(WebView2의 WebM 지원 필요). 영상 길이만큼 프로그램 창을 켜 두어야 합니다. MP4가 아닌 WebM으로 저장하며, 모델 없는 장면은 AI 영상으로 바뀌지 않습니다.</p>
   </>:<Notice>{planError}</Notice>}
