@@ -72,7 +72,10 @@ func nativeResponseStream(bytes []byte)(unsafe.Pointer,error){
  p,_,e:=procSHCreateMemStream.Call(uintptr(unsafe.Pointer(&bytes[0])),uintptr(len(bytes)))
  runtime.KeepAlive(bytes)
  if p==0{return nil,fmt.Errorf("SHCreateMemStream failed: %v",e)}
- return unsafe.Pointer(p),nil
+ // The Windows ABI returned a pointer-sized COM interface value. Interpret
+ // the slot as a pointer rather than converting a uintptr into a Go address.
+ // The IStream is native-owned and must be released with IUnknown.Release.
+ return *(*unsafe.Pointer)(unsafe.Pointer(&p)),nil
 }
 func nativeWriteWebResponse(state *nativeWebViewState,args unsafe.Pointer,status int,header http.Header,body []byte)error{
  if state==nil||state.Environment==nil{return errors.New("WebView2 environment absent")}
