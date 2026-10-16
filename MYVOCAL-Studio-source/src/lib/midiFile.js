@@ -13,7 +13,11 @@ export function createMidiFile(project){
  for(const [index,track] of (project.tracks||[]).entries()){
   const notes=(track.midiNotes||[]).filter(n=>Number.isFinite(Number(n.startBeat))&&Number(n.length)>0);
   if(!notes.length)continue;
-  const channel=index%15===9?10:index%15;const events=[];
+  // General MIDI channel 10 (zero-based 9) is reserved for percussion.
+  // Otherwise exported drum notes would sound as pitched piano/guitar parts.
+  const melodicChannel=index%15;
+  const channel=track.instrument==='drums'?9:melodicChannel>=9?melodicChannel+1:melodicChannel;
+  const events=[];
   const trackName=ascii(track.name||'MIDI Track').slice(0,80);
   events.push({tick:0,pri:0,bytes:[255,3,...variable(trackName.length),...trackName]});
   const program=programs[track.instrument||'piano']||0;
@@ -45,18 +49,19 @@ export async function parseMidiFile(file){
  for(let trackIndex=0;trackIndex<tracks;trackIndex++){
   if(r.str(4)!=='MTrk')throw Error('MIDI 트랙이 손상되었습니다.');
   const length=r.u32(),stop=r.pos+length;if(stop>r.length)throw Error('MIDI 트랙 길이가 잘못되었습니다.');
-  let tick=0,running=0,program=0,name=`MIDI ${trackIndex+1}`;const held=new Map(),notes=[];
+  let tick=0,running=0,program=0,name=`MIDI ${trackIndex+1}`,drumChannel=false;const held=new Map(),notes=[];
   while(r.pos<stop){
    tick+=r.vlq();let status=r.u8();if(status<0x80){r.pos--;if(!running)throw Error('잘못된 Running Status입니다.');status=running;}else if(status<0xf0)running=status;
    if(status===0xff){const type=r.u8(),size=r.vlq();if(r.pos+size>stop)throw Error('메타 이벤트 범위를 벗어났습니다.');if(type===0x51&&size===3&&!bpm){const t=(r.u8()<<16)|(r.u8()<<8)|r.u8();bpm=Math.round(60000000/t);}else if(type===0x03&&size<256){name=r.str(size);}else r.pos+=size;continue;}
    if(status===0xf0||status===0xf7){const size=r.vlq();r.pos+=size;continue;}
    const event=status&0xf0,channel=status&0x0f;const a=r.u8(),b=(event===0xc0||event===0xd0)?0:r.u8();
    if(event===0xc0)program=a;
+   if((event===0x90||event===0x80)&&channel===9)drumChannel=true;
    if(event===0x90&&b>0){const k=channel+':'+a,stack=held.get(k)||[];stack.push({tick,velocity:b});held.set(k,stack);}
    if(event===0x80||(event===0x90&&b===0)){const k=channel+':'+a,stack=held.get(k);if(stack?.length){const start=stack.shift();notes.push({pitch:a,velocity:start.velocity,startBeat:+(start.tick/division).toFixed(4),length:+(Math.max(1,tick-start.tick)/division).toFixed(4)});}}
   }
   r.pos=stop;
-  if(notes.length)result.push({name,instrument:program<8?'piano':program>=32&&program<40?'bass':program>=48&&program<56?'strings':program>=24&&program<32?'guitar':'synth',notes:notes.slice(0,6000)});
+  if(notes.length)result.push({name,instrument:drumChannel?'drums':program<8?'piano':program>=32&&program<40?'bass':program>=48&&program<56?'strings':program>=24&&program<32?'guitar':'synth',notes:notes.slice(0,6000)});
  }
  if(result.reduce((s,t)=>s+t.notes.length,0)>10000)throw Error('음표 수가 너무 많습니다. (최대 10,000개)');
  return {bpm:bpm||null,tracks:result};
