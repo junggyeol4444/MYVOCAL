@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {newProject} from '../src/lib/schema.js';
-import {planMvVideoRender,findMvVideoScene,drawMvVideoFrame,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT,MV_VIDEO_FPS} from '../src/lib/mvVideoRender.js';
+import {planMvVideoRender,findMvVideoScene,drawMvVideoFrame,loadMvVideoAssets,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT,MV_VIDEO_FPS} from '../src/lib/mvVideoRender.js';
 import {selectMvWebmType,assertMvExportEnvironment,recordMvWebm} from '../src/lib/mvWebmRecorder.js';
 
 function project(){
@@ -196,4 +196,47 @@ test('WebM recording releases the active encoder and all tracks when audio start
  assert.equal(encoderStops,1,'a started MediaRecorder must be stopped on failure');
  assert.equal(trackStops,2,'both captured video and audio tracks must be released');
  assert.equal(contextCloses,1,'the audio context must also be closed');
+});
+
+test('cancelled MV export stops waiting for a pending IndexedDB media read',async()=>{
+ const p=project(),before=structuredClone(p),plan=planMvVideoRender(p);
+ const controller=new AbortController();
+ const pending=loadMvVideoAssets(plan,{
+  signal:controller.signal,
+  loadFile:()=>new Promise(()=>{})
+ });
+ controller.abort();
+ await assert.rejects(pending,/취소/);
+ assert.deepEqual(p,before,'cancellation must not mutate the source project');
+});
+test('cancelling while a scene clip loads releases the pending player and object URL',async()=>{
+ const plan=planMvVideoRender(project());
+ const videoScene=plan.scenes.find(s=>s.kind==='video');
+ const controller=new AbortController();
+ let started;
+ const playerReady=new Promise(resolve=>{started=resolve;});
+ let paused=0,removed=0,reloaded=0,revoked=0;
+ const video=new EventTarget();
+ video.pause=()=>{paused++;};
+ video.removeAttribute=name=>{if(name==='src')removed++;};
+ video.load=()=>{reloaded++;};
+ const pending=loadMvVideoAssets({...plan,scenes:[videoScene]},{
+  signal:controller.signal,
+  loadFile:async()=>new Blob(['clip'],{type:'video/mp4'}),
+  createUrl:()=> 'blob:test-scene-video',
+  revokeUrl:url=>{assert.equal(url,'blob:test-scene-video');revoked++;},
+  createVideo:()=>{started();return video;}
+ });
+ await playerReady;
+ controller.abort();
+ await assert.rejects(pending,/취소/);
+ assert.equal(paused,1);
+ assert.equal(removed,1);
+ assert.equal(reloaded,1);
+ assert.equal(revoked,1);
+});
+test('MV export and preview both pass cancellation signals to scene media loader',()=>{
+ const ui=readFileSync(new URL('../src/components/MvVideoExporter.jsx',import.meta.url),'utf8');
+ assert.ok(ui.includes('loadMvVideoAssets(plan,{loadFile:getFile,signal:controller.signal})'));
+ assert.ok(ui.includes('controller.abort();resources?.dispose()'));
 });

@@ -38,13 +38,14 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  },[playing,project?.id,musicExists]);
  useEffect(()=>{
   let alive=true,resources=null;
+  const controller=new AbortController();
   setPrepared(null);setLoadError('');
   if(!plan)return;
-  loadMvVideoAssets(plan,{loadFile:getFile}).then(x=>{
+  loadMvVideoAssets(plan,{loadFile:getFile,signal:controller.signal}).then(x=>{
    if(!alive)x.dispose();
    else{resources=x;setPrepared(x);}
-  }).catch(e=>{if(alive)setLoadError(e.message);});
-  return()=>{alive=false;resources?.dispose();};
+  }).catch(e=>{if(alive&&!controller.signal.aborted)setLoadError(e.message);});
+  return()=>{alive=false;controller.abort();resources?.dispose();};
  // Scenes and original asset links, not the moving timeline position.
  },[project?.id,assetsSignature,!!plan]);
  const activeScene=plan?findMvVideoScene(plan,Number(positionSeconds)||0):null;
@@ -74,7 +75,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
   try{
    assertMvExportEnvironment();
    // Fresh playback elements keep the preview untouched throughout export.
-   resources=await loadMvVideoAssets(plan,{loadFile:getFile});
+   resources=await loadMvVideoAssets(plan,{loadFile:getFile,signal:controller.signal});
    const useAudio=!!includeSound&&musicExists;
    const result=await recordMvWebm(plan,resources,{
     includeAudio:useAudio,renderAudio:()=>mixdownWav(project,{bitDepth:16,channels:2,sampleRate:44100}),

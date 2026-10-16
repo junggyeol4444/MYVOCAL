@@ -42,47 +42,87 @@ export function findMvVideoScene(plan,seconds){
 export function selectMvSceneVisual(scene){
  return {assetId:scene?.assetId||'',kind:scene?.kind||'card'};
 }
-function waitForMedia(el,event){
+const cancelledLoad=()=>Error('영상 저장을 취소했습니다.');
+const assertNotAborted=signal=>{if(signal?.aborted)throw cancelledLoad();};
+function waitForMedia(el,event,signal){
  return new Promise((resolve,reject)=>{
-  const done=()=>{el.removeEventListener(event,done);el.removeEventListener('error',bad);resolve(el);};
-  const bad=()=>{el.removeEventListener(event,done);el.removeEventListener('error',bad);reject(Error('영상 또는 이미지 파일을 열지 못했습니다.'));};
+  const cleanup=()=>{
+   el.removeEventListener(event,done);
+   el.removeEventListener('error',bad);
+   signal?.removeEventListener('abort',abort);
+  };
+  const done=()=>{cleanup();resolve(el);};
+  const bad=()=>{cleanup();reject(Error('영상 또는 이미지 파일을 열지 못했습니다.'));};
+  const abort=()=>{cleanup();reject(cancelledLoad());};
+  if(signal?.aborted){reject(cancelledLoad());return;}
   el.addEventListener(event,done,{once:true});
   el.addEventListener('error',bad,{once:true});
+  signal?.addEventListener('abort',abort,{once:true});
+ });
+}
+function readAssetWithAbort(loadFile,assetId,signal){
+ assertNotAborted(signal);
+ if(!signal)return loadFile(assetId);
+ return new Promise((resolve,reject)=>{
+  const abort=()=>{signal.removeEventListener('abort',abort);reject(cancelledLoad());};
+  signal.addEventListener('abort',abort,{once:true});
+  Promise.resolve().then(()=>{
+   assertNotAborted(signal);
+   return loadFile(assetId);
+  }).then(
+   file=>{signal.removeEventListener('abort',abort);resolve(file);},
+   error=>{signal.removeEventListener('abort',abort);reject(error);}
+  );
  });
 }
 // The returned dispose() must be called after preview/export. Original
 // IndexedDB records and user files are never changed.
-export async function loadMvVideoAssets(plan,{loadFile,createUrl=URL.createObjectURL,revokeUrl=URL.revokeObjectURL,
+export async function loadMvVideoAssets(plan,{loadFile,signal,createUrl=URL.createObjectURL,revokeUrl=URL.revokeObjectURL,
  createImage=()=>new Image(),createVideo=()=>document.createElement('video')}={}){
  if(typeof loadFile!=='function')throw Error('로컬 미디어 읽기 기능이 없습니다.');
  const assets=new Map(),urls=[];
+ let pending=null,disposed=false;
  const dispose=()=>{
-  for(const record of assets.values())if(record.kind==='video'){record.element.pause();record.element.removeAttribute('src');record.element.load?.();}
+  if(disposed)return;
+  disposed=true;
+  for(const record of [...assets.values(),...(pending?[pending]:[])]){
+   if(record.kind==='video'){
+    try{record.element.pause();record.element.removeAttribute('src');record.element.load?.();}catch{}
+   }else{
+    try{record.element.removeAttribute?.('src');}catch{}
+   }
+  }
   for(const url of urls)revokeUrl(url);
  };
  try{
   for(const scene of plan.scenes){
+   assertNotAborted(signal);
    if(!scene.assetId)continue;
    if(assets.has(scene.assetId))continue;
-   const file=await loadFile(scene.assetId);
+   const file=await readAssetWithAbort(loadFile,scene.assetId,signal);
+   assertNotAborted(signal);
    if(!file?.size)throw Error(`'${scene.title}' 장면의 저장된 이미지/영상 파일이 없습니다.`);
    const isVideo=scene.kind==='video',type=String(file.type||'');
    if(isVideo && type!=='video/mp4')throw Error(`'${scene.title}' 장면의 MP4 영상 형식이 올바르지 않습니다.`);
    if(!isVideo && !type.startsWith('image/'))throw Error(`'${scene.title}' 장면의 이미지 형식이 올바르지 않습니다.`);
    const url=createUrl(file);urls.push(url);
    const element=isVideo?createVideo():createImage();
+   pending={kind:scene.kind,element,url};
    if(isVideo){
     element.muted=true;element.loop=true;element.playsInline=true;element.preload='auto';
-    const ready=waitForMedia(element,'loadeddata');
+    const ready=waitForMedia(element,'loadeddata',signal);
     element.src=url;await ready;
     if(!(element.videoWidth>0&&element.videoHeight>0))throw Error('영상 화면을 읽을 수 없습니다.');
    }else{
-    const ready=waitForMedia(element,'load');
+    const ready=waitForMedia(element,'load',signal);
     element.src=url;await ready;
     if(!(element.naturalWidth>0&&element.naturalHeight>0))throw Error('이미지 크기를 읽을 수 없습니다.');
    }
+   assertNotAborted(signal);
    assets.set(scene.assetId,{kind:scene.kind,element,url});
+   pending=null;
   }
+  assertNotAborted(signal);
   return {assets,dispose};
  }catch(error){dispose();throw error;}
 }
