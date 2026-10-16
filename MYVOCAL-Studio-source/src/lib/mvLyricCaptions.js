@@ -10,10 +10,9 @@ const roundMs=n=>Math.round(n*1000)/1000;
 const cleanText=text=>String(text||'').replace(/[\u0000-\u001f\u007f\u2028\u2029]/g,' ').replace(/\s+/g,' ').trim();
 function asCaptionText(cues){
  let text='';
- for(const c of cues){
-  const word=c.text;
-  if(text&&(/[A-Za-z0-9]$/.test(text)&&/^[A-Za-z0-9]/.test(word) ||
-    /\s$/.test(cues[cues.indexOf(c)-1]?.text||'')))text+=' ';
+ for(const cue of cues){
+  const word=cue.text;
+  if(text&&/[A-Za-z0-9]$/.test(text)&&/^[A-Za-z0-9]/.test(word))text+=' ';
   text+=word;
  }
  return text.slice(0,170);
