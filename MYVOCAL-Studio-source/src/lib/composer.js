@@ -212,6 +212,6 @@ export function applyComposition(project,draft,{lyrics=true,chords=true,midi=tru
  const midiTracks=canRender?buildMidiArrangement({chords:draft.chords,bars:draft.bars,key:draft.key,
   genre:draft.genre,mood:draft.mood,seed:draft.seed,sections:mergedSections,
   projectMix:settings?draft.genreMix:project.genreMix}).slice(0,draft.midiTracks.length):(draft.midiTracks||[]);
- const newTracks=midi?midiTracks.map((t,i)=>({id:`trk_composer_${Date.now()}_${i}`,name:t.name,instrument:t.instrument,type:t.role==='drums'?'rhythm':'instrument',generatedBy:'composer-v04',mute:false,solo:false,volume:t.volume,clips:[],midiNotes:t.midiNotes})):[];
+ const newTracks=midi?midiTracks.map((t,i)=>({id:`trk_composer_${Date.now()}_${i}`,name:t.name,instrument:t.instrument,type:t.role==='drums'?'rhythm':'instrument',generatedBy:'composer-v04',composerRole:t.role,mute:false,solo:false,volume:t.volume,clips:[],midiNotes:t.midiNotes})):[];
  return {...project,...(lyrics?{lyrics:draft.lyrics}:{}),...(chords?{chords:draft.chords,sections:mergedSections}:{}),...(settings?{bpm:draft.bpm,key:draft.key,genreMix:draft.genreMix?resolveGenreMix(draft.genreMix,draft.genre):resolveGenreMix(null,draft.genre)}:{}),tracks:[...old,...newTracks],compositionHistory:[...(project.compositionHistory||[]).slice(-9),{time:new Date().toISOString(),source:draft.source,title:draft.title,notes:newTracks.reduce((s,t)=>s+t.midiNotes.length,0)}]};
 }
