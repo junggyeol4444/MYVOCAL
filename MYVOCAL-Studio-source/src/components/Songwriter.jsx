@@ -1,6 +1,6 @@
 import React,{useState} from 'react';
 import {Button,Notice,Panel} from './UI';
-import {generateOfflineDraft,applyComposition,songMoods,songLengths} from '../lib/composer';
+import {generateOfflineDraft,applyComposition,songMoods,songLengths,COMPOSER_PARTS} from '../lib/composer';
 import GenreMixEditor from './GenreMixEditor';
 import {resolveGenreMix,validateGenreMix,genreMixText} from '../lib/genreMix';
 
@@ -29,7 +29,7 @@ export default function Songwriter({project:p,onChange,notify}){
   <Notice>로컬 전용 작곡 모드 · 인터넷이나 외부 AI API가 필요하지 않습니다. AI 신경망 음악 생성이 아니라 규칙 기반 작곡입니다.</Notice>
   <div className="mv4-grid">
    <div className="panel mv4-compose-form">
-    <div className="panel-top"><div><h3>로컬 작곡 도우미</h3><p>규칙 기반 초안 · MIDI 4개 트랙 · 원본 작품 복제 없음</p></div><span className="hint-pill">v0.9</span></div>
+    <div className="panel-top"><div><h3>로컬 작곡 도우미</h3><p>규칙 기반 초안 · MIDI {COMPOSER_PARTS.length}개 트랙 · 원본 작품 복제 없음</p></div><span className="hint-pill">v0.9</span></div>
     <label className="mv4-label">곡 설명 / 가사 주제<textarea value={prompt} onChange={e=>setPrompt(e.target.value)} maxLength={800} rows={4} placeholder="노래의 분위기, 이야기, 후렴 연출을 설명해 주세요"/></label>
     <GenreMixEditor mix={genreMix} onChange={setGenreMix}/><div className="mv4-form-row"><label className="mv4-label">감정<select value={mood} onChange={e=>setMood(e.target.value)}>{songMoods.map(v=><option key={v}>{v}</option>)}</select></label></div>
     <div className="mv4-form-row"><label className="mv4-label">조성<select value={key} onChange={e=>setKey(e.target.value)}>{['C Major','G Major','D Major','A Major','E Major','F Major','Bb Major','A Minor','E Minor','B Minor','D Minor','G Minor','F# Minor'].map(k=><option key={k}>{k}</option>)}</select></label><label className="mv4-label">BPM<input value={bpm} type="number" min="40" max="240" onChange={e=>setBpm(e.target.value)}/></label><label className="mv4-label">마디<select value={bars} onChange={e=>setBars(+e.target.value)}>{songLengths.map(n=><option value={n} key={n}>{n} 마디</option>)}</select></label></div>
