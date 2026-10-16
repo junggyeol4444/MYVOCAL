@@ -95,10 +95,20 @@ test('repeat harmony and strings commands never create colliding MIDI note IDs',
   p=r.project;
  }
 });
-test('legacy four-part songs and uncreated projects fail safely instead of claiming model edits',()=>{
- const p=song(),old={...p,tracks:p.tracks.filter(t=>t.composerRole!=='harmony')};
- assert.throws(()=>applyProducerCommand(old,'후렴이 심심해'),/harmony/);
+test('legacy four-part songs can gain harmony and strings without replacing manual audio',()=>{
+ const p=song(),old={...p,tracks:p.tracks.filter(t=>!['harmony','strings'].includes(t.composerRole))};
+ const snapshot=structuredClone(old),result=applyProducerCommand(old,'후렴이 심심해');
+ assert.ok(result.counts.harmony>0&&result.counts.strings>0);
+ assert.equal(result.project.tracks.length,old.tracks.length+2);
+ assert.ok(result.project.tracks.some(t=>t.composerRole==='harmony'&&t.midiNotes.length>0));
+ assert.ok(result.project.tracks.some(t=>t.composerRole==='strings'&&t.midiNotes.length>0));
+ for(const t of old.tracks)assert.ok(result.project.tracks.some(n=>n.id===t.id));
+ assert.deepEqual(result.project.tracks[0].clips,old.tracks[0].clips);
+ assert.deepEqual(old,snapshot);
+ assert.equal(result.project.scenes,old.scenes);
+});
+test('uncreated projects and unsupported voice-learning commands do not claim work',()=>{
+ const p=song();
  assert.throws(()=>applyProducerCommand(newProject(),'후렴이 심심해'),/자동 작곡 트랙/);
  assert.throws(()=>applyProducerCommand(p,'오디오 녹음 목소리를 학습해줘'),/지원하지 않는/);
- assert.equal(old.tracks.length,p.tracks.length-1);
 });
