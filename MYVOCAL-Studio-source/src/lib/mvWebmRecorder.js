@@ -56,9 +56,15 @@ export async function recordMvWebm(plan,prepared,{
   }
  };
  const stopStream=()=>{
-  if(stream)for(const t of stream.getTracks()){
-   try{t.stop();}catch{}
+  if(!stream)return;
+  let tracks=[];
+  try{tracks=stream.getTracks()||[];}catch{
+   // A disposed stream can reject getTracks; release accessible tracks anyway.
+   for(const method of ['getVideoTracks','getAudioTracks']){
+    try{tracks.push(...(stream[method]?.()||[]));}catch{}
+   }
   }
+  for(const t of tracks){try{t.stop();}catch{}}
  };
  try{
   const audioEnabled=!!includeAudio;

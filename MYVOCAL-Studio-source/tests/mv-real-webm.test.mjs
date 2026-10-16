@@ -738,3 +738,38 @@ test('abort during canvas captureStream rejects without starting the WebM encode
  assert.equal(trackStops,1,'captured video track must be released');
  assert.deepEqual(p,original,'saved project must remain unchanged');
 });
+
+test('failed getTracks on a disposed stream preserves completed WebM and releases accessible tracks',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ let elapsed=0,encoderStops=0,videoStops=0,audioStops=0;
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,data={}){for(const fn of this.listeners[name]||[])fn(data);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';encoderStops++;
+   this.emit('dataavailable',{data:new Blob(['recorded-webm-data'.repeat(25)])});
+   this.emit('stop');
+  }
+ }
+ const env={MediaRecorder:Recorder,performance:{now:()=>elapsed},
+  requestAnimationFrame:fn=>{elapsed+=1000;queueMicrotask(fn);return elapsed;},
+  cancelAnimationFrame(){}};
+ const result=await recordMvWebm(plan,{assets:new Map()},{
+  env,canvasFactory:()=>({
+   getContext:()=>({fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})}),
+   captureStream:()=>({
+    getTracks(){throw Error('stream tracks already detached');},
+    getVideoTracks:()=>[{kind:'video',stop(){videoStops++;}}],
+    getAudioTracks:()=>[{kind:'audio',stop(){audioStops++;}}]
+   })
+  })
+ });
+ assert.ok(result.blob.size>100,'recorded WebM remains available');
+ assert.equal(encoderStops,1);
+ assert.equal(videoStops,1,'video track is released despite failed getTracks');
+ assert.equal(audioStops,1,'audio track is released despite failed getTracks');
+ assert.deepEqual(p,original,'original project is unchanged');
+});
