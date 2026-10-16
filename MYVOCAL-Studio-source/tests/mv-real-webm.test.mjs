@@ -161,3 +161,39 @@ test('recorded WebM includes the real existing music mix as an audio stream',asy
  assert.equal(result.mimeType,'video/webm');
  assert.ok(result.blob.size>10);
 });
+
+test('WebM recording releases the active encoder and all tracks when audio startup fails',async()=>{
+ let encoderStops=0,trackStops=0,contextCloses=0;
+ const stream={
+  tracks:[{kind:'video',stop(){trackStops++;}}],
+  getVideoTracks(){return this.tracks.filter(t=>t.kind==='video');},
+  getTracks(){return this.tracks;},
+  addTrack(track){this.tracks.push(track);}
+ };
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8,opus';}
+  constructor(){this.state='inactive';}
+  addEventListener(){}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';encoderStops++;}
+ }
+ class AudioContext{
+  currentTime=0;
+  async resume(){}
+  async decodeAudioData(){return {duration:12};}
+  createMediaStreamDestination(){return {stream:{getAudioTracks:()=>[{kind:'audio',stop(){trackStops++;}}]}};}
+  createBufferSource(){return {connect(){},start(){throw Error('audio-start-test-failure');},stop(){}};}
+  async close(){contextCloses++;}
+ }
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const canvas={getContext:()=>ctx,captureStream:()=>stream};
+ const env={MediaRecorder:Recorder,AudioContext,performance:{now:()=>0},
+  requestAnimationFrame:()=>1,cancelAnimationFrame(){}};
+ await assert.rejects(recordMvWebm(planMvVideoRender(project()),{assets:new Map()},{
+  includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([1,2,3])]),
+  env,canvasFactory:()=>canvas
+ }),/audio-start-test-failure/);
+ assert.equal(encoderStops,1,'a started MediaRecorder must be stopped on failure');
+ assert.equal(trackStops,2,'both captured video and audio tracks must be released');
+ assert.equal(contextCloses,1,'the audio context must also be closed');
+});

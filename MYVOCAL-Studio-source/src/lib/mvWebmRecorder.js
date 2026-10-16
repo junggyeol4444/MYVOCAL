@@ -124,6 +124,11 @@ export async function recordMvWebm(plan,prepared,{
  }finally{
   if(frameId)env.cancelAnimationFrame?.(frameId);
   stopVideos();
+  // Recorder may already be running when audio startup or frame setup fails.
+  // Always release the encoder as well as its media stream on failure.
+  if(recorder&&recorder.state!=='inactive'){
+   try{recorder.stop();}catch{}
+  }
   try{audioSource?.stop();}catch{}
   stopStream();
   if(audioContext)await audioContext.close().catch(()=>{});
