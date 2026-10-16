@@ -81,8 +81,23 @@ function applyChorusArrangement11(project,windows,selected){
    found.set(role,track);
   }
  }
+ // Legacy compositions had only four parts. A requested harmony/strings
+ // operation may introduce the missing part, without replacing any old track.
+ const created=[];
+ const knownIds=new Set(project.tracks.map(t=>t.id));
+ const hasLead=project.tracks.some(t=>composerRole11(t)==='melody');
  for(const role of wanted){
-  if(!found.has(role))throw Error(`${role} 자동 작곡 트랙이 없습니다. 곡 만들기로 음악을 생성한 뒤 사용해 주세요.`);
+  if(found.has(role))continue;
+  if((role!=='harmony'&&role!=='strings')||!hasLead)
+   throw Error(`${role} 자동 작곡 트랙이 없습니다. 곡 만들기로 음악을 생성한 뒤 사용해 주세요.`);
+  let serial=0,id;
+  do{id=`trk_producer11_${role}_${serial++}`;}while(knownIds.has(id));
+  knownIds.add(id);
+  const track={id,name:role==='harmony'?'Composer · Harmony':'Composer · Strings',
+   instrument:role==='harmony'?'synth':'strings',type:'instrument',
+   volume:role==='harmony'?42:38,mute:false,solo:false,
+   generatedBy:'composer-v04',composerRole:role,clips:[],midiNotes:[]};
+  created.push(track);found.set(role,track);
  }
  const originalChords=Array.isArray(project.chords)?project.chords:[];
  const getChords=beat=>{
@@ -164,7 +179,8 @@ function applyChorusArrangement11(project,windows,selected){
  }
  const labels={melody:'멜로디 변경',drums:'드럼 강화',bass:'베이스 강화',harmony:'화음 추가',strings:'스트링 추가'};
  const summary=wanted.map(role=>`${labels[role]} ${counts[role]}개`).join(' · ');
- return {project:{...project,tracks:project.tracks.map(t=>replacements.get(t.id)||t)},
+ return {project:{...project,tracks:[...project.tracks.map(t=>replacements.get(t.id)||t),
+   ...created.map(t=>replacements.get(t.id))]},
   response:`후렴 MIDI 편곡 적용: ${summary}. 녹음 원본은 그대로입니다.`,
   kind:'chorus-arrangement-11',changed:Object.values(counts).reduce((a,b)=>a+b,0),counts};
 }
