@@ -290,3 +290,62 @@ test('cancelling while AudioContext decode is pending does not wait for decoder'
  assert.equal(closes,1);
  assert.equal(recorderStarted,0);
 });
+
+test('synchronous MP4 play failure rejects WebM export and stops encoder and tracks',async()=>{
+ let elapsed=0,encoderStops=0,trackStops=0,videoPauses=0;
+ const listeners={};
+ class Recorder{
+  static isTypeSupported(t){return t==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';}
+  addEventListener(name,cb){(listeners[name]??=[]).push(cb);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';encoderStops++;
+   for(const callback of listeners.stop||[])callback();
+  }
+ }
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const stream={getVideoTracks:()=>[{kind:'video'}],getTracks:()=>[{stop(){trackStops++;}}]};
+ const canvas={getContext:()=>ctx,captureStream:()=>stream};
+ const media=new Map([
+  ['intro-image',{kind:'image',element:{naturalWidth:400,naturalHeight:200}}],
+  ['clip-mp4',{kind:'video',element:{
+   readyState:4,videoWidth:640,videoHeight:360,
+   currentTime:0,play(){throw Error('MP4 playback blocked');},
+   pause(){videoPauses++;}
+  }}]
+ ]);
+ const env={MediaRecorder:Recorder,performance:{now:()=>elapsed},
+  requestAnimationFrame:cb=>{elapsed+=500;queueMicrotask(cb);return elapsed;},
+  cancelAnimationFrame(){}};
+ await assert.rejects(recordMvWebm(planMvVideoRender(project()),{assets:media},{
+  env,canvasFactory:()=>canvas
+ }),/저장된 장면 영상 재생이 차단됐습니다/);
+ assert.equal(encoderStops,1,'encoder must be stopped once');
+ assert.equal(trackStops,1,'captured video track must be released');
+ assert.ok(videoPauses>0,'scene video must be stopped');
+});
+
+test('export progress handler failure stops recording rather than leaving it running',async()=>{
+ let elapsed=0,encoderStops=0,trackStops=0;
+ const listeners={};
+ class Recorder{
+  static isTypeSupported(t){return t==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';}
+  addEventListener(name,cb){(listeners[name]??=[]).push(cb);}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';encoderStops++;for(const cb of listeners.stop||[])cb();}
+ }
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const env={MediaRecorder:Recorder,performance:{now:()=>elapsed},
+  requestAnimationFrame:cb=>{elapsed+=500;queueMicrotask(cb);return elapsed;},
+  cancelAnimationFrame(){}};
+ await assert.rejects(recordMvWebm(planMvVideoRender(project()),{assets:new Map()},{
+  env,canvasFactory:()=>({getContext:()=>ctx,captureStream:()=>({
+   getVideoTracks:()=>[{}],getTracks:()=>[{stop(){trackStops++;}}]
+  })}),
+  onProgress(){throw Error('progress-callback-failed');}
+ }),/progress-callback-failed/);
+ assert.equal(encoderStops,1);
+ assert.equal(trackStops,1);
+});

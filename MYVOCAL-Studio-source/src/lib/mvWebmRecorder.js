@@ -86,14 +86,19 @@ export async function recordMvWebm(plan,prepared,{
     signal?.removeEventListener('abort',abort);
     if(err)reject(err);else resolve(blob);
    };
-   const abort=()=>{
-    if(!recorder||recorder.state==='inactive'){finish(Error('영상 저장을 취소했습니다.'));return;}
-    try{recorder.stop();}catch{}
-    finish(Error('영상 저장을 취소했습니다.'));
+   // Settle the actual failure before stopping. A recorder may emit 'stop'
+   // synchronously; that event must not replace the original error.
+   const fail=error=>{
+    if(settled)return;
+    finish(error);
+    if(recorder&&recorder.state!=='inactive'){
+     try{recorder.stop();}catch{}
+    }
    };
+   const abort=()=>fail(Error('영상 저장을 취소했습니다.'));
    signal?.addEventListener('abort',abort,{once:true});
    recorder.addEventListener('dataavailable',e=>{if(e.data?.size)chunks.push(e.data);});
-   recorder.addEventListener('error',e=>finish(Error(e.error?.message||'WebM 영상 인코딩이 실패했습니다.')));
+   recorder.addEventListener('error',e=>fail(Error(e.error?.message||'WebM 영상 인코딩이 실패했습니다.')));
    recorder.addEventListener('stop',()=>{
     if(settled)return;
     const blob=new Blob(chunks,{type:mimeType.split(';')[0]});
@@ -117,16 +122,23 @@ export async function recordMvWebm(plan,prepared,{
       if(current?.kind==='video'){
        activeVideoId=scene.id;
        try{current.element.currentTime=0;}catch{}
-       const play=current.element.play();
-       if(play?.catch)play.catch(()=>{if(!settled){try{recorder.stop();}catch{}finish(Error('저장된 장면 영상 재생이 차단됐습니다.'));}});
+       try{
+        const play=current.element.play();
+        if(play?.catch)play.catch(()=>fail(Error('저장된 장면 영상 재생이 차단됐습니다.')));
+       }catch{
+        fail(Error('저장된 장면 영상 재생이 차단됐습니다.'));
+        return;
+       }
       }else activeVideoId='';
      }
      try{drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions});}catch(e){
-      try{recorder.stop();}catch{}
-      finish(e);return;
+      fail(e);return;
      }
      const percent=Math.min(100,Math.round(elapsed/plan.durationSec*100));
-     if(percent!==lastProgress&&percent%2===0){lastProgress=percent;onProgress(percent);}
+     if(percent!==lastProgress&&percent%2===0){
+      lastProgress=percent;
+      try{onProgress(percent);}catch(e){fail(e);return;}
+     }
      if(elapsed>=plan.durationSec){
       completed=true;
       stopVideos();
