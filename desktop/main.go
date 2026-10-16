@@ -40,6 +40,7 @@ type appServer struct {
 	manager     managedEngine
 	migrationMode bool
  nativeInprocess bool
+ hostMode string
 }
 
 func (a *appServer) ping() {
@@ -254,7 +255,7 @@ func run() error {
 	if html == string(raw) {
 		return errors.New("standalone HTML is missing </body>")
 	}
-	app := &appServer{root: []byte(html), sessionKey: key, instanceKey: instanceKey,migrationMode:migration}
+	app := &appServer{root: []byte(html), sessionKey: key, instanceKey: instanceKey,migrationMode:migration,hostMode:mode}
  defer app.stopManagedEngine()
  // Experimental direct WebView2 handler. Preserve the existing fixed origin
  // and legacy network mode unless explicitly opted in for Windows GUI testing.
