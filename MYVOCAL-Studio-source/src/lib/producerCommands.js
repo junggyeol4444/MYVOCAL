@@ -169,7 +169,7 @@ function applyChorusArrangement11(project,windows,selected){
   kind:'chorus-arrangement-11',changed:Object.values(counts).reduce((a,b)=>a+b,0),counts};
 }
 
-export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['후렴이 심심해','후렴을 더 웅장하게','드럼 강화하기','마지막 후렴만 반키 올려줘']);
+export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
 export function applyProducerCommand(project,rawCommand){
  if(!project?.id||!Array.isArray(project.tracks))throw Error('편집할 음악 프로젝트가 없습니다.');
  if(typeof rawCommand!=='string'||rawCommand.length>300)throw Error('300자 이하의 수정 요청을 입력하세요.');
