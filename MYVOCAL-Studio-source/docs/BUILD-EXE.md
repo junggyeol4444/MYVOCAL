@@ -1,33 +1,41 @@
-# MYVOCAL Studio v1.1 Windows prototype
+# MYVOCAL Studio — Windows EXE 빌드
 
-## 프로그램 구조
-- Windows 64비트 Go 실행기 + 내장 단일 React 화면. 루프백 웹서버(127.0.0.1), Edge/Chrome 앱 창.
-- 컴퓨터 안에서만 샘플 오디오 합성. 외부 Singing 엔진은 **별도 프로세스**로 실행해 `GET /health`, `POST /v1/sing` 계약을 구현해야 합니다.
-- 내장 AI 보컬 학습이나 Singing 신경망 모델 및 체크포인트 바이너리는 없습니다.
+현재 빌드 대상: Windows x64, Go 1.23 이상.
 
-## 추가 사항
-- 보컬 렌더링 v1.1 탭: 가사 싱크 자동 갱신, 샘플 보컬 선택·모음별 매핑, 프로젝트에 WAV 트랙 추가.
-- Singing Bridge: 세션 헤더/Origin 보호, 127.0.0.1 엔진 요청, WAV 응답 검사.
-- Python 테스트 엔진 (AI가 아닌 정현파): `tools/demo_singing_engine.py`.
-- 프로젝트 저장 형식과 로컬 저장 키는 v0.9 유지.
+## 1. 기존 v1.8 화면 포함
 
-## 빌드
-```
-cd MYVOCAL-Studio-v1.1
+`desktop/index.html`에 v1.8 UI가 이미 포함되어 있습니다. UI 소스가 변경된 경우:
+
+```powershell
+cd MYVOCAL-Studio-source
 npm install
 npm test
-npm run dev
-node scripts/build-standalone.cjs
-# 생성된 MYVOCAL-Studio-v1.1.html을 desktop/index.html에 복사
-cd ../desktop
-go test ./...
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -H windowsgui" -o ../MYVOCAL-Studio.exe .
+npm run build:standalone
+Copy-Item MYVOCAL-Studio-v1.8.html ..\desktop\index.html -Force
 ```
-이 환경에서 단일 HTML 변환은 사전 설치 TypeScript/React UMD 리소스를 사용합니다. 다른 PC에서는 변환 스크립트의 경로를 수정하거나 정규 Vite 빌드를 이용해야 합니다.
 
-## 테스트 주의
-- JS 55개, Go 테스트 통과. EXE 파일 구조 PE32+ 생성 확인.
-- 사용자 Windows PC에서 실제 EXE GUI 열기, 외부 AI 모델 추론, 라이브 보컬 학습 테스트는 미완료.
-- 프로그램으로 녹음/학습하는 모든 사람의 목소리는 본인 또는 사용 허가 자료여야 합니다.
+## 2. Windows에서 프로그램 빌드
 
-상세 내용 `docs/VERSION-1.0.md` 참고.
+저장소 루트에서:
+
+```powershell
+.\desktop\build-windows.bat
+```
+
+또는:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\desktop\build-windows.ps1
+```
+
+Go 테스트가 실패하면 EXE 빌드를 중단합니다. 기본 실행 파일은 `MYVOCAL-Studio.exe`입니다. 배포용 `MYVOCAL-Studio-Windows.zip`에는 EXE, 공식 x64 `WebView2Loader.dll`, 라이선스 알림 파일이 포함됩니다. DLL이 없으면 빌드 과정에서 공식 Microsoft WebView2 NuGet SDK에서 다운로드합니다.
+
+실행 PC에는 **Microsoft Edge WebView2 Runtime**이 설치되어 있어야 합니다. 앱 창은 새 설치에서 WebView2 네이티브 창으로 열리지만, UI와 기존 로컬 API 사이의 `127.0.0.1:58319` 내부 HTTP 연결은 아직 남아 있습니다.
+
+기존 Edge/Chrome 프로필의 프로젝트는 다른 WebView2 프로필로 자동 이동하지 않습니다. 기존 저장소를 보호하기 위해 과거 프로필은 종전 실행 모드를 유지합니다.
+
+## 3. GitHub Windows 자동 빌드
+
+`.github/workflows/windows-compatibility.yml`은 Windows 환경에서 Go 테스트, vet, EXE 빌드 후 ZIP 아티팩트를 생성하도록 구성되어 있습니다. 아티팩트 생성 및 Windows 10/11 실기기 GUI 동작은 별도의 검증 결과를 확인해야 합니다.
+
+현재 빌드에 실제 생성형 작사·작곡·Voice Model 학습·AI Singing·AI 영상 모델 전체가 내장되어 있다고 가정하지 마세요.

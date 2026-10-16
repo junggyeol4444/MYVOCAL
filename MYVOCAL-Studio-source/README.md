@@ -1,105 +1,29 @@
-# MYVOCAL Studio v1.7
+# MYVOCAL Studio — v1.8 기반 소스
 
-MYVOCAL Studio는 Windows 전용 앱 창을 제공하는 음악·영상 스튜디오 프로토타입입니다.
+원본 66개 항목의 기획안: [MYVOCAL-원본66개-기획안.md](../docs/MYVOCAL-원본66개-기획안.md)
 
-**v1.7 추가**: OpenUtau용 작업 ZIP(USTX+MIDI+SRT+manifest) 내보내기, WAV 형식·길이 검사, 검사한 WAV를 프로젝트에 가져와 새 오디오 트랙으로 저장. 실제 AI 가창 모델은 포함되지 않습니다.
+이 저장소의 UI는 React이며 Windows 데스크톱 실행기는 상위 `desktop/`의 Go 소스입니다.
 
-# MYVOCAL Studio v1.4 — Windows 데스크톱 앱 소스
+## 소스 검사 및 실행
 
-**v1.4 변경 사항**: Music Studio의 새 `OpenUtau 연동 v1.4` 탭에서 MIDI 보컬 음표·가사·BPM을 OpenUtau USTX 0.6 형식으로 내보냅니다. 보이스뱅크/발음 처리기/렌더러 선택 옵션과 겹친 음표·오래된 싱크 검사 기능이 포함됩니다. 외부에서 렌더한 WAV는 기존 `가사·MIDI 싱크` 탭에서 다시 가져옵니다. **내장 AI Singing 모델은 미포함입니다.**
+```powershell
+cd MYVOCAL-Studio-source
+npm install
+npm test
+npm run build:standalone
+```
 
-자세한 사용법 및 제한: **`docs/VERSION-1.4.md`** 를 참고하세요. 기존 v1.3 변경 사항은 `docs/VERSION-1.3.md`에 남아 있습니다.
+데스크톱에 포함된 화면은 `desktop/index.html`입니다. React 소스를 수정한 뒤 독립 HTML을 다시 생성하면 `MYVOCAL-Studio-v1.8.html`의 내용을 `desktop/index.html`에 반영해야 EXE에도 변경사항이 포함됩니다.
 
----
+Windows EXE 빌드는 `desktop/build-windows.bat` 또는 `desktop/build-windows.ps1`을 사용합니다. 자세한 사항은 `docs/BUILD-EXE.md`를 참고하세요.
 
-# MYVOCAL Studio v1.1 — 소스 프로젝트
+## 현재 구현 범위의 구분
 
-원본 **MYVOCAL Studio 66개 항목 기획안**을 기준으로 진행하는 Windows 데스크톱 프로그램의 v1.1 프로토타입입니다. 이 저장소는 UI와 간이 오디오/MIDI 엔진입니다. Windows EXE 실행기는 상위 폴더 `desktop`을 참고하세요.
+- 현재 소스에 프로젝트 데이터, 로컬 오디오/MIDI 편집, 규칙 기반 작곡 및 WAV 처리 기능이 있습니다.
+- 규칙 기반 작곡을 실제 생성형 음악 AI로 취급하지 않습니다.
+- Voice Training의 준비·데이터셋 관리와 실제 AI Voice Model 학습은 다릅니다.
+- 가창 샘플러·외부 엔진 연결과 실제 학습된 목소리의 AI Singing은 다릅니다.
+- 영상 작업 계획·스토리보드·로컬 영상 엔진 연동을 완성된 AI 뮤직비디오 생성으로 간주하지 않습니다.
+- 실제 Windows 10/11 PC의 GUI 실행과 원본 자료 보존 검증은 별도로 필요합니다.
 
-## 실행되는 기능
-
-- v0.1: 8개 시작 메뉴, 프로젝트·가사·곡 구조·장르·음성/캐릭터 자료 관리, 영상 스토리보드 초안
-- v0.2: 오디오 파일 로딩, 파형, 볼륨·음소거·솔로, 프로젝트 전체 백업/복원, WAV 믹스
-- v0.3: MIDI 피아노 롤, 6개 간이 악기, 코드 진행, SMF MIDI 입출력, 오디오 + MIDI 렌더링
-- **v0.4: 텍스트 주제에 따른 로컬 규칙 기반 작곡**, 독창적 가사 템플릿, 화성/베이스/드럼/멜로디 MIDI 4트랙, 미리보기·적용 선택, 자동 생성 트랙 교체/기존 수동 트랙 유지
-- **선택 기능: OpenAI API로 가사·코드 제안** — 개인 API 키가 필요하며 Windows EXE 내장 서버에서만 사용합니다. 제안 코드로부터 MIDI 음표를 만드는 부분은 여전히 규칙 기반입니다.
-
-**실행 경로**: 새 프로젝트 → `작사 · 자동 작곡` → `로컬 자동 작곡`에서 초안 생성 → 미리보기 → 적용 → `MIDI 피아노 롤` 또는 `편곡 / 트랙`에서 재생. 실제 AI 가사가 필요하면 `실제 AI 작사 · API 연결` 탭을 사용하세요.
-
-## 소스 실행
-
-Node.js 환경에서 `npm install && npm run dev` (개발용 React/Vite) 또는 `npm run build`. MIDI·작곡 단위 테스트는 `npm test`.
-
-Windows용 EXE는 `desktop` Go 실행기와 오프라인 UI가 별도로 연결됩니다. 현재 빌드에 사용한 `scripts/build-standalone.cjs`는 이 실행 환경의 React UMD 및 TypeScript 경로에 묶인 개발 도구이므로 다른 컴퓨터에서 그대로 사용할 수 있는 표준 빌드 시스템은 아닙니다.
-
-## 구분해야 할 사항
-
-1. 오프라인 작곡은 AI 모델이 아니라 규칙 기반으로 제작됩니다.
-2. OpenAI API가 제안하는 것은 가사·코드이고 완성 오디오를 생성하지 않습니다. 모델 ID/요금/인터넷 연결은 사용자 계정에 의존합니다.
-3. 보컬 학습, 음성 합성, 가상 가수 실제 Singing, 2D/3D 모션, 영상 생성/렌더링, Suno 연동은 여전히 개발 전입니다.
-4. 현재 EXE는 Edge/Chrome 앱 모드 + 로컬 서버 + Web Audio 방식이며, Windows 전용 네이티브 DAW/VST 호스트가 아닙니다.
-5. 프로젝트 파일을 업그레이드하기 전에 **전체 백업**을 저장하세요. v0.1~v0.3 프로젝트 저장 키는 유지됩니다.
-
-자세한 제한·빌드 방법·테스트 범위는 상위 `BUILD.md`를 참조하세요.
-
-
-## v0.6 추가: Voice Dataset Collector
-
-- Voice Studio에서 12개 가이드(저음/중음/고음 × ㅏ·ㅓ·ㅣ·ㅜ) 중 선택해 녹음 또는 음성 파일을 등록합니다.
-- 각 샘플에 사용자가 지정한 가이드 라벨과 메모를 저장합니다. 자동 발음 인식/검증은 하지 않습니다.
-- 기존 v0.5 음향 분석 결과로 클리핑/소리 크기/피치 검출 비율/샘플 길이의 품질 경고를 표시합니다. 품질 통과는 AI 학습 가능 또는 올바른 발음을 의미하지 않습니다.
-- ZIP 내보내기는 `manifest.json`과 원본 음성 파일을 포함합니다. 전체 150MB 이하. 데이터는 로컬에서 처리합니다.
-- 기존 v0.1~0.5 데이터 저장소 키는 유지합니다. v0.6에서 갱신한 프로필의 새로운 라벨은 과거 버전에서 보존되지 않을 수 있으므로 사용 전 백업하세요.
-
-
-## v0.7 추가: Voice Training Manager
-
-- Voice Studio에서 권한 있는 목소리를 등록한 후 왼쪽 메뉴의 **Voice Training**으로 이동합니다.
-- 원본 수·신호 품질·발음/음역 라벨 수를 점검합니다. 이 수치는 학습 적합성을 보장하지 않습니다.
-- 학습 대상/준비 옵션을 선택하고 **학습 준비 작업**을 생성합니다. 준비 기록은 모델 학습을 실행하지 않고, 샘플 메타데이터 스냅샷과 권한 정보를 로컬에 저장합니다.
-- **학습 자료 ZIP**을 내보내면 `audio/`, `manifest.json`, `training-plan.json`, `README.txt`가 포함됩니다. RVC/SVC 등 외부 학습 프로그램에 맞춘 전처리 및 학습은 사용자가 별도 수행해야 합니다.
-- 외부에서 생성한 `.pth`, `.pt`, `.onnx`, `.ckpt`, `.safetensors` 파일을 최대 200MB까지 로컬 체크포인트 보관함에 등록할 수 있습니다. SHA-256은 무결성 식별값일 뿐 안전성/호환성 검증이 아닙니다.
-- Virtual Singer 프로필에 외부 체크포인트를 연결하는 메타데이터 옵션이 추가되었습니다. **Singing 합성은 지원하지 않습니다.**
-- 원본 녹음과 체크포인트는 브라우저 앱 프로필 IndexedDB에 저장됩니다. JSON 메타데이터 백업에는 바이너리가 포함되지 않습니다. 원본 ZIP 및 모델 파일을 별도로 백업하세요.
-- `trainingPlans` 및 `voiceModels`를 기존 프로젝트 저장 구조에 추가했으며, `myvocal-studio-v01` 로컬 저장 키와 `%LOCALAPPDATA%\MYVOCAL Studio\DesktopProfile` 경로는 변경하지 않았습니다.
-- 기존 테스트 23개와 v0.7의 학습 준비/권한/스냅샷/모델 등록 계약 테스트 8개를 포함합니다.
-
-
-## v0.8 추가: 로컬 보컬 샘플러
-
-- Voice Training의 5번 패널에서 피치 분석 완료한 목소리 원본을 선택합니다.
-- 짧은 원본 구간을 추출해 IndexedDB에 저장하고 단순 샘플 모델로 관리합니다.
-- 기본 8음 또는 MIDI 멜로디 음표를 기준으로 원본 샘플 재생속도를 조절하는 보컬 미리보기 WAV를 생성합니다.
-- 이 방식은 **AI Voice 학습/가사 Singing이 아니며** 음색/발음 정확성이 제한됩니다.
-- Windows EXE 빌드는 성공했지만 Windows 실기기 실행과 웹 UI 클릭 테스트는 미검증입니다.
-
-
-## v0.9 추가: 가사-MIDI 싱크 및 외부 보컬 교환
-
-# MYVOCAL Studio v0.9 - 가사/MIDI 싱크 및 외부 보컬 작업 교환
-
-- Music Studio → 프로젝트 → **가사·MIDI 싱크** 탭
-- MIDI 음표의 시작/길이를 기준으로 가사를 시간별 배치, 직접 음절 텍스트 편집, 프로젝트에 저장
-- 대괄호 `[Chorus]` 등 독립적인 구간 라벨은 무시. 한국어는 표기 글자(한글 완성형 음절) 단위, 영어는 단어 단위; 음소(phoneme) 분석 아님
-- 텍스트가 음표보다 많으면 미배치 수를 경고, 적으면 `—`로 표시. BPM이나 가사가 달라지면 재생성 필요
-- **외부 추론용 ZIP**: `manifest.json`, `melody.mid`, `lyrics.srt`, `README.txt`. 외부 엔진과 호환되는 표준 신호와 메타데이터를 전달하지만 엔진 고유 포맷은 별도 변환해야 함
-- 사용할 목소리/체크포인트 메타데이터를 선택적으로 참조할 수 있지만 파일을 포함하지 않고 추론을 실행하지 않음
-- 외부 렌더 WAV를 프로젝트 오디오 트랙으로 불러오기, 오디오 자산 IndexedDB 보관, 프로젝트 전체 백업 지원
-- 프로젝트 백업/복원 시 v0.9 alignment 프로젝트·트랙 참조 ID 리매핑
-
-## 중요한 제한
-
-이번 버전도 AI Voice Training, RVC/SVC/ONNX 추론 실행, 텍스트→음성 합성, 실제 발음 정렬, Lip Sync, MV 생성은 지원하지 않습니다. Windows용 EXE는 브라우저(Edge/Chrome)를 전용 앱 창으로 여는 Go 실행기입니다. 외부 추론용 ZIP은 외부 툴의 실제 모델 호환성 또는 결과를 보증하지 않습니다.
-
-
-## v1.1 보컬 렌더링
-- Music Studio > **보컬 렌더링 v1.1**: 가사 싱크와 ㅏ/ㅓ/ㅣ/ㅜ 샘플 보컬을 매칭해 WAV 렌더링. AI 음소 합성이 아님.
-- Windows EXE의 로컬 Singing Bridge: 외부 호환 서버에 가사/MIDI를 보내고 WAV 수신.
-- 테스트용 서버 `tools/demo_singing_engine.py`는 AI가 아닌 합성음만 만듭니다.
-- 외부 실제 AI 모델·학습·추론 런타임은 내장돼 있지 않습니다. `docs/VERSION-1.0.md` 참고.
-
-## v1.2 엔진 실행 관리자 및 CLI 어댑터
-
-- Music Studio → 보컬 렌더링 v1.2 화면에서 **Windows 엔진 실행 관리**를 할 수 있습니다. 설치된 `.exe` 실행 파일 및 JSON 배열 인수를 입력해 명시적으로 시작하고 중지합니다.
-- `tools/cli_singing_adapter.py`를 이용해 사용자 지정 외부 명령줄 프로그램과 MYVOCAL의 HTTP 계약을 이어 줄 수 있습니다. `{input}`, `{output}`, `{model}` 경로 템플릿을 제공합니다. 별도 추론 래퍼와 목소리 모델이 반드시 필요합니다.
-- 로컬 합성음 예제와 어댑터 시험은 실제 AI 학습 또는 AI 가창이 아닙니다. Windows 실기기 UI 검증은 미완료입니다.
+기존 프로젝트는 브라우저별 로컬 저장소와 IndexedDB에 남아 있습니다. 네이티브 WebView2 새 프로필로 기존 데이터를 자동 이전하지 않습니다. 이전하기 전에 기존 프로그램에서 프로젝트와 자료를 백업해야 합니다.

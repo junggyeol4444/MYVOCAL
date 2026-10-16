@@ -1,3 +1,6 @@
-MYVOCAL Studio v0.5 Prototype Frontend
-This application embeds React/ReactDOM runtime components. React's MIT license is
-included under MYVOCAL-Studio-v0.5/third_party/react-MIT-LICENSE.txt.
+MYVOCAL Studio — Windows desktop build
+The embedded UI uses React and ReactDOM components distributed under the MIT license.
+The React MIT license is included in MYVOCAL-Studio-source/third_party/react-MIT-LICENSE.txt
+and in the Windows distribution ZIP.
+The Microsoft WebView2Loader.dll is distributed from the official Microsoft.Web.WebView2 NuGet SDK.
+The Microsoft Edge WebView2 Runtime must be installed on the Windows PC.

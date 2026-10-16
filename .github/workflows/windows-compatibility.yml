@@ -1,4 +1,4 @@
-name: MYVOCAL Windows validation (test branches only)
+name: MYVOCAL Windows validation
 on:
   push:
     branches: [main, 'test/**']
@@ -37,7 +37,7 @@ jobs:
           $loader = Join-Path $env:RUNNER_TEMP "webview2\Microsoft.Web.WebView2.1.0.4258.31\runtimes\win-x64\native\WebView2Loader.dll"
           if (-not (Test-Path -LiteralPath $loader)) { throw "Official x64 WebView2Loader.dll not found" }
           Copy-Item -LiteralPath $loader -Destination "WebView2Loader.dll"
-          Compress-Archive -LiteralPath @("MYVOCAL-Studio-Windows.exe", "WebView2Loader.dll", "desktop/NOTICE.txt") -DestinationPath "MYVOCAL-Studio-Windows.zip" -Force
+          Compress-Archive -LiteralPath @("MYVOCAL-Studio-Windows.exe", "WebView2Loader.dll", "desktop/NOTICE.txt", "MYVOCAL-Studio-source/third_party/react-MIT-LICENSE.txt") -DestinationPath "MYVOCAL-Studio-Windows.zip" -Force
       - name: Upload unsigned Windows application and tests
         uses: actions/upload-artifact@v4
         with:
