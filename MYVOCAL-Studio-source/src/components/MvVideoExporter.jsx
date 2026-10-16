@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Notice,Panel} from './UI';
 import {getFile} from '../lib/assetDb.js';
-import {audioEnd,mixdownWav} from '../lib/audioEngine.js';
+import {AudioEngine,audioEnd,mixdownWav} from '../lib/audioEngine.js';
 import {planMvVideoRender,loadMvVideoAssets,findMvVideoScene,drawMvVideoFrame,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT} from '../lib/mvVideoRender.js';
 import {recordMvWebm,assertMvExportEnvironment} from '../lib/mvWebmRecorder.js';
 
@@ -13,7 +13,7 @@ function saveMovie(blob,project){
  setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 export default function MvVideoExporter({project,characters=[],positionSeconds=0,playing=false,notify}){
- const canvas=useRef(null),abort=useRef(null),mounted=useRef(true);
+ const canvas=useRef(null),abort=useRef(null),mounted=useRef(true),previewAudio=useRef(null);
  const [prepared,setPrepared]=useState(null),[loadError,setLoadError]=useState('');
  const [busy,setBusy]=useState(false),[progress,setProgress]=useState(0),[includeSound,setIncludeSound]=useState(true);
  let plan=null,planError='';
@@ -21,7 +21,17 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  const assetsSignature=JSON.stringify((project?.scenes||[]).map(s=>[s.id,s.imageAssetId,s.videoClipAssetId,s.videoGeneration?.mime]));
  const musicExists=project&&audioEnd(project)>0;
  const sceneTimeline=JSON.stringify(plan?.scenes.map(s=>[s.id,s.start,s.end,s.title])||[]);
- useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;abort.current?.abort();};},[]);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;abort.current?.abort();previewAudio.current?.stop();};},[]);
+ useEffect(()=>{
+  if(!previewAudio.current)previewAudio.current=new AudioEngine();
+  const audio=previewAudio.current;
+  if(!playing||!musicExists){audio.stop(0);return;}
+  // The storyboard player is the time clock; its Seek action pauses first,
+  // stopping audio before an optional restart at the selected position.
+  audio.play(project,Math.max(0,Math.min(Number(positionSeconds)||0,plan?.durationSec||0)))
+   .catch(e=>{if(mounted.current)notify('음악 미리 듣기 실패: '+e.message);});
+  return()=>audio.stop();
+ },[playing,project?.id,musicExists]);
  useEffect(()=>{
   let alive=true,resources=null;
   setPrepared(null);setLoadError('');
@@ -80,7 +90,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
    <span>이미지 없는 스토리보드 카드 <strong>{plan.cardScenes}개</strong></span>
   </div>
   <canvas ref={canvas} width={MV_VIDEO_WIDTH} height={MV_VIDEO_HEIGHT} aria-label="실제 MV 영상 미리보기" style={{display:'block',width:'100%',maxWidth:MV_VIDEO_WIDTH,aspectRatio:'16 / 9',background:'#111623',borderRadius:10,margin:'12px auto'}}/>
-  <p className="muted">위 장면은 기존 스토리보드의 재생·일시정지·위치 이동 버튼과 연결됩니다. 저장된 짧은 MP4 클립은 해당 장면 길이 동안 반복합니다. 이미지가 없는 구간은 텍스트 카드로 표시됩니다.</p>
+  <p className="muted">위 장면은 기존 스토리보드의 재생·일시정지·위치 이동 버튼과 연결되며, 재생 중에는 프로젝트 음악도 함께 들을 수 있습니다. 저장된 짧은 MP4 클립은 해당 장면 길이 동안 반복합니다. 이미지가 없는 구간은 텍스트 카드로 표시됩니다.</p>
   {loadError&&<Notice>연결된 원본 미디어 읽기 실패: {loadError}. 프로젝트 백업 또는 이미지·영상 원본을 확인하세요.</Notice>}
   {!prepared&&!loadError&&<p className="muted">장면 이미지·영상 파일 확인 중…</p>}
   <div className="hstack" style={{gap:12,flexWrap:'wrap',alignItems:'center'}}>
