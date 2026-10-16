@@ -62,6 +62,12 @@ export function buildMvLyricCaptions(project){
 }
 export function captionAtTime(captions,seconds){
  if(!Array.isArray(captions)||!Number.isFinite(seconds))return null;
- // Adjacent caption endings belong to the next phrase, not both.
- return captions.find(c=>c.startSec<=seconds&&seconds<c.endSec)||null;
+ // A newly starting phrase takes precedence when sustained MIDI notes
+ // overlap the previous caption's final note.
+ let active=null;
+ for(const cue of captions){
+  if(cue.startSec<=seconds&&seconds<cue.endSec&&
+     (!active||cue.startSec>=active.startSec))active=cue;
+ }
+ return active;
 }
