@@ -67,8 +67,10 @@ export function normalizeSingingNotes(notes){
 }
 export function projectPreviewNotes(project){
  if(!project)return [];
- const vocal=(project.tracks||[]).find(t=>/vocal/i.test(t.type||'')||(t.name||'').toLowerCase().includes('vocal'));
- const primary=(vocal?.midiNotes||[]).length?vocal:(project.tracks||[]).find(t=>t.instrument!=='drums'&&t.midiNotes?.length);
+ const tracks=(project.tracks||[]).filter(t=>t.instrument!=='drums'&&t.midiNotes?.length);
+ const primary=tracks.find(t=>t.type==='vocal')||
+  tracks.find(t=>t.generatedBy==='composer-v04'&&(t.composerRole==='melody'||t.name==='Composer · Melody'))||
+  tracks.find(t=>/lead melody|보컬 멜로디/i.test(t.name||''))||tracks[0];
  return normalizeSingingNotes(primary?.midiNotes||[]);
 }
 export async function renderSamplerPreview(model,notes,bpm=120,{loadFile=getFile,contextFactory}={}){
