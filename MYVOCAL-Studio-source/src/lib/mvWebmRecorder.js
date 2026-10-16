@@ -126,7 +126,10 @@ export async function recordMvWebm(plan,prepared,{
      if(scene?.id!==lastSceneId){
       const previous=lastSceneId?plan.scenes.find(s=>s.id===lastSceneId):null;
       const old=previous?.assetId&&allAssets.get(previous.assetId);
-      if(old?.kind==='video')old.element.pause();
+      if(old?.kind==='video'){
+       // A stale MP4 element must not strand an otherwise valid recording.
+       try{old.element.pause();}catch{}
+      }
       lastSceneId=scene?.id||'';
       const current=scene?.assetId&&allAssets.get(scene.assetId);
       if(current?.kind==='video'){
