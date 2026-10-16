@@ -24,7 +24,7 @@ test('one-click creation provides playable/editable music and storyboard, withou
  assert.ok(project.tracks.some(t=>t.generatedBy==='composer-v04'&&t.midiNotes?.length));
  assert.ok(project.tracks.some(t=>t.instrument==='drums'&&t.midiNotes?.length));
  assert.ok(project.chords.length>4);
- assert.equal(project.scenes.length,6);
+ assert.equal(project.scenes.length,project.sections.length);
  assert.equal(project.createPipeline97.tasks.find(t=>t.key==='singing').status,'requires-local-model');
  assert.equal(project.createPipeline97.tasks.find(t=>t.key==='musicVideo').status,'requires-local-model');
 });

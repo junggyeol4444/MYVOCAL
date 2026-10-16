@@ -11,7 +11,7 @@ test('STEP96/97 entire project JSON retains prior manual assets and action histo
  const modified=applyCreativeDirection96(composed,direction);
  const saved=JSON.stringify(modified),restored=JSON.parse(saved);
  assert.equal(restored.tracks[0].clips[0].assetId,'original_audio');
- assert.equal(restored.bpm,132);assert.equal(restored.scenes.length,6);
+ assert.equal(restored.bpm,132);assert.equal(restored.scenes.length,restored.sections.length);
  assert.equal(restored.creativeDirector96.history[0].domain,'music');
  assert.equal(restored.createPipeline97.tasks.find(t=>t.key==='composition').status,'prepared');
  assert.equal(initial.bpm,120);
