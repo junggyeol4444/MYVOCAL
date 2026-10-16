@@ -6,7 +6,7 @@ import {canReplaceDefaultStoryboard,storyboardFromSongSections} from './songStor
 const ORDER=['lyrics','composition','arrangement','singing','mix','master','storyboard','musicVideo'];
 const AI_ONLY=new Set(['singing','musicVideo']);
 export const CREATE97_ORDER=Object.freeze(ORDER);
-const snap=p=>JSON.stringify({id:p.id,title:p.title,prompt:p.prompt,tracks:p.tracks,scenes:p.scenes,lyrics:p.lyrics,sections:p.sections,chords:p.chords,bpm:p.bpm});
+const snap=p=>JSON.stringify({id:p.id,title:p.title,prompt:p.prompt,tracks:p.tracks,scenes:p.scenes,lyrics:p.lyrics,sections:p.sections,chords:p.chords,bpm:p.bpm,key:p.key,genreMix:p.genreMix,voiceId:p.voiceId,characterId:p.characterId,withVideo:p.withVideo,videoMode:p.videoMode,options:p.options});
 export function planCreateSongVideo97(project,selected={}){
  if(!project?.id||!Array.isArray(project.tracks)||!Array.isArray(project.scenes))throw Error('프로젝트가 유효하지 않습니다.');
  const options=Object.fromEntries(ORDER.map(k=>[k,selected[k]===true]));
