@@ -16,7 +16,7 @@ export function assertMvExportEnvironment(env=globalThis){
   throw Error('영상 녹화에 필요한 화면 프레임 기능이 없습니다.');
 }
 export async function recordMvWebm(plan,prepared,{
- renderAudio=null,includeAudio=false,signal,onProgress=()=>{},
+ renderAudio=null,includeAudio=false,showCaptions=false,captions=[],signal,onProgress=()=>{},
  canvasFactory=()=>document.createElement('canvas'),env=globalThis
 }={}){
  assertMvExportEnvironment(env);
@@ -42,7 +42,7 @@ export async function recordMvWebm(plan,prepared,{
    await audioContext.resume(); // initiated by the user's click, not background work
   }
   if(signal?.aborted)throw Error('영상 저장을 취소했습니다.');
-  drawMvVideoFrame(canvas,plan,allAssets,0);
+  drawMvVideoFrame(canvas,plan,allAssets,0,{captions,showCaptions});
   if(audioEnabled){
    const wav=await renderAudio();
    if(!wav?.size)throw Error('노래 WAV를 생성하지 못했습니다.');
@@ -103,7 +103,7 @@ export async function recordMvWebm(plan,prepared,{
        if(play?.catch)play.catch(()=>{if(!settled){try{recorder.stop();}catch{}finish(Error('저장된 장면 영상 재생이 차단됐습니다.'));}});
       }else activeVideoId='';
      }
-     try{drawMvVideoFrame(canvas,plan,allAssets,elapsed);}catch(e){
+     try{drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions});}catch(e){
       try{recorder.stop();}catch{}
       finish(e);return;
      }
@@ -120,7 +120,7 @@ export async function recordMvWebm(plan,prepared,{
   });
   const blob=await result;
   onProgress(100);
-  return {blob,fileName:'MYVOCAL-MusicVideo.webm',seconds:plan.durationSec,mimeType:'video/webm',includesAudio:audioEnabled};
+  return {blob,fileName:'MYVOCAL-MusicVideo.webm',seconds:plan.durationSec,mimeType:'video/webm',includesAudio:audioEnabled,includesCaptions:!!showCaptions&&captions.length>0};
  }finally{
   if(frameId)env.cancelAnimationFrame?.(frameId);
   stopVideos();
