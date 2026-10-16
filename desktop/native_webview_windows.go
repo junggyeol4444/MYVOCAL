@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -49,7 +50,8 @@ var (
 	iidEnvHandler          = nativeGUID{0x4e8a3389, 0xc9d8, 0x4bd2, [8]byte{0xb6, 0xb5, 0x12, 0x4f, 0xee, 0x6c, 0xc1, 0x4d}}
 	iidControllerHandler   = nativeGUID{0x6c4819f3, 0xc9b7, 0x4260, [8]byte{0x81, 0x27, 0xc9, 0xf5, 0xbd, 0xe7, 0xf6, 0x8c}}
 	iidNavigationHandler   = nativeGUID{0x9adbe429, 0xf36d, 0x432b, [8]byte{0x9d, 0xdc, 0xf8, 0x88, 0x1f, 0xbd, 0x76, 0xe3}}
-	iidPopupHandler        = nativeGUID{0xd4c185fe, 0xc81c, 0x4989, [8]byte{0x97, 0xaf, 0x2d, 0x3f, 0xa7, 0xab, 0x56, 0x51}}
+	 iidPopupHandler        = nativeGUID{0xd4c185fe, 0xc81c, 0x4989, [8]byte{0x97, 0xaf, 0x2d, 0x3f, 0xa7, 0xab, 0x56, 0x51}}
+ iidResourceHandler     = nativeGUID{0xab00b74c,0x15f1,0x4646,[8]byte{0x80,0xe8,0xe7,0x63,0x41,0xd2,0x5d,0x71}}
 	nativeUser32           = syscall.NewLazyDLL("user32.dll")
 	nativeKernel32         = syscall.NewLazyDLL("kernel32.dll")
 	nativeOle32            = syscall.NewLazyDLL("ole32.dll")
@@ -124,6 +126,10 @@ type nativeWebViewState struct {
 	Environment, Controller, WebView unsafe.Pointer
 	EnvHandler, ControllerHandler    *comHandler
 	NavHandler, PopupHandler         *comHandler
+ ResourceHandler                   *comHandler
+ RequestHandler                    http.Handler
+ ResourceToken                     uint64
+ ResourceSubscribed                bool
 	NavToken, PopupToken             uint64
 	NavSubscribed, PopupSubscribed   bool
 	Shutdown                         bool
@@ -481,6 +487,13 @@ func nativeControllerReady(this *comHandler, result uintptr, controller unsafe.P
 		procPostMessage.Call(state.Window.Load(), wmClose, 0, 0)
 		return 0
 	}
+ if state.RequestHandler!=nil {
+  if err:=nativeRegisterResourceInterceptor(state);err!=nil{
+   state.Failure=err
+   procPostMessage.Call(state.Window.Load(),wmClose,0,0)
+   return 0
+  }
+ }
 	nativeResize(state)
 	url, _ := syscall.UTF16PtrFromString(state.URL)
 	hr = nativeCOMCall(webview, 5, nativeCOMPointer(unsafe.Pointer(url)))
@@ -524,11 +537,11 @@ func nativeShutdownWebView(state *nativeWebViewState) {
 	state.Life.beginClose()
 	webview, controller, environment := state.WebView, state.Controller, state.Environment
 	state.WebView, state.Controller, state.Environment = nil, nil, nil
-	nav, popup := state.NavSubscribed, state.PopupSubscribed
-	navToken, popupToken := state.NavToken, state.PopupToken
-	state.NavSubscribed, state.PopupSubscribed = false, false
-	state.NavToken, state.PopupToken = 0, 0
-	state.NavHandler, state.PopupHandler = nil, nil // storage stays pinned
+	nav, popup, resource := state.NavSubscribed, state.PopupSubscribed, state.ResourceSubscribed
+	navToken, popupToken, resourceToken := state.NavToken, state.PopupToken, state.ResourceToken
+	state.NavSubscribed, state.PopupSubscribed, state.ResourceSubscribed = false, false, false
+	state.NavToken, state.PopupToken, state.ResourceToken = 0, 0, 0
+	state.NavHandler, state.PopupHandler, state.ResourceHandler = nil, nil, nil // storage stays pinned
 	if webview != nil {
 		if nav {
 			nativeCOMCall(webview, 8, nativeCOMValue(uintptr(navToken)))
@@ -536,6 +549,7 @@ func nativeShutdownWebView(state *nativeWebViewState) {
 		if popup {
 			nativeCOMCall(webview, 45, nativeCOMValue(uintptr(popupToken)))
 		}
+  if resource{nativeCOMCall(webview,56,nativeCOMValue(uintptr(resourceToken)))}
 	}
 	if controller != nil {
 		nativeCOMCall(controller, 24) // ICoreWebView2Controller.Close
@@ -606,7 +620,7 @@ func nativeWndProc(hwnd, message, wparam, lparam uintptr) uintptr {
 	result, _, _ := procDefWindow.Call(hwnd, message, wparam, lparam)
 	return result
 }
-func runNativeWebView2(url, profile string) error {
+func runNativeWebView2(url, profile string, inprocess http.Handler) error {
 	if url != fixedOrigin {
 		return errors.New("WebView2 고정 origin 불일치")
 	}
@@ -640,7 +654,7 @@ func runNativeWebView2(url, profile string) error {
 	if err != nil {
 		return err
 	}
-	state := &nativeWebViewState{URL: url, STAThreadID: uint32(tid), MessageToken: token}
+	state := &nativeWebViewState{URL: url, STAThreadID: uint32(tid), MessageToken: token,RequestHandler:inprocess}
 	nativeActive = state
 	defer func() {
 		// WebView2 environment/controller creation is asynchronous. A window

@@ -39,6 +39,7 @@ type appServer struct {
 	root        []byte
 	manager     managedEngine
 	migrationMode bool
+ nativeInprocess bool
 }
 
 func (a *appServer) ping() {
@@ -254,7 +255,13 @@ func run() error {
 		return errors.New("standalone HTML is missing </body>")
 	}
 	app := &appServer{root: []byte(html), sessionKey: key, instanceKey: instanceKey,migrationMode:migration}
-	defer app.stopManagedEngine()
+ defer app.stopManagedEngine()
+ // Experimental direct WebView2 handler. Preserve the existing fixed origin
+ // and legacy network mode unless explicitly opted in for Windows GUI testing.
+ if mode==hostWebView2 && os.Getenv("MYVOCAL_NATIVE_INPROCESS")=="1" {
+  app.nativeInprocess=true
+  return runNativeWebView2("http://127.0.0.1:"+appPort,filepath.Join(dataDir(),"NativeWebView2Profile"),secureLoopbackHandler(app.routes()))
+ }
 	endpoint := "http://127.0.0.1:" + appPort
 	listener, err := listenStable("127.0.0.1:" + appPort)
 	if err != nil {
@@ -284,7 +291,7 @@ func run() error {
 	if mode == hostWebView2 {
 		// The native message loop runs on its own locked OS thread; on exit
 		// the loopback server and managed engines shut down cleanly.
-		err := runNativeWebView2(endpoint, filepath.Join(dataDir(), "NativeWebView2Profile"))
+		err := runNativeWebView2(endpoint, filepath.Join(dataDir(), "NativeWebView2Profile"), nil)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		shutdownErr := server.Shutdown(ctx)

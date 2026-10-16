@@ -2,7 +2,7 @@
 
 package main
 
-import "errors"
+import ("errors";"net/http")
 
 func nativeHostAvailable() error                  { return errors.New("WebView2는 Windows에서만 실행됩니다") }
-func runNativeWebView2(url, profile string) error { return nativeHostAvailable() }
+func runNativeWebView2(url, profile string, inprocess http.Handler) error { return nativeHostAvailable() }

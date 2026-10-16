@@ -71,12 +71,14 @@ func (a *appServer) systemReadiness(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	managed := a.manager.snapshot()["running"] == true
+ transportDetail := "진단 응답을 반환하는 로컬 앱 서버가 실행 중입니다."
+ if a.nativeInprocess {transportDetail="WebView2 요청을 프로그램 내부에서 처리합니다. 별도 TCP 포트를 열지 않았습니다."}
 	report := readinessReport{
 		Version: "1.8.0", OS: runtime.GOOS, Arch: runtime.GOARCH,
 		Checks: []readinessCheck{
 			{ID: "desktop_browser", Available: browserDetected(), Detail: "데스크톱 창을 여는 데 Edge 또는 Chrome이 필요합니다."},
 			{ID: "data_folder", Available: dataStorageWritable(), Detail: "앱 데이터 폴더에 진단용 파일을 썼다가 삭제합니다."},
-			{ID: "app_server", Available: true, Detail: "진단 응답을 반환하는 로컬 앱 서버가 실행 중입니다."},
+			{ID: "app_server", Available: true, Detail: transportDetail},
 		},
 		BundledNeuralSinging:  false,
 		BundledVideoGenerator: false,
