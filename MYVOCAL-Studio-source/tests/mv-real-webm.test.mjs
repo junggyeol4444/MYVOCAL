@@ -349,3 +349,74 @@ test('export progress handler failure stops recording rather than leaving it run
  assert.equal(encoderStops,1);
  assert.equal(trackStops,1);
 });
+
+test('a failing video pause cannot strand the WebM recorder at a scene change',async()=>{
+ let elapsed=0,stops=0,trackStops=0,plays=0;
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,data={}){for(const fn of this.listeners[name]||[])fn(data);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';stops++;
+   this.emit('dataavailable',{data:new Blob(['webm-encoded-frames'.repeat(20)])});
+   this.emit('stop');
+  }
+ }
+ const video={readyState:4,videoWidth:640,videoHeight:360,currentTime:0,
+  play(){plays++;return Promise.resolve();},
+  pause(){throw Error('stale video element cannot pause');}
+ };
+ const context={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const env={MediaRecorder:Recorder,performance:{now:()=>elapsed},
+  requestAnimationFrame:fn=>{elapsed+=500;queueMicrotask(fn);return elapsed;},
+  cancelAnimationFrame(){}};
+ const result=await recordMvWebm(planMvVideoRender(project()),{
+  assets:new Map([['clip-mp4',{kind:'video',element:video}]])
+ },{
+  env,canvasFactory:()=>({
+   getContext:()=>context,
+   captureStream:()=>({getVideoTracks:()=>[{}],getTracks:()=>[{stop(){trackStops++;}}]})
+  })
+ });
+ assert.ok(result.blob.size>100);
+ assert.ok(plays>0,'video scene was played');
+ assert.equal(stops,1,'encoder completed despite rejected pause');
+ assert.equal(trackStops,1,'video track was released');
+});
+
+test('one failing media track stop does not hide saved WebM or leak remaining tracks',async()=>{
+ let elapsed=0,stops=0,otherStops=0;
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,data={}){for(const fn of this.listeners[name]||[])fn(data);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';stops++;
+   this.emit('dataavailable',{data:new Blob(['encoded-video'.repeat(30)])});
+   this.emit('stop');
+  }
+ }
+ const context={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const env={MediaRecorder:Recorder,performance:{now:()=>elapsed},
+  requestAnimationFrame:fn=>{elapsed+=1000;queueMicrotask(fn);return elapsed;},
+  cancelAnimationFrame(){}};
+ const result=await recordMvWebm(planMvVideoRender(project()),{assets:new Map()},{
+  env,canvasFactory:()=>({
+   getContext:()=>context,
+   captureStream:()=>({
+    getVideoTracks:()=>[{}],
+    getTracks:()=>[
+     {stop(){throw Error('track already closed');}},
+     {stop(){otherStops++;}}
+    ]
+   })
+  })
+ });
+ assert.ok(result.blob.size>100);
+ assert.equal(stops,1);
+ assert.equal(otherStops,1,'later tracks must still be closed');
+});

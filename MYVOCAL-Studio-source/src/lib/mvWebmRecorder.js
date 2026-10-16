@@ -48,8 +48,18 @@ export async function recordMvWebm(plan,prepared,{
  let audioContext=null,audioSource=null,stream=null,recorder=null,frameId=0;
  let activeVideoId='',lastSceneId='',lastProgress=-1;
  const allAssets=prepared?.assets||new Map();
- const stopVideos=()=>{for(const x of allAssets.values())if(x.kind==='video')x.element.pause();};
- const stopStream=()=>{if(stream)stream.getTracks().forEach(t=>t.stop());};
+ // Cleanup must be best-effort: a stale MP4 element or released track
+ // must not keep the WebM recorder pending or leak remaining media resources.
+ const stopVideos=()=>{
+  for(const x of allAssets.values())if(x.kind==='video'){
+   try{x.element.pause();}catch{}
+  }
+ };
+ const stopStream=()=>{
+  if(stream)for(const t of stream.getTracks()){
+   try{t.stop();}catch{}
+  }
+ };
  try{
   const audioEnabled=!!includeAudio;
   let audioDestination=null;
