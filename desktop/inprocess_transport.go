@@ -22,7 +22,15 @@ type inprocessResponse struct {
  Body []byte
 }
 
-func dispatchInprocessRequest(handler http.Handler, method, rawURL string, headers http.Header, payload []byte) (inprocessResponse,error) {
+func dispatchInprocessRequest(handler http.Handler, method, rawURL string, headers http.Header, payload []byte) (out inprocessResponse, dispatchErr error) {
+ // net/http.Server catches panics per connection; the native in-process
+ // adapter must offer the same containment instead of crashing the EXE.
+ defer func(){
+  if recovered:=recover();recovered!=nil {
+   out=inprocessResponse{}
+   dispatchErr=errors.New("internal request handler failed")
+  }
+ }()
  if handler==nil {return inprocessResponse{},errors.New("internal handler missing")}
  if len(payload)>nativeInprocessMaxRequestBytes {return inprocessResponse{},errors.New("internal request too large")}
  u,err:=url.Parse(rawURL)
