@@ -508,3 +508,31 @@ test('cancelled pending MP4 detaches source even if pause throws',async()=>{
  assert.deepEqual(removed,['src']);
  assert.deepEqual(revoked,['blob:pending']);
 });
+
+
+test('failed animation frame scheduling rejects export and releases encoder tracks',async()=>{
+ let schedules=0,encoderStops=0,trackStops=0;
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';encoderStops++;for(const fn of this.listeners.stop||[])fn();}
+ }
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const env={MediaRecorder:Recorder,performance:{now:()=>500},
+  requestAnimationFrame:fn=>{
+   schedules++;
+   if(schedules===2)throw Error('animation frame scheduler unavailable');
+   queueMicrotask(fn);return schedules;
+  },cancelAnimationFrame(){}
+ };
+ await assert.rejects(recordMvWebm(planMvVideoRender(project()),{assets:new Map()},{
+  env,canvasFactory:()=>({getContext:()=>ctx,captureStream:()=>({
+   getVideoTracks:()=>[{}],getTracks:()=>[{stop(){trackStops++;}}]
+  })})
+ }),/animation frame scheduler unavailable/);
+ assert.equal(schedules,2);
+ assert.equal(encoderStops,1,'active recorder must stop after frame scheduling failure');
+ assert.equal(trackStops,1,'captured stream must be released');
+});

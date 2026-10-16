@@ -160,7 +160,7 @@ export async function recordMvWebm(plan,prepared,{
       lastProgress=percent;
       try{onProgress(percent);}catch(e){fail(e);return;}
      }
-     frameId=env.requestAnimationFrame(frame);
+     try{frameId=env.requestAnimationFrame(frame);}catch(e){fail(e);}
     };
     frameId=env.requestAnimationFrame(frame);
    }catch(e){finish(e);}
