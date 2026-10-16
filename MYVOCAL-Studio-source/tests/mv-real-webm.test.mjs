@@ -457,3 +457,54 @@ test('WebM completion never paints an unintended empty scene card at the exact e
  assert.ok(!labels.includes('장면 공백'),'no extra blank title is burned in after last scene');
  assert.deepEqual(p,original,'project remains unchanged');
 });
+
+test('MV asset disposal cleans every source and URL after a failed player pause',async()=>{
+ const p=project(),before=structuredClone(p),plan=planMvVideoRender(p);
+ const removed=[],revoked=[],reloaded=[];
+ const image=new EventTarget();
+ image.naturalWidth=400;image.naturalHeight=200;
+ image.removeAttribute=()=>{throw Error('image already detached');};
+ const video=new EventTarget();
+ video.videoWidth=640;video.videoHeight=360;
+ video.pause=()=>{throw Error('video player already stopped');};
+ video.removeAttribute=name=>removed.push(name);
+ video.load=()=>reloaded.push('video');
+ const prepared=await loadMvVideoAssets(plan,{
+  loadFile:async id=>new Blob(['saved-media'],{type:id==='clip-mp4'?'video/mp4':'image/png'}),
+  createUrl:file=>file.type==='video/mp4'?'blob:clip':'blob:still',
+  revokeUrl:url=>{revoked.push(url);if(url==='blob:still')throw Error('already revoked');},
+  createImage:()=>{queueMicrotask(()=>image.dispatchEvent(new Event('load')));return image;},
+  createVideo:()=>{queueMicrotask(()=>video.dispatchEvent(new Event('loadeddata')));return video;}
+ });
+ assert.equal(prepared.assets.size,2);
+ assert.doesNotThrow(()=>prepared.dispose());
+ assert.deepEqual(removed,['src']);
+ assert.deepEqual(reloaded,['video']);
+ assert.deepEqual(revoked,['blob:still','blob:clip']);
+ prepared.dispose();
+ assert.equal(revoked.length,2);
+ assert.deepEqual(p,before);
+});
+test('cancelled pending MP4 detaches source even if pause throws',async()=>{
+ const scene=planMvVideoRender(project()).scenes.find(x=>x.kind==='video');
+ const controller=new AbortController();
+ let created;
+ const playerCreated=new Promise(resolve=>{created=resolve;});
+ const removed=[],revoked=[];
+ const video=new EventTarget();
+ video.pause=()=>{throw Error('cannot pause unready video');};
+ video.removeAttribute=name=>removed.push(name);
+ video.load=()=>{};
+ const pending=loadMvVideoAssets({scenes:[scene]},{
+  signal:controller.signal,
+  loadFile:async()=>new Blob(['saved-video'],{type:'video/mp4'}),
+  createUrl:()=> 'blob:pending',
+  revokeUrl:url=>revoked.push(url),
+  createVideo:()=>{created();return video;}
+ });
+ await playerCreated;
+ controller.abort();
+ await assert.rejects(pending,/취소/);
+ assert.deepEqual(removed,['src']);
+ assert.deepEqual(revoked,['blob:pending']);
+});

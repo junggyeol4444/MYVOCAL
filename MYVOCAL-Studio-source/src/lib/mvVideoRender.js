@@ -87,12 +87,14 @@ export async function loadMvVideoAssets(plan,{loadFile,signal,createUrl=URL.crea
   disposed=true;
   for(const record of [...assets.values(),...(pending?[pending]:[])]){
    if(record.kind==='video'){
-    try{record.element.pause();record.element.removeAttribute('src');record.element.load?.();}catch{}
+    try{record.element.pause();}catch{}
+    try{record.element.removeAttribute('src');}catch{}
+    try{record.element.load?.();}catch{}
    }else{
     try{record.element.removeAttribute?.('src');}catch{}
    }
   }
-  for(const url of urls)revokeUrl(url);
+  for(const url of urls){try{revokeUrl(url);}catch{}}
  };
  try{
   for(const scene of plan.scenes){
