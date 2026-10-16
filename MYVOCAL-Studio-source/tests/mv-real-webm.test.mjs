@@ -420,3 +420,40 @@ test('one failing media track stop does not hide saved WebM or leak remaining tr
  assert.equal(stops,1);
  assert.equal(otherStops,1,'later tracks must still be closed');
 });
+
+test('WebM completion never paints an unintended empty scene card at the exact end time',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ let elapsed=0,encoderStops=0,trackStops=0;
+ const labels=[];
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,data={}){for(const fn of this.listeners[name]||[])fn(data);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';encoderStops++;
+   this.emit('dataavailable',{data:new Blob(['recorded-frame-data'.repeat(20)])});
+   this.emit('stop');
+  }
+ }
+ const ctx={
+  fillRect(){},drawImage(){},createLinearGradient:()=>({addColorStop(){}}),
+  fillText(value){labels.push(String(value));}
+ };
+ const env={MediaRecorder:Recorder,performance:{now:()=>elapsed},
+  requestAnimationFrame:callback=>{elapsed+=1000;queueMicrotask(callback);return elapsed;},
+  cancelAnimationFrame(){}};
+ const result=await recordMvWebm(plan,{assets:new Map()},{
+  env,canvasFactory:()=>({
+   getContext:()=>ctx,
+   captureStream:()=>({getVideoTracks:()=>[{}],getTracks:()=>[{stop(){trackStops++;}}]})
+  })
+ });
+ assert.equal(result.seconds,12);
+ assert.equal(encoderStops,1);
+ assert.equal(trackStops,1);
+ assert.ok(labels.includes('Outro'),'final actual scene is rendered');
+ assert.ok(!labels.includes('장면 공백'),'no extra blank title is burned in after last scene');
+ assert.deepEqual(p,original,'project remains unchanged');
+});

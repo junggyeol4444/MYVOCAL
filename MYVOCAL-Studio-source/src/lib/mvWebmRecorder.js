@@ -122,6 +122,14 @@ export async function recordMvWebm(plan,prepared,{
     const frame=()=>{
      if(settled||signal?.aborted)return;
      const elapsed=Math.min(plan.durationSec,(env.performance.now()-startedAt)/1000);
+     // A scene at exactly durationSec does not exist; rendering it would
+     // append an unintended 'empty scene' card as the last WebM frame.
+     if(elapsed>=plan.durationSec){
+      completed=true;
+      stopVideos();
+      try{recorder.stop();}catch(e){finish(e);}
+      return;
+     }
      const scene=findMvVideoScene(plan,elapsed);
      if(scene?.id!==lastSceneId){
       const previous=lastSceneId?plan.scenes.find(s=>s.id===lastSceneId):null;
@@ -152,11 +160,7 @@ export async function recordMvWebm(plan,prepared,{
       lastProgress=percent;
       try{onProgress(percent);}catch(e){fail(e);return;}
      }
-     if(elapsed>=plan.durationSec){
-      completed=true;
-      stopVideos();
-      try{recorder.stop();}catch(e){finish(e);}
-     }else frameId=env.requestAnimationFrame(frame);
+     frameId=env.requestAnimationFrame(frame);
     };
     frameId=env.requestAnimationFrame(frame);
    }catch(e){finish(e);}
