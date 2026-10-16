@@ -1,6 +1,35 @@
 const DB='myvocal-assets-v01',STORE='files';
 function openDb() {return new Promise((resolve,reject)=>{const request=indexedDB.open(DB,1);request.onupgradeneeded=()=>request.result.createObjectStore(STORE);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});}
-async function tx(mode, callback) {const db=await openDb();return new Promise((resolve,reject)=>{const t=db.transaction(STORE,mode);const req=callback(t.objectStore(STORE));req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);t.oncomplete=()=>db.close();t.onerror=()=>reject(t.error);});}
+// IndexedDB request success means the operation ran, NOT that its transaction
+// committed. Never publish a recording/model asset as saved before oncomplete.
+// An abort (quota, disk I/O, shutdown) must reject even if put() succeeded.
+async function tx(mode, callback) {
+ const db=await openDb();
+ return new Promise((resolve,reject)=>{
+  let done=false,requestResult,transaction;
+  const settle=error=>{
+   if(done)return;
+   done=true;
+   db.close();
+   if(error)reject(error);
+   else resolve(requestResult);
+  };
+  try{
+   transaction=db.transaction(STORE,mode);
+   transaction.oncomplete=()=>settle(null);
+   transaction.onabort=()=>settle(transaction.error||new Error('자산 저장 트랜잭션이 중단되었습니다.'));
+   // Request errors abort an ordinary IndexedDB transaction. Resolve/reject
+   // on the transaction's terminal event, never an individual request event.
+   transaction.onerror=()=>{};
+   const request=callback(transaction.objectStore(STORE));
+   request.onsuccess=()=>{requestResult=request.result;};
+   request.onerror=()=>{};
+  }catch(error){
+   if(transaction)try{transaction.abort();}catch{}
+   settle(error);
+  }
+ });
+}
 export const putFile=(id,file)=>tx('readwrite',s=>s.put(file,id));
 export const getFile=(id)=>tx('readonly',s=>s.get(id));
 export const removeFile=(id)=>tx('readwrite',s=>s.delete(id));
