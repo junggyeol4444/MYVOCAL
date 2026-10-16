@@ -23,6 +23,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  const musicExists=project&&audioEnd(project)>0;
  const lyricCaptions=buildMvLyricCaptions(project);
  const captionsEnabled=showCaptions&&lyricCaptions.status==='ready';
+ const captionSignature=JSON.stringify(lyricCaptions.captions);
  const sceneTimeline=JSON.stringify(plan?.scenes.map(s=>[s.id,s.start,s.end,s.title])||[]);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;abort.current?.abort();previewAudio.current?.stop();};},[]);
  useEffect(()=>{
@@ -64,7 +65,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
    }else video.pause();
   }
   try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0,{captions:lyricCaptions.captions,showCaptions:captionsEnabled});}catch{}
- },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,project?.vocalAlignment?.sourceKey]);
+ },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,captionSignature]);
  const startExport=async()=>{
   if(!plan||busy)return;
   const controller=new AbortController();abort.current=controller;
