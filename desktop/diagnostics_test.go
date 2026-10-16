@@ -37,3 +37,14 @@ func TestReadinessDoesNotClaimAIGeneration(t *testing.T) {
 		t.Fatalf("incomplete report: %+v", report)
 	}
 }
+
+func TestReadinessRecognizesNativeHostWithoutBrowser(t *testing.T){
+ a:=&appServer{sessionKey:"unit-test",hostMode:hostWebView2,nativeInprocess:true}
+ w:=httptest.NewRecorder()
+ a.systemReadiness(w,singingReq("GET","/api/system/readiness","unit-test",nil))
+ if w.Code!=200{t.Fatalf("diagnostics failed: %d %s",w.Code,w.Body.String())}
+ var result readinessReport
+ if e:=json.Unmarshal(w.Body.Bytes(),&result);e!=nil{t.Fatal(e)}
+ if len(result.Checks)!=3||!result.Checks[0].Available{t.Fatalf("WebView2 incorrectly requires Edge/Chrome: %+v",result.Checks)}
+ if result.Checks[2].Detail==""{t.Fatal("in-process transport not described")}
+}
