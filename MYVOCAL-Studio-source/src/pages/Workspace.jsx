@@ -2,6 +2,7 @@ import React,{useState} from 'react';
 import {Button,Empty,Icon,Notice,Panel,SectionHead} from '../components/UI';
 import {genId,genreList,trackPresets} from '../lib/schema';
 import {downloadText} from '../lib/store';
+import {applyProducerCommand,PRODUCER_COMMAND_EXAMPLES} from '../lib/producerCommands.js';
 import Video from './Video';
 import CreativeDirector96 from '../components/CreativeDirector96.jsx';
 import FinalDelivery98 from '../components/FinalDelivery98.jsx';
@@ -25,7 +26,18 @@ export default function Workspace({data,project,onChange,navigate,notify,studio,
  const setTrack=(id,patch)=>change({tracks:p.tracks.map(t=>t.id===id?{...t,...patch}:t)});
  const addTrack=()=>{change({tracks:[...p.tracks,{id:genId('trk'),name:newTrack.trim()||`Track ${p.tracks.length+1}`,type:'instrument',mute:false,solo:false,volume:75,clips:[]}]});setNewTrack('');notify('새 트랙을 추가했습니다.');};
  const addGenre=()=>change({genreMix:[...p.genreMix,{name:genreList.find(g=>!p.genreMix.some(x=>x.name===g))||'Pop',weight:0}]});
- const logCommand=e=>{e.preventDefault();if(!chat.trim())return;const message=chat.trim();const entry={id:genId('msg'),text:message,time:Date.now(),response:'요청을 기록했습니다. 자동 작곡은 상단의 ‘작사 · 자동 작곡’ 탭에서 사용할 수 있습니다.'};change({producerLog:[...(p.producerLog||[]),entry]});setChat('');};
+ const logCommand=e=>{
+  e.preventDefault();
+  if(!chat.trim())return;
+  const message=chat.trim();
+  try{
+   const result=applyProducerCommand(p,message);
+   const entry={id:genId('msg'),text:message,time:Date.now(),response:result.response};
+   onChange({...result.project,producerLog:[...(p.producerLog||[]),entry]});
+   setChat('');
+   notify(result.response);
+  }catch(err){notify('음악 편집 불가: '+err.message);}
+ };
  const switchSection=(id,patch)=>change({sections:p.sections.map(s=>s.id===id?{...s,...patch}:s)});
  const changeSectionGenre=(id,mix)=>change({sections:setSectionGenreMix(p.sections,id,mix)});
  const totalBars=p.sections.reduce((sum,s)=>sum+(Number(s.bars)||0),0);
@@ -48,6 +60,6 @@ export default function Workspace({data,project,onChange,navigate,notify,studio,
  <div className="structure-row"><span className="section-no">{String(i+1).padStart(2,'0')}</span><input aria-label={`구간 ${i+1} 이름`} value={s.name} onChange={e=>switchSection(s.id,{name:e.target.value})}/><label>마디 <input type="number" min="1" max="128" value={s.bars} onChange={e=>switchSection(s.id,{bars:Number(e.target.value)||1})}/></label><button aria-label="구간 삭제" className="icon-btn danger" onClick={()=>change({sections:p.sections.filter(x=>x.id!==s.id)})}><Icon name="trash" size={16}/></button></div>
  <SectionGenreEditor section={s} projectMix={p.genreMix} onChange={mix=>changeSectionGenre(s.id,mix)}/>
  </div>)}</div><Button icon="plus" onClick={()=>change({sections:[...p.sections,{id:genId('sec'),name:'새 구간',bars:8}]})}>구간 추가</Button><p className="field-hint">총 {totalBars}마디 · BPM {p.bpm}</p></Panel><Panel title="Genre Mixing" description="장르를 혼합하고 비율을 조절하세요. (AI AUTO는 추후 지원)"><label className="check-item genre-auto"><input type="checkbox" checked={p.genreAuto||false} onChange={e=>change({genreAuto:e.target.checked})}/> AI AUTO (예약 옵션)</label><div className="genre-mix">{p.genreMix.map((g,i)=><div className="genre-row" key={i}><select value={g.name} onChange={e=>change({genreMix:p.genreMix.map((x,j)=>j===i?{...x,name:e.target.value}:x)})}>{genreList.map(name=><option key={name}>{name}</option>)}</select><input aria-label="장르 비율" type="range" min="0" max="100" value={g.weight} onChange={e=>change({genreMix:p.genreMix.map((x,j)=>j===i?{...x,weight:Number(e.target.value)}:x)})}/><span>{g.weight}%</span><button className="icon-btn danger" aria-label="장르 삭제" onClick={()=>{if(p.genreMix.length>1)change({genreMix:p.genreMix.filter((_,j)=>j!==i)})}}><Icon name="close" size={16}/></button></div>)}</div><div className="hstack spread"><Button icon="plus" onClick={addGenre}>장르 추가</Button><span className={sumGenre===100?'success-text':'warn-text'}>합계 {sumGenre}% {sumGenre===100?'✓':'· 100%로 맞춰 주세요'}</span></div></Panel></>}
- </div><aside className="producer-panel panel"><div className="producer-head"><span className="producer-avatar"><Icon name="spark" size={21}/></span><div><h3>AI Producer</h3><p>CREATIVE ASSISTANT</p></div><span className="producer-pending">연결 예정</span></div><div className="producer-intro"><strong>어떤 사운드를 만들까요?</strong><p>현재는 자연어 요청을 기록합니다. 실제 작사 AI 연결 및 로컬 MIDI 자동 작곡은 상단의 ‘작사 · 자동 작곡’ 탭에서 사용할 수 있습니다.</p></div><div className="suggestions">{['후렴을 더 웅장하게','드럼 강화하기','마지막 후렴 반키 올리기'].map(text=><button onClick={()=>setChat(text)} key={text}><Icon name="spark" size={13}/>{text}</button>)}</div><div className="chat-history">{(p.producerLog||[]).slice(-6).map(log=><div className="chat-block" key={log.id}><div className="chat-user">{log.text}</div><div className="chat-response">{log.response}</div></div>)}</div><form className="producer-form" onSubmit={logCommand}><input value={chat} onChange={e=>setChat(e.target.value)} placeholder="수정 요청 기록하기..."/><button type="submit" aria-label="보내기"><Icon name="send" size={18}/></button></form></aside></div>}
+ </div><aside className="producer-panel panel"><div className="producer-head"><span className="producer-avatar"><Icon name="spark" size={21}/></span><div><h3>AI Producer</h3><p>CREATIVE ASSISTANT</p></div><span className="producer-pending">MIDI 수정 가능</span></div><div className="producer-intro"><strong>어떤 사운드를 만들까요?</strong><p>아래의 지원된 요청은 프로젝트 MIDI와 코드를 실제로 수정합니다. 그 외의 자유 대화 AI와 오디오 음정 변경은 아직 지원하지 않습니다.</p></div><div className="suggestions">{PRODUCER_COMMAND_EXAMPLES.map(text=><button onClick={()=>setChat(text)} key={text}><Icon name="spark" size={13}/>{text}</button>)}</div><div className="chat-history">{(p.producerLog||[]).slice(-6).map(log=><div className="chat-block" key={log.id}><div className="chat-user">{log.text}</div><div className="chat-response">{log.response}</div></div>)}</div><form className="producer-form" onSubmit={logCommand}><input value={chat} onChange={e=>setChat(e.target.value)} placeholder="예: 마지막 후렴만 반키 올려줘"/><button type="submit" aria-label="보내기"><Icon name="send" size={18}/></button></form></aside></div>}
  </>;
 }
