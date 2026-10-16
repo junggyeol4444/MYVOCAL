@@ -98,3 +98,14 @@ test('long manually edited lyric captions wrap without dropping user text',()=>{
  drawMvVideoFrame({width:640,height:360,getContext:()=>ctx},planMvVideoRender(p),new Map(),.1,{showCaptions:true,captions:result.captions});
  assert.equal(shown.filter(t=>lyric.includes(t)).join(''),lyric,'canvas must preserve every original lyric character');
 });
+
+test('overlapping lyric phrases switch when the new phrase starts, not after the old sustain ends',()=>{
+ const captions=[
+  {startSec:0,endSec:3,text:'앞 가사'},
+  {startSec:2.5,endSec:5,text:'다음 가사'}
+ ];
+ assert.equal(captionAtTime(captions,2.49).text,'앞 가사');
+ assert.equal(captionAtTime(captions,2.5).text,'다음 가사');
+ assert.equal(captionAtTime(captions,3).text,'다음 가사');
+ assert.equal(captionAtTime(captions,5),null);
+});
