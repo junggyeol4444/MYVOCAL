@@ -127,3 +127,37 @@ test('cancelled WebM export never produces a fake successful file',async()=>{
  const plan=planMvVideoRender(project());
  await assert.rejects(recordMvWebm(plan,{assets:new Map()},{signal:controller.signal,env:{MediaRecorder:{isTypeSupported:()=>true},requestAnimationFrame(){}},canvasFactory:()=>({captureStream(){}})}),/취소/);
 });
+
+test('recorded WebM includes the real existing music mix as an audio stream',async()=>{
+ let ms=0,addedAudio=0,startedAudio=0;
+ const mediaStream={tracks:[{kind:'video',stop(){}}],getVideoTracks(){return this.tracks.filter(t=>t.kind==='video');},getTracks(){return this.tracks;},addTrack(t){this.tracks.push(t);addedAudio++;}};
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8,opus';}
+  constructor(stream){this.stream=stream;this.state='inactive';this.listeners={};}
+  addEventListener(n,fn){(this.listeners[n]??=[]).push(fn);}
+  emit(n,e={}){(this.listeners[n]||[]).forEach(fn=>fn(e));}
+  start(){this.state='recording';assert.equal(this.stream.getTracks().length,2);}
+  stop(){this.state='inactive';this.emit('dataavailable',{data:new Blob(['recorded-webm-video-audio-data'])});this.emit('stop');}
+ }
+ class AudioContext{
+  currentTime=0;
+  async resume(){}
+  async decodeAudioData(data){assert.ok(data.byteLength>0);return {duration:12};}
+  createMediaStreamDestination(){return {stream:{getAudioTracks:()=>[{kind:'audio',stop(){}}]}};}
+  createBufferSource(){return {buffer:null,connect(){},start(){startedAudio++;},stop(){}};}
+  async close(){}
+ }
+ const context={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const canvas={width:0,height:0,getContext:()=>context,captureStream:()=>mediaStream};
+ const env={MediaRecorder:Recorder,AudioContext,performance:{now:()=>ms},requestAnimationFrame:fn=>{ms+=500;queueMicrotask(fn);return ms;},cancelAnimationFrame(){}};
+ const plan=planMvVideoRender(project()),assets=new Map();
+ const result=await recordMvWebm(plan,{assets},{
+  includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([82,73,70,70,0,0,0,0,87,65,86,69])]),
+  env,canvasFactory:()=>canvas
+ });
+ assert.equal(addedAudio,1);
+ assert.equal(startedAudio,1);
+ assert.equal(result.includesAudio,true);
+ assert.equal(result.mimeType,'video/webm');
+ assert.ok(result.blob.size>10);
+});
