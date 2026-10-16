@@ -49,7 +49,8 @@ if (-not (Test-Path -LiteralPath $dll)) {
 if (-not (Test-Path -LiteralPath $dll)) { throw 'WebView2Loader.dll must accompany the EXE.' }
 $notice = Join-Path $PSScriptRoot 'NOTICE.txt'
 $license = Join-Path $root 'MYVOCAL-Studio-source\third_party\react-MIT-LICENSE.txt'
-Compress-Archive -LiteralPath @($exe,$dll,$notice,$license) -DestinationPath $zip -Force
+$migrate = Join-Path $PSScriptRoot 'MIGRATE-TO-NATIVE.bat'
+Compress-Archive -LiteralPath @($exe,$dll,$notice,$license,$migrate) -DestinationPath $zip -Force
 Write-Host "Created: $exe"
 Write-Host "Created: $zip (EXE + WebView2Loader.dll + notices)"
 Write-Host 'Requires Microsoft Edge WebView2 Runtime on the target Windows PC.'

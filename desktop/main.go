@@ -38,6 +38,7 @@ type appServer struct {
 	pinged      bool
 	root        []byte
 	manager     managedEngine
+	migrationMode bool
 }
 
 func (a *appServer) ping() {
@@ -91,6 +92,7 @@ func (a *appServer) routes() *http.ServeMux {
 		io.WriteString(w, userAgent)
 	})
 	mux.HandleFunc("/api/system/readiness", a.systemReadiness)
+	mux.HandleFunc("/api/system/migration/complete", a.finishNativeMigration)
 	mux.HandleFunc("/api/images/health", a.imageHealth)
 	mux.HandleFunc("/api/images/generate", a.imageGenerate)
 	mux.HandleFunc("/api/person-mv/generate", a.personMVGenerate)
@@ -209,10 +211,18 @@ func run() error {
 	}
 	setupLog()
 	// Never move an existing Chromium project into a fresh WebView2 profile.
-	mode, pinHost, err := resolveHostMode(dataDir(), requestedHostMode())
-	if err != nil {
-		return err
-	}
+	migration:=requestedNativeMigration(os.Args[1:])
+ var mode string
+ var pinHost bool
+ var err error
+ if migration {
+  if err=verifyMigrationSource(dataDir());err!=nil{return err}
+  if requestedHostMode()!=""{return errors.New("프로필 이전 실행 시 MYVOCAL_DESKTOP_HOST 환경 변수를 함께 사용하지 마세요")}
+  mode=hostWebView2
+ } else {
+  mode,pinHost,err=resolveHostMode(dataDir(),requestedHostMode())
+  if err!=nil{return err}
+ }
 	if mode == hostWebView2 {
 		if err := nativeHostAvailable(); err != nil {
 			return err
@@ -236,11 +246,14 @@ func run() error {
 		return err
 	}
 	script := sessionScript(key)
-	html := strings.Replace(string(raw), "</body>", script+"</body>", 1)
+ if migration {
+  script=strings.Replace(script,"</script>","window.__MYVOCAL_MIGRATION_MODE=true;</script>",1)
+ }
+ html := strings.Replace(string(raw), "</body>", script+"</body>", 1)
 	if html == string(raw) {
 		return errors.New("standalone HTML is missing </body>")
 	}
-	app := &appServer{root: []byte(html), sessionKey: key, instanceKey: instanceKey}
+	app := &appServer{root: []byte(html), sessionKey: key, instanceKey: instanceKey,migrationMode:migration}
 	defer app.stopManagedEngine()
 	endpoint := "http://127.0.0.1:" + appPort
 	listener, err := listenStable("127.0.0.1:" + appPort)

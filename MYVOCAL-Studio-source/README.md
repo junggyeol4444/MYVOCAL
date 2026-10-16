@@ -27,3 +27,5 @@ Windows EXE 빌드는 `desktop/build-windows.bat` 또는 `desktop/build-windows.
 - 실제 Windows 10/11 PC의 GUI 실행과 원본 자료 보존 검증은 별도로 필요합니다.
 
 기존 프로젝트는 브라우저별 로컬 저장소와 IndexedDB에 남아 있습니다. 네이티브 WebView2 새 프로필로 기존 데이터를 자동 이전하지 않습니다. 이전하기 전에 기존 프로그램에서 프로젝트와 자료를 백업해야 합니다.
+
+전체 작업공간 및 원본 자료의 ZIP 이전은 `설정 → 전체 작업공간 ZIP 백업/복원`에서 지원합니다. 레거시 프로필을 네이티브 기본 창으로 변경할 때는 `desktop/MIGRATE-TO-NATIVE.bat`를 사용하세요.
