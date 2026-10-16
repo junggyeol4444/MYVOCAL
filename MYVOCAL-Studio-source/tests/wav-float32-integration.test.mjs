@@ -2,8 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {installAudioIndexedDB} from './helpers/audio-indexeddb.mjs';
 const fakeFile={arrayBuffer:async()=>new ArrayBuffer(4)};
-globalThis.indexedDB={open(){const req={result:{createObjectStore(){},transaction(){return {objectStore(){return {get(){const x={};queueMicrotask(()=>{x.result=fakeFile;x.onsuccess?.()});return x}}}}},close(){}}};queueMicrotask(()=>req.onsuccess?.());return req;}};
+installAudioIndexedDB(fakeFile);
 class Param{setValueAtTime(){}linearRampToValueAtTime(){}}
 class Node{connect(){}disconnect(){}start(){}}
 class Gain extends Node{constructor(){super();this.gain=new Param();}}

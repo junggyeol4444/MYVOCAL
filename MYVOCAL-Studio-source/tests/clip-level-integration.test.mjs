@@ -3,18 +3,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {installAudioIndexedDB} from './helpers/audio-indexeddb.mjs';
 
 const rate=44100,sourceSamples=Float32Array.from({length:rate*2},(_,i)=>.25*Math.sin(2*Math.PI*440*i/rate));
 const decoded={duration:2,sampleRate:rate,getChannelData:()=>sourceSamples};
 const file={arrayBuffer:async()=>new ArrayBuffer(4)};
-globalThis.indexedDB={open(){
- const req={result:{createObjectStore(){},transaction(){return {
-  objectStore(){return {get(){const r={};queueMicrotask(()=>{r.result=file;r.onsuccess?.()});return r}}},
-  close(){},
- }} ,close(){} }};
- queueMicrotask(()=>req.onsuccess?.());return req;
-}};
-
+installAudioIndexedDB(file);
 class Param{
  constructor(){this.value=1;this.events=[];}
  setValueAtTime(value,time){this.events.push({value,time});this.value=value;}

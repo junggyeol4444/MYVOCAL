@@ -3,12 +3,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {installAudioIndexedDB} from './helpers/audio-indexeddb.mjs';
 import {duplicateClipInTracks,splitClipInTracks} from '../src/lib/clipArrangement.js';
 import {createClipHistory,recordClipChange,applyClipHistory} from '../src/lib/clipHistory.js';
 const rate=44100,mono=Float32Array.from({length:rate},(_,i)=>.2*Math.sin(2*Math.PI*220*i/rate));
 const decoded={duration:1,sampleRate:rate,numberOfChannels:1,getChannelData:()=>mono};
 const file={arrayBuffer:async()=>new ArrayBuffer(4)};
-globalThis.indexedDB={open(){const req={result:{createObjectStore(){},transaction(){return {objectStore(){return {get(){const r={};queueMicrotask(()=>{r.result=file;r.onsuccess?.()});return r}}}}},close(){}}};queueMicrotask(()=>req.onsuccess?.());return req;}};
+installAudioIndexedDB(file);
 class Param{
  constructor(){this.value=1;this.events=[];}
  setValueAtTime(value,time){this.value=value;this.events.push({value,time});}
