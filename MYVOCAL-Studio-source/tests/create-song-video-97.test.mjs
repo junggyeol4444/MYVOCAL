@@ -104,3 +104,11 @@ test('default untouched scene is replaceable, but added fields, even hidden ones
  assert.equal(canReplaceDefaultStoryboard({...p,scenes:[{...p.scenes[0],imageAssetId:'abc'}]}),false);
  assert.equal(canReplaceDefaultStoryboard({...p,scenes:[{...p.scenes[0],videoGeneration:{status:'generated'}}]}),false);
 });
+
+test('a changed voice, character or musical setting rejects an outdated storyboard plan',()=>{
+ const p=newProject();
+ const plan=planCreateSongVideo97(p,{composition:true,storyboard:true});
+ for(const changed of [{voiceId:'different'},{characterId:'other'},{bpm:145},{key:'D Major'},{genreMix:[{name:'Pop',weight:100}]},{videoMode:'Story MV'},{withVideo:false}]){
+  assert.throws(()=>applyCreateSongVideo97({...p,...changed},plan),/변경/);
+ }
+});
