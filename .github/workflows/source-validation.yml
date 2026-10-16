@@ -1,4 +1,4 @@
-name: MYVOCAL source validation (test branches only)
+name: MYVOCAL source validation
 on:
   push:
     branches: [main, 'test/**']
@@ -16,6 +16,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm install --no-audit --no-fund
       - run: npm test
       - run: node scripts/build-standalone.cjs
   desktop:
