@@ -54,7 +54,7 @@ test('incomplete or unsafe alignment is rejected instead of inventing subtitles'
  assert.equal(buildMvLyricCaptions({...p,vocalAlignment:{format:'bad',cues:[]}}).status,'invalid');
  const bad={...p.vocalAlignment,cues:[{...p.vocalAlignment.cues[0],endSec:-1}]};
  assert.equal(buildMvLyricCaptions({...p,vocalAlignment:bad}).status,'invalid');
- assert.equal(buildMvLyricCaptions({...p,vocalAlignment:{...p.vocalAlignment,cues:p.vocalAlignment.cues.map(c=>({...c,lyric:'—'}))}}).status,'stale');
+ assert.equal(buildMvLyricCaptions({...p,vocalAlignment:{...p.vocalAlignment,cues:p.vocalAlignment.cues.map(c=>({...c,lyric:'—'}))}}).status,'empty');
 });
 test('a silent note with an empty lyric never turns into invented caption text',()=>{
  const p=vocalSong();
