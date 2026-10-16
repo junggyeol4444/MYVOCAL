@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {newProject} from '../src/lib/schema.js';
-import {generateOfflineDraft,buildMidiArrangement,applyComposition,sectionMidiStyleMap} from '../src/lib/composer.js';
+import {generateOfflineDraft,buildMidiArrangement,applyComposition,sectionMidiStyleMap,COMPOSER_PARTS} from '../src/lib/composer.js';
 import {singleSectionGenre,setSectionGenreMix} from '../src/lib/sectionGenre.js';
 
 const ballad=[{name:'Ballad',weight:100}];
@@ -51,7 +51,7 @@ test('composer applied to existing project uses retained section overrides for a
  const d=generateOfflineDraft(opts);
  const applied=applyComposition(project,d);
  const midi=applied.tracks.filter(t=>t.generatedBy==='composer-v04');
- assert.equal(midi.length,4);
+ assert.equal(midi.length,COMPOSER_PARTS.length);
  assert.ok(inBar(midi.find(t=>t.instrument==='drums'),9).length>inBar(d.midiTracks.find(t=>t.role==='drums'),9).length);
  assert.deepEqual(applied.tracks[0].clips,before.tracks[0].clips);
  assert.equal(applied.voiceId,'voice');
