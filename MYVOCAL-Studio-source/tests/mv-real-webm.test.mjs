@@ -89,3 +89,41 @@ test('Video page wires real canvas renderer and WebM music mixer into existing s
  for(const text of ['MvVideoExporter','positionSeconds={animaticPosition}','playing={animaticPlaying}'])assert.ok(page.includes(text),text);
  for(const text of ['recordMvWebm','loadMvVideoAssets','drawMvVideoFrame','mixdownWav','전체 MV WebM 저장','저장 취소'])assert.ok(component.includes(text),text);
 });
+
+test('WebM recorder actually captures a whole video timeline and returns recorded bytes',async()=>{
+ let ms=0,stops=0,frames=0,videoStarted=0;
+ const events=[];
+ class Recorder {
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(stream,options){this.stream=stream;this.options=options;this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,e={}){for(const fn of this.listeners[name]||[])fn(e);}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';stops++;this.emit('dataavailable',{data:new Blob(['real-recorded-webm-data-not-just-json'])});this.emit('stop');}
+ }
+ const context={fillRect(){},drawImage(){frames++;},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const tracks=[{stop(){}}];
+ const canvas={width:0,height:0,getContext:()=>context,captureStream:()=>({getVideoTracks:()=>tracks,getTracks:()=>tracks})};
+ const media=new Map([['intro-image',{kind:'image',element:{naturalWidth:400,naturalHeight:200}}],
+ ['clip-mp4',{kind:'video',element:{readyState:4,videoWidth:1280,videoHeight:720,paused:true,play(){videoStarted++;this.paused=false;return Promise.resolve();},pause(){this.paused=true;},currentTime:0}}]]);
+ const env={
+  MediaRecorder:Recorder,performance:{now:()=>ms},
+  requestAnimationFrame:fn=>{ms+=500;queueMicrotask(fn);return ms;},
+  cancelAnimationFrame(){}
+ };
+ const plan=planMvVideoRender(project());
+ const result=await recordMvWebm(plan,{assets:media},{env,canvasFactory:()=>canvas,onProgress:n=>events.push(n)});
+ assert.equal(result.seconds,12);
+ assert.equal(result.mimeType,'video/webm');
+ assert.equal(result.includesAudio,false);
+ assert.ok(result.blob.size>20);
+ assert.equal(stops,1);
+ assert.ok(videoStarted>0);
+ assert.ok(frames>0);
+ assert.ok(events.includes(100));
+});
+test('cancelled WebM export never produces a fake successful file',async()=>{
+ const controller=new AbortController();controller.abort();
+ const plan=planMvVideoRender(project());
+ await assert.rejects(recordMvWebm(plan,{assets:new Map()},{signal:controller.signal,env:{MediaRecorder:{isTypeSupported:()=>true},requestAnimationFrame(){}},canvasFactory:()=>({captureStream(){}})}),/취소/);
+});
