@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {AssetPreview,Button,Empty,Field,Icon,Modal,Notice,SectionHead,Status} from '../components/UI';
 import {genId,now,rightsOptions} from '../lib/schema';
-import {getFile,putFile,removeFile} from '../lib/assetDb';
+import {getFile,putFile,putFilesAtomic,removeFile} from '../lib/assetDb';
 import {analyzeAudioFile,voiceAdvice} from '../lib/voiceAnalysis';
 import {VOICE_GUIDES,getVoiceGuide,checkSampleQuality,voiceDatasetSummary,downloadVoiceDataset} from '../lib/voiceDataset';
 
@@ -59,17 +59,27 @@ export default function Voices({data,add,remove,notify}){
  const stopRecord=()=>{if(rec.current?.state==='recording')rec.current.stop();};
  const close=()=>{if(recording){notify('먼저 녹음을 중지하세요.');return;}if(busy)return;reset();};
  const addSamples=async(v,files,capturePromptId='',notes='')=>{
-  if(busy)return;const chosen=[...files].filter(checkFile);if(!chosen.length)return;
+  if(busy)return false;
+  const chosen=[...files].filter(checkFile).slice(0,8);
+  if(!chosen.length)return false;
   setBusy(true);setProgress(0);
   try{
-   const assets=[...(v.assets||[])];let failures=0;
-   for(const f of chosen.slice(0,8)){
-    const id=genId('asset');await putFile(id,f);let analysis=null,error='';
-    try{analysis=await analyzeAudioFile(f,{onProgress:setProgress});}catch(err){error=err.message;failures++;}
-    assets.push({id,fileName:f.name,createdAt:now(),analysis,analysisError:error,capturePromptId,notes});
+   // Inspect all samples before committing any original. Recording files
+   // are stored together so a quota/disk failure cannot leave half a batch.
+   const prepared=[];let failures=0;
+   for(const f of chosen){
+    const id=genId('asset');let analysis=null,error='';
+    try{analysis=await analyzeAudioFile(f,{onProgress:setProgress});}
+    catch(err){error=err.message;failures++;}
+    prepared.push({id,file:f,entry:{id,fileName:f.name,createdAt:now(),analysis,analysisError:error,capturePromptId,notes}});
    }
-   add('voices',{...v,assets});setExpanded(v.id);notify(`${Math.min(8,chosen.length)}개 샘플을 저장했습니다.${failures?` ${failures}개는 분석할 수 없습니다.`:''}`);
-  }catch(err){notify('샘플 저장 실패: '+err.message);}finally{setBusy(false);setProgress(0)}
+   await putFilesAtomic(prepared.map(({id,file})=>[id,file]));
+   add('voices',{...v,assets:[...(v.assets||[]),...prepared.map(p=>p.entry)]});
+   setExpanded(v.id);
+   notify(`${prepared.length}개 샘플을 저장했습니다.${failures?` ${failures}개는 분석할 수 없습니다.`:''}`);
+   return true;
+  }catch(err){notify('샘플 저장 실패: '+err.message);return false;}
+  finally{setBusy(false);setProgress(0);}
  };
  const rerun=async(v,entry)=>{
   if(busy)return;setBusy(true);setProgress(0);
@@ -87,8 +97,9 @@ export default function Voices({data,add,remove,notify}){
  };
  const saveGuide=async v=>{
   if(!guideFile){notify('녹음하거나 오디오 파일을 선택해 주세요.');return;}
-  await addSamples(v,[guideFile],guideTarget,guideNotes.trim());
-  setGuideFile(null);setGuideNotes('');
+  const saved=await addSamples(v,[guideFile],guideTarget,guideNotes.trim());
+  // Keep the recorded original in the form if IndexedDB rejected the write.
+  if(saved){setGuideFile(null);setGuideNotes('');}
  };
  const downloadDataset=async v=>{
   if(busy||recording)return;setBusy(true);
