@@ -654,7 +654,7 @@ func runNativeWebView2(url, profile string) error {
 	}()
 	instance, _, _ := procGetModuleHandle.Call(0)
 	className, _ := syscall.UTF16PtrFromString("MYVOCALNativeWebView2Window")
-	title, _ := syscall.UTF16PtrFromString("MYVOCAL Studio — WebView2 Preview")
+	title, _ := syscall.UTF16PtrFromString("MYVOCAL Studio")
 	wc := nativeWindowClass{Size: uint32(unsafe.Sizeof(nativeWindowClass{})), WndProc: syscall.NewCallback(nativeWndProc), Instance: instance, ClassName: className}
 	if r, _, e := procRegisterClass.Call(uintptr(unsafe.Pointer(&wc))); r == 0 {
 		return fmt.Errorf("WebView2 창 클래스 등록 실패: %v", e)

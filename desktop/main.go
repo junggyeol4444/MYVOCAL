@@ -1,7 +1,7 @@
-// MYVOCAL Studio Step 03o - desktop host preview and profile safety
-// This EXE embeds the offline application UI, serves it exclusively over loopback,
-// and opens the existing Edge/Chrome app-mode host by default.
-// An experimental native WebView2 host is opt-in for isolated new profiles only.
+// MYVOCAL Studio native Windows desktop launcher.
+// Fresh installations open the embedded application UI in a native WebView2 window.
+// The loopback HTTP endpoint remains an internal transport for existing UI/API code.
+// Existing Edge/Chrome profiles remain on their original host to preserve project data.
 // This is not an AI generation engine.
 package main
 

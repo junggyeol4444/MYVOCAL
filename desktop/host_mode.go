@@ -112,10 +112,12 @@ func resolveHostMode(base, request string) (string, bool, error) {
 		}
 		return hostWebView2, true, nil
 	}
-	if request == hostWebView2 {
-		return hostWebView2, true, nil
+	if request == hostBrowser {
+		return hostBrowser, true, nil
 	}
-	return hostBrowser, true, nil
+	// New installations open a real Windows WebView2 window by default.
+	// Existing Chromium profiles and pinned host preferences above remain untouched.
+	return hostWebView2, true, nil
 }
 
 // persistHostMode publishes a fully written, fsynced preference in one step.

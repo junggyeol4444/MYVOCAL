@@ -1,7 +1,7 @@
 name: MYVOCAL source validation (test branches only)
 on:
   push:
-    branches: ['test/**']
+    branches: [main, 'test/**']
   workflow_dispatch:
 permissions:
   contents: read

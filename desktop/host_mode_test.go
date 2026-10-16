@@ -9,14 +9,21 @@ import (
 	"testing"
 )
 
-func TestHostModeFreshInstallDefaultsToBrowser(t *testing.T) {
+func TestHostModeFreshInstallDefaultsToNativeWindow(t *testing.T) {
 	base := t.TempDir()
 	mode, persist, err := resolveHostMode(base, "")
-	if err != nil || mode != hostBrowser || !persist {
+	if err != nil || mode != hostWebView2 || !persist {
 		t.Fatalf("%s %t %v", mode, persist, err)
 	}
 	if _, err = os.Stat(filepath.Join(base, "launcher-host.json")); !os.IsNotExist(err) {
 		t.Fatal("resolver wrote data")
+	}
+}
+func TestHostModeFreshInstallExplicitBrowserOptIn(t *testing.T) {
+	base := t.TempDir()
+	mode, persist, err := resolveHostMode(base, hostBrowser)
+	if err != nil || mode != hostBrowser || !persist {
+		t.Fatalf("%s %t %v", mode, persist, err)
 	}
 }
 func TestHostModeLegacyProfileCannotBeMigratedSilently(t *testing.T) {

@@ -1,7 +1,7 @@
 name: MYVOCAL Windows validation (test branches only)
 on:
   push:
-    branches: ['test/**']
+    branches: [main, 'test/**']
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,11 +30,20 @@ jobs:
       - name: Compile Windows x64 COM mock tests
         working-directory: desktop
         run: go test -c -o ../MYVOCAL-Windows-Tests.exe .
-      - name: Upload unsigned test artifacts
+      - name: Package native Windows application with official x64 WebView2 loader
+        shell: pwsh
+        run: |
+          nuget install Microsoft.Web.WebView2 -Version 1.0.4258.31 -OutputDirectory "$env:RUNNER_TEMP\webview2" -NonInteractive
+          $loader = Join-Path $env:RUNNER_TEMP "webview2\Microsoft.Web.WebView2.1.0.4258.31\runtimes\win-x64\native\WebView2Loader.dll"
+          if (-not (Test-Path -LiteralPath $loader)) { throw "Official x64 WebView2Loader.dll not found" }
+          Copy-Item -LiteralPath $loader -Destination "WebView2Loader.dll"
+          Compress-Archive -LiteralPath @("MYVOCAL-Studio-Windows.exe", "WebView2Loader.dll", "desktop/NOTICE.txt") -DestinationPath "MYVOCAL-Studio-Windows.zip" -Force
+      - name: Upload unsigned Windows application and tests
         uses: actions/upload-artifact@v4
         with:
           name: windows-build-${{ matrix.os }}
           path: |
+            MYVOCAL-Studio-Windows.zip
             MYVOCAL-Studio-Windows.exe
             MYVOCAL-Windows-Tests.exe
           retention-days: 7

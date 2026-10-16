@@ -17,4 +17,8 @@ if %errorlevel% neq 0 (
   exit /b 1
 )
 echo Created ..\MYVOCAL-Studio.exe
+if not exist "..\WebView2Loader.dll" (
+  echo To run the native Windows application, place Microsoft's official x64 WebView2Loader.dll next to the EXE.
+  echo The GitHub Windows Actions ZIP automatically includes this DLL.
+)
 pause
