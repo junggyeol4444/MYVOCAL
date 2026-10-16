@@ -568,3 +568,50 @@ test('failed animation frame cancellation does not lose completed WebM or skip t
  assert.equal(trackStops,1,'video track must be stopped even if frame cancellation throws');
  assert.deepEqual(p,original,'original project must remain unchanged');
 });
+
+test('a synchronous AudioContext close error preserves finished WebM and releases media',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ let elapsed=0,encoderStops=0,trackStops=0,contextCloses=0;
+ const tracks=[{kind:'video',stop(){trackStops++;}}];
+ const stream={
+  getVideoTracks:()=>tracks.filter(t=>t.kind==='video'),
+  getTracks:()=>tracks,addTrack:t=>tracks.push(t)
+ };
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8,opus';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,data={}){for(const fn of this.listeners[name]||[])fn(data);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';encoderStops++;
+   this.emit('dataavailable',{data:new Blob(['recorded-webm-with-audio'.repeat(20)])});
+   this.emit('stop');
+  }
+ }
+ class AudioContext{
+  currentTime=0;
+  async resume(){}
+  async decodeAudioData(){return {duration:12};}
+  createMediaStreamDestination(){
+   return {stream:{getAudioTracks:()=>[{kind:'audio',stop(){trackStops++;}}]}};
+  }
+  createBufferSource(){return {connect(){},start(){},stop(){}};}
+  close(){contextCloses++;throw Error('audio context already disposed');}
+ }
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const env={MediaRecorder:Recorder,AudioContext,performance:{now:()=>elapsed},
+  requestAnimationFrame:fn=>{elapsed+=1000;queueMicrotask(fn);return elapsed;},
+  cancelAnimationFrame(){}
+ };
+ const result=await recordMvWebm(plan,{assets:new Map()},{
+  includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([82,73,70,70])]),
+  env,canvasFactory:()=>({getContext:()=>ctx,captureStream:()=>stream})
+ });
+ assert.ok(result.blob.size>100,'completed WebM must not be discarded by cleanup');
+ assert.equal(result.includesAudio,true);
+ assert.equal(encoderStops,1);
+ assert.equal(trackStops,2,'both video and audio tracks must be released');
+ assert.equal(contextCloses,1);
+ assert.deepEqual(p,original,'the original project must remain unchanged');
+});
