@@ -21,7 +21,7 @@ function windows(p){
  return win;
 }
 function inChorus(n,ranges){return ranges.some(([a,b])=>n.startBeat>=a&&n.startBeat<b);}
-function trackByRole(p,r){return p.tracks.find(t=>role(t)===r);}
+function trackByRole(p,r){return p.tracks.find(t=>t.generatedBy==='composer-v04'&&role(t)===r);}
 function differences(before,after,r){
  const a=trackByRole(before,r),b=trackByRole(after,r);
  assert.ok(a&&b);
