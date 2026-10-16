@@ -169,7 +169,8 @@ export async function recordMvWebm(plan,prepared,{
   onProgress(100);
   return {blob,fileName:'MYVOCAL-MusicVideo.webm',seconds:plan.durationSec,mimeType:'video/webm',includesAudio:audioEnabled,includesCaptions:!!showCaptions&&captions.length>0};
  }finally{
-  if(frameId)env.cancelAnimationFrame?.(frameId);
+  // Frame cancellation is best-effort: failure must not skip media cleanup.
+  if(frameId){try{env.cancelAnimationFrame?.(frameId);}catch{}}
   stopVideos();
   // Recorder may already be running when audio startup or frame setup fails.
   // Always release the encoder as well as its media stream on failure.

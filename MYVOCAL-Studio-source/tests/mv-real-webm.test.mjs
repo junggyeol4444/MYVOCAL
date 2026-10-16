@@ -536,3 +536,35 @@ test('failed animation frame scheduling rejects export and releases encoder trac
  assert.equal(encoderStops,1,'active recorder must stop after frame scheduling failure');
  assert.equal(trackStops,1,'captured stream must be released');
 });
+
+test('failed animation frame cancellation does not lose completed WebM or skip track cleanup',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ let elapsed=0,encoderStops=0,trackStops=0,cancelAttempts=0;
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  emit(name,data={}){for(const fn of this.listeners[name]||[])fn(data);}
+  start(){this.state='recording';}
+  stop(){
+   this.state='inactive';encoderStops++;
+   this.emit('dataavailable',{data:new Blob(['recorded-webm-data'.repeat(25)])});
+   this.emit('stop');
+  }
+ }
+ const env={MediaRecorder:Recorder,performance:{now:()=>elapsed},
+  requestAnimationFrame:fn=>{elapsed+=1000;queueMicrotask(fn);return elapsed;},
+  cancelAnimationFrame(){cancelAttempts++;throw Error('frame already released');}
+ };
+ const result=await recordMvWebm(plan,{assets:new Map()},{
+  env,canvasFactory:()=>({
+   getContext:()=>({fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})}),
+   captureStream:()=>({getVideoTracks:()=>[{}],getTracks:()=>[{stop(){trackStops++;}}]})
+  })
+ });
+ assert.ok(result.blob.size>100,'recorded WebM must remain available');
+ assert.equal(encoderStops,1);
+ assert.equal(cancelAttempts,1);
+ assert.equal(trackStops,1,'video track must be stopped even if frame cancellation throws');
+ assert.deepEqual(p,original,'original project must remain unchanged');
+});
