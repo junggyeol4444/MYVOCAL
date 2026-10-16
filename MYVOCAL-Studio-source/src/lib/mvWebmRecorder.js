@@ -115,6 +115,9 @@ export async function recordMvWebm(plan,prepared,{
     if(!completed||blob.size<100)finish(Error('영상 인코딩이 중단되거나 파일 내용이 없습니다.'));
     else finish(null,blob);
    });
+   // Capture setup can synchronously abort before this listener is attached.
+   // Never start an encoder after the cancellation has already happened.
+   if(signal?.aborted){fail(Error('영상 저장을 취소했습니다.'));return;}
    try{
     recorder.start(1000);
     if(audioSource)audioSource.start(audioContext.currentTime+0.03);
