@@ -5,6 +5,7 @@ import {isAlignmentStale} from './lyricAlignment.js';
 const MAX_CUES=4096;
 const MAX_GROUP_UNITS=11;
 const MAX_GROUP_SECONDS=3.4;
+const MAX_GROUP_CHARACTERS=64;
 const MAX_GAP_SECONDS=.45;
 const roundMs=n=>Math.round(n*1000)/1000;
 const cleanText=text=>String(text||'').replace(/[\u0000-\u001f\u007f\u2028\u2029]/g,' ').replace(/\s+/g,' ').trim();
@@ -15,7 +16,7 @@ function asCaptionText(cues){
   if(text&&/[A-Za-z0-9]$/.test(text)&&/^[A-Za-z0-9]/.test(word))text+=' ';
   text+=word;
  }
- return text.slice(0,170);
+ return text;
 }
 export function buildMvLyricCaptions(project){
  const alignment=project?.vocalAlignment;
@@ -50,6 +51,7 @@ export function buildMvLyricCaptions(project){
   // Preserve timing boundaries: a long pause, long phrase or many syllables
   // begins a new caption line instead of showing future lyrics too early.
   if(previous&&(items.length>=MAX_GROUP_UNITS||
+    asCaptionText(items).length+entry.text.length>MAX_GROUP_CHARACTERS||
     entry.endSec-items[0].startSec>MAX_GROUP_SECONDS||
     entry.startSec-previous.endSec>MAX_GAP_SECONDS||
     entry.startSec<previous.startSec))finish();
