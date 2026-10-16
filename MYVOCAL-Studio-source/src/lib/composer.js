@@ -77,6 +77,8 @@ export function sectionMidiStyleMap(sections,bars,projectMix,genre='Pop') {
  }
  return styles;
 }
+// Original product plan section 5: every musical part is an editable MIDI track.
+export const COMPOSER_PARTS=Object.freeze(['chords','bass','drums','melody','harmony','piano','guitar','strings','synth']);
 export function buildMidiArrangement({chords,bars=24,key='C Major',genre='Pop',mood='희망적',seed=1,sections,projectMix}){
  const rand=random(seed),{root,minor}=parseKey(key),scale=minor?minorSteps:majorSteps;
  const tracks=[
@@ -118,7 +120,60 @@ export function buildMidiArrangement({chords,bars=24,key='C Major',genre='Pop',m
    melody.midiNotes.push(note(pitch,start+b,rand()<.4?.5:.9,vel));
   }
  }
- return tracks.map(t=>({...t,midiNotes:t.midiNotes.map((n,i)=>({...n,id:`${t.role}_${i}_${seed}`}))}));
+ // Retain the original chord, bass, drum and melody algorithms unchanged.
+ // The extra parts have their own deterministic seed so previously generated
+ // melodic phrases do not change when an accompaniment is introduced.
+ const accompanimentRandom=random((seed^0x5a9e31bd)>>>0);
+ const harmony={role:'harmony',name:'Composer · Harmony',instrument:'synth',volume:42,midiNotes:[]};
+ const piano={role:'piano',name:'Composer · Piano',instrument:'piano',volume:45,midiNotes:[]};
+ const guitar={role:'guitar',name:'Composer · Guitar',instrument:'guitar',volume:43,midiNotes:[]};
+ const strings={role:'strings',name:'Composer · Strings',instrument:'strings',volume:38,midiNotes:[]};
+ const synth={role:'synth',name:'Composer · Synth',instrument:'synth',volume:35,midiNotes:[]};
+ const totalBeats=bars*4;
+ for(const chordEvent of chords){
+  let pitches;
+  try{pitches=chordPitches(chordEvent.symbol,4);}
+  catch{continue;}
+  if(!Number.isFinite(chordEvent.bar)||!Number.isFinite(chordEvent.bars)||chordEvent.bars<=0)continue;
+  const start=Math.max(0,(chordEvent.bar-1)*4);
+  const duration=Math.min(chordEvent.bars*4,totalBeats-start);
+  if(!(duration>0))continue;
+  const lower=pitches[0]-12;
+  // Whole-bar strings provide an independently adjustable harmonic layer.
+  strings.midiNotes.push(note(lower,start,Math.max(.1,duration-.16),48));
+  strings.midiNotes.push(note(pitches.at(-1)-12,start,Math.max(.1,duration-.16),42));
+  for(let step=0;step<duration;step++){
+   const barIndex=Math.floor((start+step)/4);
+   const style=barStyles[barIndex];
+   const offset=style?.velocityOffset||0;
+   const pitch=pitches[(step+Math.floor(step/4))%pitches.length];
+   piano.midiNotes.push(note(pitch,start+step,.74,57+offset));
+   if(step%2===0){
+    const fretPitch=pitches[(Math.floor(step/2)+1)%pitches.length];
+    guitar.midiNotes.push(note(fretPitch,start+step,.39,energize?67+offset:49+offset));
+   }
+   if(step%2===0 || energize){
+    const index=(Math.floor(step*2)+Math.floor(accompanimentRandom()*pitches.length))%pitches.length;
+    synth.midiNotes.push(note(pitches[index]+12,start+step,.24,48+offset));
+   }
+  }
+ }
+ // Harmony follows the real lead MIDI notes, not a second unrelated melody.
+ // Voice identity is not synthesized; this remains a user-editable guide part.
+ for(let i=0;i<melody.midiNotes.length;i++){
+  const lead=melody.midiNotes[i];
+  const bar=Math.floor(lead.startBeat/4);
+  if(bar<Math.floor(bars/4)||bar===bars-1||i%2!==0)continue;
+  const chordEvent=chords.find(c=>lead.startBeat>=(c.bar-1)*4&&lead.startBeat<(c.bar+c.bars-1)*4);
+  if(!chordEvent)continue;
+  let pitches;
+  try{pitches=chordPitches(chordEvent.symbol,4);}catch{continue;}
+  const choices=pitches.flatMap(p=>[p-12,p,p+12]).filter(p=>p>=48&&p<=lead.pitch-3);
+  if(!choices.length)continue;
+  const closest=Math.max(...choices);
+  harmony.midiNotes.push(note(closest,lead.startBeat,Math.min(lead.length,.85),57));
+ }
+ return [...tracks,harmony,piano,guitar,strings,synth].map(t=>({...t,midiNotes:t.midiNotes.map((n,i)=>({...n,id:`${t.role}_${i}_${seed}`}))}));
 }
 export function generateOfflineDraft({prompt='',title='',genre='Pop',genreMix,mood='희망적',key='C Major',bpm=0,bars=24,variation=0}={}){
  const safeBars=songLengths.includes(Number(bars))?Number(bars):24;
@@ -150,12 +205,13 @@ export function applyComposition(project,draft,{lyrics=true,chords=true,midi=tru
  // explicitly overrides its project genre. This avoids changing old projects,
  // external MIDI, manual tracks, or previously authored audio/video assets.
  const styled=Array.isArray(mergedSections)&&mergedSections.some(section=>section?.genreMix!=null);
- const canRender=styled&&midi&&Array.isArray(draft.midiTracks)&&draft.midiTracks.length===4&&
-  draft.midiTracks.every(track=>['chords','bass','drums','melody'].includes(track.role))&&
+ const canRender=styled&&midi&&Array.isArray(draft.midiTracks)&&
+  [4,COMPOSER_PARTS.length].includes(draft.midiTracks.length)&&
+  draft.midiTracks.every((track,i)=>track.role===COMPOSER_PARTS[i])&&
   Array.isArray(draft.chords)&&Number.isSafeInteger(draft.seed)&&Number.isSafeInteger(draft.bars);
  const midiTracks=canRender?buildMidiArrangement({chords:draft.chords,bars:draft.bars,key:draft.key,
   genre:draft.genre,mood:draft.mood,seed:draft.seed,sections:mergedSections,
-  projectMix:settings?draft.genreMix:project.genreMix}):(draft.midiTracks||[]);
+  projectMix:settings?draft.genreMix:project.genreMix}).slice(0,draft.midiTracks.length):(draft.midiTracks||[]);
  const newTracks=midi?midiTracks.map((t,i)=>({id:`trk_composer_${Date.now()}_${i}`,name:t.name,instrument:t.instrument,type:t.role==='drums'?'rhythm':'instrument',generatedBy:'composer-v04',mute:false,solo:false,volume:t.volume,clips:[],midiNotes:t.midiNotes})):[];
  return {...project,...(lyrics?{lyrics:draft.lyrics}:{}),...(chords?{chords:draft.chords,sections:mergedSections}:{}),...(settings?{bpm:draft.bpm,key:draft.key,genreMix:draft.genreMix?resolveGenreMix(draft.genreMix,draft.genre):resolveGenreMix(null,draft.genre)}:{}),tracks:[...old,...newTracks],compositionHistory:[...(project.compositionHistory||[]).slice(-9),{time:new Date().toISOString(),source:draft.source,title:draft.title,notes:newTracks.reduce((s,t)=>s+t.midiNotes.length,0)}]};
 }
