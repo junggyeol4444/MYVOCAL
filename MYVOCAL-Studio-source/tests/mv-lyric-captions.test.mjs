@@ -85,3 +85,16 @@ test('video exporter preserves a user-toggle and passes the SAME lyric cues to W
  for(const token of ['showCaptions=false','drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions})','includesCaptions:'])
   assert.ok(recorder.includes(token),token);
 });
+
+test('long manually edited lyric captions wrap without dropping user text',()=>{
+ const p=vocalSong();
+ const lyric='서로 다른 세상에서 살아가다 결국 다시 만나며 함께 우리의 이야기를 노래하는 아름다운 밤의 새로운 꿈이야기';
+ p.vocalAlignment={...p.vocalAlignment,cues:p.vocalAlignment.cues.map((c,i)=>i===0?{...c,lyric}:({...c,lyric:'—'}))};
+ const result=buildMvLyricCaptions(p);
+ assert.equal(result.status,'ready');
+ assert.equal(result.captions[0].text,lyric);
+ const shown=[];
+ const ctx={fillRect(){},drawImage(){},fillText:text=>shown.push(String(text)),createLinearGradient:()=>({addColorStop(){}})};
+ drawMvVideoFrame({width:640,height:360,getContext:()=>ctx},planMvVideoRender(p),new Map(),.1,{showCaptions:true,captions:result.captions});
+ assert.equal(shown.filter(t=>lyric.includes(t)).join(''),lyric,'canvas must preserve every original lyric character');
+});
