@@ -1,6 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {Button,Field,Notice,Panel,Status} from './UI';
-import {alignLyricNotes,midiVocalTracks,isAlignmentStale,createVocalExchangePackage,makeImportedVocalTrack} from '../lib/lyricAlignment';
+import {alignLyricNotes,midiVocalTracks,preferredVocalMidiTrack,isAlignmentStale,createVocalExchangePackage,makeImportedVocalTrack} from '../lib/lyricAlignment';
 import {genId} from '../lib/schema';
 import {putFile,removeFile} from '../lib/assetDb';
 import {readAudioInfo} from '../lib/audioEngine';
@@ -9,13 +9,14 @@ function saveFile(data,name){const blob=new Blob([data],{type:'application/zip'}
 const format=t=>`${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}.${String(Math.round((t%1)*10))}`;
 export default function LyricSync({project:p,data,onChange,notify}){
  const tracks=midiVocalTracks(p);
+ const recommended=preferredVocalMidiTrack(p);
  const saved=p.vocalAlignment&&!isAlignmentStale(p,p.vocalAlignment)?p.vocalAlignment:null;
  const [trackId,setTrackId]=useState(saved?.trackId||''),[draft,setDraft]=useState(null),[busy,setBusy]=useState(false),[voiceId,setVoiceId]=useState(p.voiceId||''),[modelId,setModelId]=useState('');
  const voices=data.voices||[],voice=voices.find(v=>v.id===voiceId);
  const models=(data.voiceModels||[]).filter(m=>m.engineId!=='sampler'&&m.voiceId===voice?.id),model=models.find(m=>m.id===modelId);
  useEffect(()=>{setDraft(null);setTrackId('');setVoiceId(p.voiceId||'');setModelId('');},[p.id]);
  const current=draft||saved;
- function generate(){try{const value=alignLyricNotes(p,trackId);setDraft(value);notify('가사 글자와 MIDI 음표를 순서대로 배치했습니다. 발음 분석은 아닙니다.');}catch(e){notify('싱크 생성 실패: '+e.message)}}
+ function generate(){try{const value=alignLyricNotes(p,trackId);setDraft(value);notify('선택한 보컬 멜로디 MIDI에 가사를 배치했습니다. 발음 분석은 아닙니다.');}catch(e){notify('싱크 생성 실패: '+e.message)}}
  const edit=(i,text)=>setDraft({...current,cues:current.cues.map((c,j)=>j===i?{...c,lyric:text.slice(0,80)}:c)});
  function persist(){if(!current){notify('가사 싱크를 먼저 생성해 주세요.');return;}if(isAlignmentStale(p,current)){notify('원본 가사나 MIDI가 변경되었습니다. 다시 생성해 주세요.');return;}onChange({...p,vocalAlignment:current});setDraft(null);notify('가사·MIDI 싱크를 프로젝트에 저장했습니다.');}
  async function exportPackage(){if(!current)return;setBusy(true);try{const {bytes,fileName}=await createVocalExchangePackage(p,current,voice||null,model||null);saveFile(bytes,fileName);notify('외부 추론용 ZIP을 저장했습니다. MYVOCAL에서 AI 모델은 실행하지 않았습니다.');}catch(e){notify('추론 교환 ZIP 생성 실패: '+e.message)}finally{setBusy(false)}}
@@ -30,9 +31,9 @@ export default function LyricSync({project:p,data,onChange,notify}){
   onChange({...p,tracks:[...p.tracks,track]});notify('외부 보컬 WAV를 새 오디오 트랙으로 추가했습니다. 실제 목소리 합성은 외부에서 수행된 결과입니다.');
  }catch(e){if(assetId)await removeFile(assetId).catch(()=>{});notify('WAV 가져오기 실패: '+e.message)}finally{setBusy(false)}}
  return <>
-  <Panel title="가사 ↔ MIDI 음표 싱크 · v0.9" description="가사를 MIDI 음표에 일대일로 수동 정렬하는 편집기입니다. 한국어는 글자 단위, 영어는 단어 단위로 자동 배치합니다.">
+  <Panel title="가사 ↔ MIDI 음표 싱크 · v0.9" description="가사를 MIDI 보컬 멜로디에 자동 배치한 뒤 각 음표를 직접 수정하는 편집기입니다. 한국어는 글자 단위, 영어는 단어 단위로 자동 배치합니다.">
    <div className="mv9-controls">
-    <Field label="보컬 MIDI 트랙"><select value={trackId||saved?.trackId||tracks[0]?.id||''} onChange={e=>{setTrackId(e.target.value);setDraft(null)}}>{tracks.map(t=><option value={t.id} key={t.id}>{t.name} ({t.midiNotes.length}음)</option>)}{!tracks.length&&<option value="">MIDI 트랙 없음</option>}</select></Field>
+    <Field label="보컬 MIDI 트랙"><select value={trackId||saved?.trackId||recommended?.id||''} onChange={e=>{setTrackId(e.target.value);setDraft(null)}}>{tracks.map(t=><option value={t.id} key={t.id}>{t.name} ({t.midiNotes.length}음)</option>)}{!tracks.length&&<option value="">MIDI 트랙 없음</option>}</select></Field>
     <Button variant="primary" icon="spark" disabled={!tracks.length||busy} onClick={generate}>가사 자동 배치</Button>
     <Button icon="save" disabled={!current||busy} onClick={persist}>싱크 저장</Button>
    </div>
