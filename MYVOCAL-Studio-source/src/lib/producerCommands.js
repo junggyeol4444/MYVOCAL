@@ -1,3 +1,4 @@
+import {chordPitches} from './midiEngine.js';
 // Apply only explicitly supported music editing commands from the original
 // MYVOCAL Producer specification. These are real MIDI/chord edits, not LLM AI.
 // Original audio/image assets are never overwritten.
@@ -49,7 +50,123 @@ function editNotes(project,windows,deltaFor){
  return {tracks,changed};
 }
 
-export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['후렴을 더 웅장하게','드럼 강화하기','마지막 후렴만 반키 올려줘']);
+// The five concrete changes requested by plan §11: melody, drums, bass,
+// harmony and strings. Only local editable MIDI is modified, not recorded audio.
+const producerParts11=['melody','drums','bass','harmony','strings'];
+function composerRole11(track){
+ if(track?.generatedBy!=='composer-v04')return '';
+ const role=track.composerRole||/^Composer · (\w+)$/u.exec(String(track.name||''))?.[1]?.toLowerCase()||'';
+ return producerParts11.includes(role)?role:'';
+}
+function chordForBeat11(chords,beat){
+ return chords.find(c=>Number.isFinite(Number(c.bar))&&Number.isFinite(Number(c.bars))&&
+   Number(c.bars)>0&&beat>=(Number(c.bar)-1)*4&&beat<(Number(c.bar)+Number(c.bars)-1)*4);
+}
+const within11=(note,windows)=>windows.some(w=>note.startBeat>=w.fromBeat&&note.startBeat<w.toBeat);
+function nextNoteId11(used,role){
+ let index=used.size;
+ while(used.has(`producer11_${role}_${index}`))index++;
+ const id=`producer11_${role}_${index}`;
+ used.add(id);
+ return id;
+}
+function applyChorusArrangement11(project,windows,selected){
+ const wanted=producerParts11.filter(p=>selected.includes(p));
+ if(!wanted.length)throw Error('변경할 악기 구성이 없습니다.');
+ const found=new Map();
+ for(const track of project.tracks){
+  const role=composerRole11(track);
+  if(wanted.includes(role)){
+   if(found.has(role))throw Error(`${role} 자동 작곡 트랙이 중복됩니다. 먼저 트랙을 정리해 주세요.`);
+   found.set(role,track);
+  }
+ }
+ for(const role of wanted){
+  if(!found.has(role))throw Error(`${role} 자동 작곡 트랙이 없습니다. 곡 만들기로 음악을 생성한 뒤 사용해 주세요.`);
+ }
+ const originalChords=Array.isArray(project.chords)?project.chords:[];
+ const getChords=beat=>{
+  const chord=chordForBeat11(originalChords,beat);
+  if(!chord)return null;
+  try{return chordPitches(chord.symbol,4);}catch{return null;}
+ };
+ // Build the replacements locally. If any required track has no editable
+ // chorus notes or chords, reject the entire operation before updating a project.
+ const replacements=new Map(),counts={};
+ for(const role of wanted){
+  const track=found.get(role);
+  if(!Array.isArray(track.midiNotes))throw Error(`${role}의 MIDI 음표가 없습니다.`);
+  const notes=track.midiNotes;
+  let touched=0;
+  let updated=notes.map((n,i)=>{
+   if(!playableNote(n)||!within11(n,windows))return n;
+   const velocity=Math.round(Number(n.velocity)||85);
+   let patch=null;
+   if(role==='melody'&&i%3===0){
+    const pitches=getChords(n.startBeat);
+    if(pitches){
+     const candidates=pitches.flatMap(p=>[p-12,p,p+12,p+24])
+      .filter(p=>p>=0&&p<=127&&p!==n.pitch);
+     candidates.sort((a,b)=>Math.abs(a-n.pitch)-Math.abs(b-n.pitch)||a-b);
+     if(candidates.length&&Math.abs(candidates[0]-n.pitch)<=12)
+      patch={pitch:candidates[0]};
+    }
+   }else if(role==='drums')patch={velocity:Math.min(127,velocity+15)};
+   else if(role==='bass')patch={velocity:Math.min(127,velocity+17)};
+   if(!patch||Object.keys(patch).every(key=>n[key]===patch[key]))return n;
+   touched++;
+   return {...n,...patch};
+  });
+  if(role==='harmony'){
+   const lead=found.get('melody')||project.tracks.find(t=>composerRole11(t)==='melody');
+   if(!lead)throw Error('화음을 추가할 멜로디 트랙이 없습니다.');
+   const ids=new Set(notes.map(n=>n.id)),occupied=new Set(notes.map(n=>`${n.startBeat}:${n.pitch}`));
+   for(const [i,n] of (lead.midiNotes||[]).entries()){
+    if(i%3!==0||!playableNote(n)||!within11(n,windows))continue;
+    const pitches=getChords(n.startBeat);
+    if(!pitches)continue;
+    const choices=pitches.flatMap(p=>[p-12,p,p+12]).filter(p=>p>=36&&p<=n.pitch-3&&p<=127);
+    if(!choices.length)continue;
+    const pitch=Math.max(...choices),key=`${n.startBeat}:${pitch}`;
+    if(occupied.has(key))continue;
+    if(touched>=256)break;
+    occupied.add(key);
+    updated.push({id:nextNoteId11(ids,'harmony'),pitch,startBeat:n.startBeat,
+      length:Math.max(.1,Math.min(n.length,.85)),velocity:58});
+    touched++;
+   }
+  }else if(role==='strings'){
+   const ids=new Set(notes.map(n=>n.id)),occupied=new Set(notes.map(n=>`${n.startBeat}:${n.pitch}`));
+   for(const w of windows){
+    for(const c of originalChords){
+     const start=Math.max(w.fromBeat,(Number(c.bar)-1)*4);
+     const end=Math.min(w.toBeat,(Number(c.bar)+Number(c.bars)-1)*4);
+     if(!(end>start)||!Number.isFinite(start)||!Number.isFinite(end))continue;
+     let pitches;
+     try{pitches=chordPitches(c.symbol,4);}catch{continue;}
+     const pitch=pitches.at(-1);
+     const key=`${start}:${pitch}`;
+     if(occupied.has(key))continue;
+     if(touched>=256)break;
+     occupied.add(key);
+     updated.push({id:nextNoteId11(ids,'strings'),pitch,startBeat:start,
+      length:Math.max(.1,end-start-.12),velocity:53});
+     touched++;
+    }
+   }
+  }
+  if(!touched)throw Error(`${role}에서 실제 변경할 음표를 찾지 못했습니다. 먼저 음악 트랙을 확인해 주세요.`);
+  counts[role]=touched;
+  replacements.set(track.id,{...track,midiNotes:updated});
+ }
+ const labels={melody:'멜로디 변경',drums:'드럼 강화',bass:'베이스 강화',harmony:'화음 추가',strings:'스트링 추가'};
+ const summary=wanted.map(role=>`${labels[role]} ${counts[role]}개`).join(' · ');
+ return {project:{...project,tracks:project.tracks.map(t=>replacements.get(t.id)||t)},
+  response:`후렴 MIDI 편곡 적용: ${summary}. 녹음 원본은 그대로입니다.`,
+  kind:'chorus-arrangement-11',changed:Object.values(counts).reduce((a,b)=>a+b,0),counts};
+}
+
+export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['후렴이 심심해','후렴을 더 웅장하게','드럼 강화하기','마지막 후렴만 반키 올려줘']);
 export function applyProducerCommand(project,rawCommand){
  if(!project?.id||!Array.isArray(project.tracks))throw Error('편집할 음악 프로젝트가 없습니다.');
  if(typeof rawCommand!=='string'||rawCommand.length>300)throw Error('300자 이하의 수정 요청을 입력하세요.');
@@ -59,6 +176,16 @@ export function applyProducerCommand(project,rawCommand){
  const choruses=windows.filter(w=>isChorus(w.name));
  if(!choruses.length)throw Error('후렴 구간이 없습니다. 곡 구조에서 후렴을 추가해 주세요.');
  const last=windows.filter(w=>isFinal(w.name)).at(-1)||choruses.at(-1);
+ if(/^후렴이\s*심심해(?:요)?$/u.test(cmd))
+  return applyChorusArrangement11(project,choruses,producerParts11);
+ const partCommands=[
+  ['melody',/^(?:후렴(?:의|에|에서)?\s*)?멜로디(?:를|를\s*)?\s*(?:변경|바꿔(?:줘|주세요)?|변경해(?:줘|주세요)?)$/u],
+  ['bass',/^(?:후렴(?:의|에|에서)?\s*)?베이스\s*(?:강화(?:해(?:줘|주세요)?|하기)?|더\s*강하게(?:\s*해줘)?)$/u],
+  ['harmony',/^(?:후렴(?:의|에|에서)?\s*)?화음\s*(?:추가(?:해(?:줘|주세요)?|하기)?|넣어(?:줘|주세요)?)$/u],
+  ['strings',/^(?:후렴(?:의|에|에서)?\s*)?스트링\s*(?:추가(?:해(?:줘|주세요)?|하기)?|넣어(?:줘|주세요)?)$/u]
+ ];
+ for(const [role,pattern] of partCommands)
+  if(pattern.test(cmd))return applyChorusArrangement11(project,choruses,[role]);
  if(/^마지막\s*후렴(?:만|을|에서)?\s*(?:반키|반음)\s*(?:올려(?:줘|주세요)?|높여(?:줘|주세요)?|올리기)$/u.test(cmd)){
   const {tracks,changed}=editNotes(project,[last],(track,n)=>isDrums(track)?null:{pitch:n.pitch+1});
   let chordsChanged=0;
