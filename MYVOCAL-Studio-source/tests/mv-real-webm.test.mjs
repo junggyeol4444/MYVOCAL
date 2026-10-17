@@ -922,3 +922,34 @@ test('abort inside WebM progress callback does not schedule another frame',async
  assert.equal(encoderStops,1);assert.equal(trackStops,1);
  assert.deepEqual(p,before);
 });
+
+test('zero-valued animation frame handle is cancelled when WebM export aborts',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ const controller=new AbortController();
+ let frameRequests=0,encoderStops=0,trackStops=0;
+ const cancelledFrameIds=[];
+ const tracks=[{stop(){trackStops++;}}];
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.events={};}
+  addEventListener(name,fn){(this.events[name]??=[]).push(fn);}
+  start(){this.state='recording';}
+  stop(){encoderStops++;this.state='inactive';}
+ }
+ const env={MediaRecorder:Recorder,performance:{now:()=>0},
+  requestAnimationFrame(){frameRequests++;queueMicrotask(()=>controller.abort());return 0;},
+  cancelAnimationFrame(id){cancelledFrameIds.push(id);}
+ };
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ await assert.rejects(recordMvWebm(plan,{assets:new Map()},{
+  signal:controller.signal,env,canvasFactory:()=>({
+   getContext:()=>ctx,
+   captureStream:()=>({getVideoTracks:()=>tracks,getTracks:()=>tracks})
+  })
+ }),/영상 저장을 취소했습니다/);
+ assert.equal(frameRequests,1,'one frame was scheduled before cancellation');
+ assert.deepEqual(cancelledFrameIds,[0],'animation frame handle 0 must be cancelled');
+ assert.equal(encoderStops,1,'recorder must be stopped');
+ assert.equal(trackStops,1,'media track must be released');
+ assert.deepEqual(p,original,'saved project must remain unchanged');
+});

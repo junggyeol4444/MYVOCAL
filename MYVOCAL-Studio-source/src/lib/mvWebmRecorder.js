@@ -45,7 +45,7 @@ export async function recordMvWebm(plan,prepared,{
  if(signal?.aborted)throw Error('영상 저장을 취소했습니다.');
  const canvas=canvasFactory();canvas.width=MV_VIDEO_WIDTH;canvas.height=MV_VIDEO_HEIGHT;
  if(typeof canvas.captureStream!=='function')throw Error('영상 캔버스 녹화를 지원하지 않습니다.');
- let audioContext=null,audioSource=null,stream=null,recorder=null,frameId=0;
+ let audioContext=null,audioSource=null,stream=null,recorder=null,frameId=null;
  let activeVideoId='',lastSceneId='',lastProgress=-1;
  const allAssets=prepared?.assets||new Map();
  // Cleanup must be best-effort: a stale MP4 element or released track
@@ -187,7 +187,7 @@ export async function recordMvWebm(plan,prepared,{
   return {blob,fileName:'MYVOCAL-MusicVideo.webm',seconds:plan.durationSec,mimeType:'video/webm',includesAudio:audioEnabled,includesCaptions:!!showCaptions&&captions.length>0};
  }finally{
   // Frame cancellation is best-effort: failure must not skip media cleanup.
-  if(frameId){try{env.cancelAnimationFrame?.(frameId);}catch{}}
+  if(frameId!==null){try{env.cancelAnimationFrame?.(frameId);}catch{}}
   stopVideos();
   // Recorder may already be running when audio startup or frame setup fails.
   // Always release the encoder as well as its media stream on failure.
