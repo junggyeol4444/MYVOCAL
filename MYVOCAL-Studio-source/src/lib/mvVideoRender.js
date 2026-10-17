@@ -139,6 +139,26 @@ export function playMvPreviewClip(video){
   if(playback?.catch)playback.catch(()=>{});
  }catch{}
 }
+// A saved MP4 can be used in more than one scene. Sync each media element
+// once, otherwise a later inactive scene pauses the currently active clip.
+export function syncMvPreviewClips(scenes,assets,activeScene,playing,positionSeconds){
+ const handled=new Set();
+ for(const scene of scenes){
+  if(scene.kind!=='video'||!scene.assetId||handled.has(scene.assetId))continue;
+  handled.add(scene.assetId);
+  const video=assets.get(scene.assetId)?.element;
+  if(!video)continue;
+  if(activeScene?.kind==='video'&&activeScene.assetId===scene.assetId){
+   if(!playing){
+    pauseMvPreviewClip(video);
+    const sec=Math.max(0,(Number(positionSeconds)||0)-activeScene.start);
+    if(Number.isFinite(video.duration)&&video.duration>0&&Math.abs(video.currentTime-(sec%video.duration))>.2){
+     try{video.currentTime=sec%video.duration;}catch{}
+    }
+   }else if(video.paused)playMvPreviewClip(video);
+  }else pauseMvPreviewClip(video);
+ }
+}
 const frameTitle=(s)=>String(s||'장면').replace(/[\u0000-\u001f\u007f]+/g,' ').slice(0,75);
 function cover(ctx,source,width,height){
  const sw=source.videoWidth||source.naturalWidth||0,sh=source.videoHeight||source.naturalHeight||0;

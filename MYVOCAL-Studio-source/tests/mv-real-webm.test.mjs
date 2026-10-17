@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {newProject} from '../src/lib/schema.js';
-import {planMvVideoRender,findMvVideoScene,drawMvVideoFrame,loadMvVideoAssets,pauseMvPreviewClip,playMvPreviewClip,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT,MV_VIDEO_FPS} from '../src/lib/mvVideoRender.js';
+import {planMvVideoRender,findMvVideoScene,drawMvVideoFrame,loadMvVideoAssets,pauseMvPreviewClip,playMvPreviewClip,syncMvPreviewClips,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT,MV_VIDEO_FPS} from '../src/lib/mvVideoRender.js';
 import {selectMvWebmType,assertMvExportEnvironment,recordMvWebm} from '../src/lib/mvWebmRecorder.js';
 
 function project(){
@@ -791,4 +791,36 @@ test('stale preview play and rejected playback promises do not interrupt MV prev
  assert.doesNotThrow(()=>{for(const clip of [stale,blocked,healthy])playMvPreviewClip(clip);});
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(plays,1,'later saved clips still play');
+});
+
+test('reused saved MP4 keeps playing in either scene and pauses only once on seek',()=>{
+ const p=project(),original=structuredClone(p);
+ const scenes=[
+  {id:'first',kind:'video',assetId:'same-mp4',start:0,end:2},
+  {id:'second',kind:'video',assetId:'same-mp4',start:2,end:4},
+  {id:'third',kind:'video',assetId:'other-mp4',start:4,end:6}
+ ];
+ let plays=0,pauses=0,otherPauses=0;
+ const shared={paused:true,duration:3,currentTime:0,
+  play(){plays++;this.paused=false;return Promise.resolve();},
+  pause(){pauses++;this.paused=true;}
+ };
+ const other={paused:true,pause(){otherPauses++;},play(){throw Error('inactive video must not play');}};
+ const assets=new Map([
+  ['same-mp4',{kind:'video',element:shared}],
+  ['other-mp4',{kind:'video',element:other}]
+ ]);
+ syncMvPreviewClips(scenes,assets,scenes[0],true,1);
+ assert.equal(shared.paused,false,'later scene sharing the MP4 must not pause the active clip');
+ assert.equal(plays,1);
+ assert.equal(pauses,0);
+ syncMvPreviewClips(scenes,assets,scenes[1],true,2.5);
+ assert.equal(shared.paused,false,'the same MP4 stays playing in its second scene');
+ assert.equal(plays,1,'shared MP4 must not restart unnecessarily');
+ syncMvPreviewClips(scenes,assets,scenes[1],false,3);
+ assert.equal(shared.paused,true);
+ assert.equal(pauses,1,'each shared MP4 is paused only once');
+ assert.equal(shared.currentTime,1,'seeking uses the active scene start');
+ assert.equal(otherPauses,3,'unrelated clip remains paused on every update');
+ assert.deepEqual(p,original,'the original saved project is never modified');
 });
