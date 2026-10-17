@@ -129,6 +129,8 @@ export async function recordMvWebm(plan,prepared,{
     // MediaRecorder.start() can synchronously trigger an abort/stop event.
     if(settled||signal?.aborted)return;
     if(audioSource)audioSource.start(audioContext.currentTime+0.03);
+    // Audio startup may synchronously cancel the export.
+    if(settled||signal?.aborted)return;
     startedAt=env.performance.now();
     const frame=()=>{
      if(settled||signal?.aborted)return;
@@ -166,11 +168,14 @@ export async function recordMvWebm(plan,prepared,{
      try{drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions});}catch(e){
       fail(e);return;
      }
+     if(settled||signal?.aborted)return;
      const percent=Math.min(100,Math.round(elapsed/plan.durationSec*100));
      if(percent!==lastProgress&&percent%2===0){
       lastProgress=percent;
       try{onProgress(percent);}catch(e){fail(e);return;}
      }
+     // Progress callbacks may synchronously cancel the export.
+     if(settled||signal?.aborted)return;
      try{frameId=env.requestAnimationFrame(frame);}catch(e){fail(e);}
     };
     frameId=env.requestAnimationFrame(frame);

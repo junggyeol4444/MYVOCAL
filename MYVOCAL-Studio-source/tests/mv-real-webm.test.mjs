@@ -866,3 +866,59 @@ test('cancelling during MediaRecorder.start never starts audio or schedules anot
  assert.equal(trackStops,2,'captured audio and video tracks must be released');
  assert.deepEqual(p,original,'saved project must remain unchanged');
 });
+
+
+test('abort inside audio source start does not schedule a WebM frame',async()=>{
+ const p=project(),before=structuredClone(p),plan=planMvVideoRender(p),controller=new AbortController();
+ let frames=0,encoderStops=0,trackStops=0,audioStarts=0;
+ const tracks=[{kind:'video',stop(){trackStops++;}}];
+ const stream={getVideoTracks:()=>tracks.filter(t=>t.kind==='video'),getTracks:()=>tracks,addTrack:t=>tracks.push(t)};
+ class Recorder{
+  static isTypeSupported(t){return t==='video/webm;codecs=vp8,opus';}
+  constructor(){this.state='inactive';this.events={};}
+  addEventListener(n,fn){(this.events[n]??=[]).push(fn);}
+  start(){this.state='recording';}
+  stop(){encoderStops++;this.state='inactive';}
+ }
+ class AudioContext{
+  currentTime=0;async resume(){} async decodeAudioData(){return {duration:12};}
+  createMediaStreamDestination(){return {stream:{getAudioTracks:()=>[{stop(){trackStops++;}}]}};}
+  createBufferSource(){return {connect(){},start(){audioStarts++;controller.abort();},stop(){}};}
+  close(){return Promise.resolve();}
+ }
+ const env={MediaRecorder:Recorder,AudioContext,performance:{now:()=>0},
+  requestAnimationFrame(){frames++;return 1;},cancelAnimationFrame(){}};
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ await assert.rejects(recordMvWebm(plan,{assets:new Map()},{
+  signal:controller.signal,includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([82,73,70,70])]),
+  env,canvasFactory:()=>({getContext:()=>ctx,captureStream:()=>stream})
+ }),/취소/);
+ assert.equal(audioStarts,1);assert.equal(frames,0);
+ assert.equal(encoderStops,1);assert.equal(trackStops,2);
+ assert.deepEqual(p,before);
+});
+
+test('abort inside WebM progress callback does not schedule another frame',async()=>{
+ const p=project(),before=structuredClone(p),plan=planMvVideoRender(p),controller=new AbortController();
+ let frames=0,encoderStops=0,trackStops=0,progressCalls=0;
+ const tracks=[{stop(){trackStops++;}}];
+ class Recorder{
+  static isTypeSupported(t){return t==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.events={};}
+  addEventListener(n,fn){(this.events[n]??=[]).push(fn);}
+  start(){this.state='recording';}
+  stop(){encoderStops++;this.state='inactive';}
+ }
+ const env={MediaRecorder:Recorder,performance:{now:()=>0},
+  requestAnimationFrame(fn){frames++;queueMicrotask(fn);return frames;},cancelAnimationFrame(){}};
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ await assert.rejects(recordMvWebm(plan,{assets:new Map()},{
+  signal:controller.signal,env,onProgress(){progressCalls++;controller.abort();},
+  canvasFactory:()=>({getContext:()=>ctx,captureStream:()=>({
+   getVideoTracks:()=>tracks,getTracks:()=>tracks
+  })})
+ }),/취소/);
+ assert.equal(progressCalls,1);assert.equal(frames,1);
+ assert.equal(encoderStops,1);assert.equal(trackStops,1);
+ assert.deepEqual(p,before);
+});
