@@ -128,6 +128,17 @@ export async function loadMvVideoAssets(plan,{loadFile,signal,createUrl=URL.crea
   return {assets,dispose};
  }catch(error){dispose();throw error;}
 }
+// Preview elements may become stale while scenes change; one failed media
+// action must not interrupt playback/cleanup of the other saved clips.
+export function pauseMvPreviewClip(video){
+ try{video?.pause?.();}catch{}
+}
+export function playMvPreviewClip(video){
+ try{
+  const playback=video?.play?.();
+  if(playback?.catch)playback.catch(()=>{});
+ }catch{}
+}
 const frameTitle=(s)=>String(s||'장면').replace(/[\u0000-\u001f\u007f]+/g,' ').slice(0,75);
 function cover(ctx,source,width,height){
  const sw=source.videoWidth||source.naturalWidth||0,sh=source.videoHeight||source.naturalHeight||0;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {newProject} from '../src/lib/schema.js';
-import {planMvVideoRender,findMvVideoScene,drawMvVideoFrame,loadMvVideoAssets,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT,MV_VIDEO_FPS} from '../src/lib/mvVideoRender.js';
+import {planMvVideoRender,findMvVideoScene,drawMvVideoFrame,loadMvVideoAssets,pauseMvPreviewClip,playMvPreviewClip,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT,MV_VIDEO_FPS} from '../src/lib/mvVideoRender.js';
 import {selectMvWebmType,assertMvExportEnvironment,recordMvWebm} from '../src/lib/mvWebmRecorder.js';
 
 function project(){
@@ -772,4 +772,23 @@ test('failed getTracks on a disposed stream preserves completed WebM and release
  assert.equal(videoStops,1,'video track is released despite failed getTracks');
  assert.equal(audioStops,1,'audio track is released despite failed getTracks');
  assert.deepEqual(p,original,'original project is unchanged');
+});
+
+
+test('stale preview video pause does not interrupt cleanup of following clips',()=>{
+ let healthyPauses=0;
+ const stale={pause(){throw Error('stale video element cannot pause');}};
+ const healthy={pause(){healthyPauses++;}};
+ assert.doesNotThrow(()=>{for(const clip of [stale,healthy])pauseMvPreviewClip(clip);});
+ assert.equal(healthyPauses,1,'later saved clips still pause');
+});
+
+test('stale preview play and rejected playback promises do not interrupt MV preview',async()=>{
+ let plays=0;
+ const stale={play(){throw Error('stale video element cannot play');}};
+ const blocked={play(){return Promise.reject(Error('autoplay blocked'));}};
+ const healthy={play(){plays++;return Promise.resolve();}};
+ assert.doesNotThrow(()=>{for(const clip of [stale,blocked,healthy])playMvPreviewClip(clip);});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(plays,1,'later saved clips still play');
 });

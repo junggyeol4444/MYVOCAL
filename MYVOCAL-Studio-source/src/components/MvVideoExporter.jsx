@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {Button,Notice,Panel} from './UI';
 import {getFile} from '../lib/assetDb.js';
 import {AudioEngine,audioEnd,mixdownWav} from '../lib/audioEngine.js';
-import {planMvVideoRender,loadMvVideoAssets,findMvVideoScene,drawMvVideoFrame,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT} from '../lib/mvVideoRender.js';
+import {planMvVideoRender,loadMvVideoAssets,findMvVideoScene,drawMvVideoFrame,pauseMvPreviewClip,playMvPreviewClip,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT} from '../lib/mvVideoRender.js';
 import {recordMvWebm,assertMvExportEnvironment} from '../lib/mvWebmRecorder.js';
 import {buildMvLyricCaptions} from '../lib/mvLyricCaptions.js';
 
@@ -57,13 +57,13 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
    if(!video)continue;
    if(activeScene?.id===s.id){
     if(!playing){
-     video.pause();
+     pauseMvPreviewClip(video);
      const sec=Math.max(0,(Number(positionSeconds)||0)-s.start);
      if(Number.isFinite(video.duration)&&video.duration>0&&Math.abs(video.currentTime-(sec%video.duration))>.2){
       try{video.currentTime=sec%video.duration;}catch{}
      }
-    }else if(video.paused)video.play()?.catch(()=>{});
-   }else video.pause();
+    }else if(video.paused)playMvPreviewClip(video);
+   }else pauseMvPreviewClip(video);
   }
   try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0,{captions:lyricCaptions.captions,showCaptions:captionsEnabled});}catch{}
  },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,captionSignature]);
