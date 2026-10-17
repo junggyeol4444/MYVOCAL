@@ -824,3 +824,45 @@ test('reused saved MP4 keeps playing in either scene and pauses only once on see
  assert.equal(otherPauses,3,'unrelated clip remains paused on every update');
  assert.deepEqual(p,original,'the original saved project is never modified');
 });
+
+test('cancelling during MediaRecorder.start never starts audio or schedules another frame',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ const controller=new AbortController();
+ let encoderStarts=0,encoderStops=0,frameRequests=0,audioStarts=0,trackStops=0;
+ const tracks=[{kind:'video',stop(){trackStops++;}}];
+ const stream={
+  getVideoTracks:()=>tracks.filter(t=>t.kind==='video'),
+  getTracks:()=>tracks,
+  addTrack:t=>tracks.push(t)
+ };
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8,opus';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  start(){encoderStarts++;this.state='recording';controller.abort();}
+  stop(){encoderStops++;this.state='inactive';}
+ }
+ class AudioContext{
+  currentTime=0;
+  async resume(){}
+  async decodeAudioData(){return {duration:12};}
+  createMediaStreamDestination(){
+   return {stream:{getAudioTracks:()=>[{kind:'audio',stop(){trackStops++;}}]}};
+  }
+  createBufferSource(){return {connect(){},start(){audioStarts++;},stop(){}};}
+  close(){return Promise.resolve();}
+ }
+ const env={MediaRecorder:Recorder,AudioContext,performance:{now:()=>0},
+  requestAnimationFrame(){frameRequests++;return 1;},cancelAnimationFrame(){}};
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ await assert.rejects(recordMvWebm(plan,{assets:new Map()},{
+  includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([82,73,70,70])]),
+  signal:controller.signal,env,canvasFactory:()=>({getContext:()=>ctx,captureStream:()=>stream})
+ }),/취소/);
+ assert.equal(encoderStarts,1);
+ assert.equal(encoderStops,1,'cancelled encoder must stop');
+ assert.equal(audioStarts,0,'cancelled recording must never start prepared audio');
+ assert.equal(frameRequests,0,'cancelled recording must not schedule new frames');
+ assert.equal(trackStops,2,'captured audio and video tracks must be released');
+ assert.deepEqual(p,original,'saved project must remain unchanged');
+});

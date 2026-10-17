@@ -126,6 +126,8 @@ export async function recordMvWebm(plan,prepared,{
    if(signal?.aborted){fail(Error('영상 저장을 취소했습니다.'));return;}
    try{
     recorder.start(1000);
+    // MediaRecorder.start() can synchronously trigger an abort/stop event.
+    if(settled||signal?.aborted)return;
     if(audioSource)audioSource.start(audioContext.currentTime+0.03);
     startedAt=env.performance.now();
     const frame=()=>{
