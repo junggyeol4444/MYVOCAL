@@ -166,6 +166,53 @@ try {
   $report['wavExportedAfterRestart'] = $true
   $report['wavBytes'] = $wav.Length
   $report['steps'] += 'Real GUI WAV export produced a nonempty RIFF/WAVE file after EXE restart'
+
+  # Follow the existing Video Studio user route and export the generated storyboard
+  # with its MIDI music as a real WebM. This is NOT an AI-generated scene.
+  $report['stage'] = 'export-webm'
+  Invoke-MYVOCALButton -Window $window -Caption 'Video Studio'
+  $buttonType = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Button)
+  $nameType = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::NameProperty, '전체 MV WebM 저장')
+  $searchCondition = [System.Windows.Automation.AndCondition]::new($buttonType, $nameType)
+  $videoButton = $null
+  for ($i = 0; $i -lt 45; $i++) {
+    $videoButton = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $searchCondition)
+    if ($null -ne $videoButton -and $videoButton.Current.IsEnabled) { break }
+    Start-Sleep -Seconds 2
+  }
+  if ($null -eq $videoButton -or -not $videoButton.Current.IsEnabled) {
+    throw 'Real MV WebM export button is missing or disabled'
+  }
+  $existingWebm = @(Get-ChildItem -LiteralPath $downloads -Filter '*.webm' -File | ForEach-Object { $_.FullName })
+  $webmStarted = [DateTime]::UtcNow
+  $videoButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $webm = $null
+  for ($i = 0; $i -lt 120; $i++) {
+    Start-Sleep -Seconds 2
+    $webm = Get-ChildItem -LiteralPath $downloads -Filter '*.webm' -File |
+      Where-Object { $_.Length -gt 1024 -and $_.LastWriteTimeUtc -ge $webmStarted.AddSeconds(-3) -and $existingWebm -notcontains $_.FullName } |
+      Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($null -ne $webm) {
+      if (-not (Test-Path -LiteralPath ($webm.FullName + '.crdownload'))) { break }
+      $webm = $null
+    }
+  }
+  if ($null -eq $webm) { throw "No real WebM downloaded by the Video Studio GUI into $downloads" }
+  $videoStream = [System.IO.File]::Open($webm.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+  try {
+    $magic = [byte[]]::new(4)
+    if ($videoStream.Read($magic,0,4) -ne 4 -or
+        $magic[0] -ne 0x1a -or $magic[1] -ne 0x45 -or $magic[2] -ne 0xdf -or $magic[3] -ne 0xa3) {
+      throw 'Downloaded video does not have a Matroska/WebM EBML header'
+    }
+  } finally { $videoStream.Dispose() }
+  Copy-Item -LiteralPath $webm.FullName -Destination (Join-Path $EvidenceDirectory 'exported-mv.webm') -Force
+  $report['webmExportedAfterRestart'] = $true
+  $report['webmBytes'] = $webm.Length
+  $report['steps'] += 'Real GUI Video Studio exported an EBML/WebM file with the generated song'
   $report['stage'] = 'complete'
   $report['passed'] = $true
 } catch {
