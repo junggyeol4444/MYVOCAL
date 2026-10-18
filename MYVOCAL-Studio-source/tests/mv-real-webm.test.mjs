@@ -953,3 +953,34 @@ test('zero-valued animation frame handle is cancelled when WebM export aborts',a
  assert.equal(trackStops,1,'media track must be released');
  assert.deepEqual(p,original,'saved project must remain unchanged');
 });
+
+test('WebM frame scene lookup failure rejects and releases encoder tracks without changing saved project',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ let callback=null,encoderStops=0,trackStops=0;
+ const cancelled=[];
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  start(){this.state='recording';}
+  stop(){this.state='inactive';encoderStops++;}
+ }
+ const env={MediaRecorder:Recorder,performance:{now:()=>0},
+  requestAnimationFrame(fn){callback=fn;return 0;},
+  cancelAnimationFrame(id){cancelled.push(id);}
+ };
+ const ctx={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const pending=recordMvWebm(plan,{assets:new Map()},{
+  env,canvasFactory:()=>({getContext:()=>ctx,captureStream:()=>({
+   getVideoTracks:()=>[{}],getTracks:()=>[{stop(){trackStops++;}}]
+  })})
+ });
+ assert.equal(typeof callback,'function');
+ plan.scenes[0]=null; // Simulate a scene becoming invalid after recording starts.
+ assert.doesNotThrow(()=>callback(),'a failed scene lookup must settle the export, not escape the frame callback');
+ await assert.rejects(pending,TypeError);
+ assert.equal(encoderStops,1,'recorder must stop after a failed scene lookup');
+ assert.equal(trackStops,1,'captured video track must be released');
+ assert.deepEqual(cancelled,[0],'pending frame handle must be cancelled');
+ assert.deepEqual(p,original,'original saved project remains unchanged');
+});

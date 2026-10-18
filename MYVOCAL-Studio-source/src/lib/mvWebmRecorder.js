@@ -143,7 +143,8 @@ export async function recordMvWebm(plan,prepared,{
       try{recorder.stop();}catch(e){finish(e);}
       return;
      }
-     const scene=findMvVideoScene(plan,elapsed);
+     let scene;
+     try{scene=findMvVideoScene(plan,elapsed);}catch(e){fail(e);return;}
      if(scene?.id!==lastSceneId){
       const previous=lastSceneId?plan.scenes.find(s=>s.id===lastSceneId):null;
       const old=previous?.assetId&&allAssets.get(previous.assetId);
