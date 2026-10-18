@@ -134,6 +134,16 @@ func setupLog() {
 		}
 	}
 }
+// Insert the per-launch script at the real document closing tag, not a
+// "</body>" string embedded in the bundled JavaScript modules.
+func injectSessionScript(html, script string) (string, error) {
+ pos := strings.LastIndex(html, "</body>")
+ if pos < 0 {
+  return "", errors.New("standalone HTML is missing </body>")
+ }
+ return html[:pos] + script + html[pos:], nil
+}
+
 func edgePaths() []string {
 	names := []string{"msedge.exe", "chrome.exe"}
 	result := []string{}
@@ -251,10 +261,10 @@ func run() error {
  if migration {
   script=strings.Replace(script,"</script>","window.__MYVOCAL_MIGRATION_MODE=true;</script>",1)
  }
- html := strings.Replace(string(raw), "</body>", script+"</body>", 1)
-	if html == string(raw) {
-		return errors.New("standalone HTML is missing </body>")
-	}
+ html, err := injectSessionScript(string(raw), script)
+ if err != nil {
+  return err
+ }
 	app := &appServer{root: []byte(html), sessionKey: key, instanceKey: instanceKey,migrationMode:migration,hostMode:mode}
  defer app.stopManagedEngine()
  // Experimental direct WebView2 handler. Preserve the existing fixed origin
