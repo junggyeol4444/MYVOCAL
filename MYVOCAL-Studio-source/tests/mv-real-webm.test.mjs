@@ -1035,3 +1035,35 @@ test('audio destination track and video track are released if stream.addTrack fa
  assert.equal(closes,1);
  assert.deepEqual(p,before,'saved project must remain unchanged');
 });
+
+test('failed WebM frame clock rejects and releases encoder and tracks without modifying saved project',async()=>{
+ const p=project(),original=structuredClone(p),plan=planMvVideoRender(p);
+ let callback=null,clockCalls=0,encoderStops=0,trackStops=0;
+ const cancelled=[];
+ const videoTrack={stop(){trackStops++;}};
+ class Recorder{
+  static isTypeSupported(type){return type==='video/webm;codecs=vp8';}
+  constructor(){this.state='inactive';this.listeners={};}
+  addEventListener(name,fn){(this.listeners[name]??=[]).push(fn);}
+  start(){this.state='recording';}
+  stop(){encoderStops++;this.state='inactive';}
+ }
+ const env={MediaRecorder:Recorder,performance:{now(){clockCalls++;if(clockCalls===2)throw Error('frame clock failed');return 0;}},
+  requestAnimationFrame(fn){callback=fn;return 0;},
+  cancelAnimationFrame(id){cancelled.push(id);}
+ };
+ const context={fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})};
+ const pending=recordMvWebm(plan,{assets:new Map()},{
+  env,canvasFactory:()=>({getContext:()=>context,captureStream:()=>({
+   getVideoTracks:()=>[videoTrack],getTracks:()=>[videoTrack]
+  })})
+ });
+ assert.equal(typeof callback,'function');
+ assert.doesNotThrow(()=>callback(),'frame clock failure must not escape the callback');
+ await assert.rejects(pending,/frame clock failed/);
+ assert.equal(clockCalls,2);
+ assert.equal(encoderStops,1,'failed recording must stop its encoder');
+ assert.equal(trackStops,1,'failed recording must release the captured track');
+ assert.deepEqual(cancelled,[0],'pending animation frame 0 must be cancelled');
+ assert.deepEqual(p,original,'saved project data must remain unchanged');
+});

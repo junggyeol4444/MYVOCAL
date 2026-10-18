@@ -140,7 +140,9 @@ export async function recordMvWebm(plan,prepared,{
     startedAt=env.performance.now();
     const frame=()=>{
      if(settled||signal?.aborted)return;
-     const elapsed=Math.min(plan.durationSec,(env.performance.now()-startedAt)/1000);
+     let elapsed;
+     // A failed frame clock must reject and release the encoder, not strand it.
+     try{elapsed=Math.min(plan.durationSec,(env.performance.now()-startedAt)/1000);}catch(e){fail(e);return;}
      // A scene at exactly durationSec does not exist; rendering it would
      // append an unintended 'empty scene' card as the last WebM frame.
      if(elapsed>=plan.durationSec){
