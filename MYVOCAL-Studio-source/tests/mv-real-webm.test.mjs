@@ -984,3 +984,54 @@ test('WebM frame scene lookup failure rejects and releases encoder tracks withou
  assert.deepEqual(cancelled,[0],'pending frame handle must be cancelled');
  assert.deepEqual(p,original,'original saved project remains unchanged');
 });
+
+
+test('audio destination track is released when audio source connection fails before capture',async()=>{
+ const p=project(),before=structuredClone(p),plan=planMvVideoRender(p);
+ let audioStops=0,canvasCaptures=0,closes=0;
+ const orphanTrack={kind:'audio',stop(){audioStops++;}};
+ class AudioContext{
+  async resume(){}
+  async decodeAudioData(){return {duration:1};}
+  createMediaStreamDestination(){return {stream:{getAudioTracks:()=>[orphanTrack]}};}
+  createBufferSource(){return {connect(){throw Error('audio source connect failed');},stop(){}};}
+  async close(){closes++;}
+ }
+ class Recorder{static isTypeSupported(){return true;}}
+ const env={MediaRecorder:Recorder,AudioContext,requestAnimationFrame(){}};
+ await assert.rejects(recordMvWebm(plan,{assets:new Map()},{
+  includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([82,73,70,70])]),
+  env,canvasFactory:()=>({getContext:()=>({fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})}),
+   captureStream(){canvasCaptures++;throw Error('unexpected canvas capture');}})
+ }),/audio source connect failed/);
+ assert.equal(audioStops,1,'unattached audio track must be released');
+ assert.equal(canvasCaptures,0);
+ assert.equal(closes,1);
+ assert.deepEqual(p,before,'saved project must remain unchanged');
+});
+
+test('audio destination track and video track are released if stream.addTrack fails',async()=>{
+ const p=project(),before=structuredClone(p),plan=planMvVideoRender(p);
+ let audioStops=0,videoStops=0,closes=0;
+ const audioTrack={kind:'audio',stop(){audioStops++;}};
+ const videoTrack={kind:'video',stop(){videoStops++;}};
+ class AudioContext{
+  async resume(){}
+  async decodeAudioData(){return {duration:1};}
+  createMediaStreamDestination(){return {stream:{getAudioTracks:()=>[audioTrack]}};}
+  createBufferSource(){return {connect(){},stop(){}};}
+  async close(){closes++;}
+ }
+ class Recorder{static isTypeSupported(){return true;}}
+ const env={MediaRecorder:Recorder,AudioContext,requestAnimationFrame(){}};
+ await assert.rejects(recordMvWebm(plan,{assets:new Map()},{
+  includeAudio:true,renderAudio:async()=>new Blob([new Uint8Array([82,73,70,70])]),
+  env,canvasFactory:()=>({getContext:()=>({fillRect(){},drawImage(){},fillText(){},createLinearGradient:()=>({addColorStop(){}})}),
+   captureStream(){return {getVideoTracks:()=>[videoTrack],getTracks:()=>[videoTrack],
+    addTrack(){throw Error('audio track attach failed');}};}})
+ }),/audio track attach failed/);
+ assert.equal(audioStops,1,'unattached audio track must be released');
+ assert.equal(videoStops,1,'canvas video track must be released');
+ assert.equal(closes,1);
+ assert.deepEqual(p,before,'saved project must remain unchanged');
+});

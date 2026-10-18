@@ -45,7 +45,7 @@ export async function recordMvWebm(plan,prepared,{
  if(signal?.aborted)throw Error('영상 저장을 취소했습니다.');
  const canvas=canvasFactory();canvas.width=MV_VIDEO_WIDTH;canvas.height=MV_VIDEO_HEIGHT;
  if(typeof canvas.captureStream!=='function')throw Error('영상 캔버스 녹화를 지원하지 않습니다.');
- let audioContext=null,audioSource=null,stream=null,recorder=null,frameId=null;
+ let audioContext=null,audioSource=null,audioDestination=null,stream=null,recorder=null,frameId=null;
  let activeVideoId='',lastSceneId='',lastProgress=-1;
  const allAssets=prepared?.assets||new Map();
  // Cleanup must be best-effort: a stale MP4 element or released track
@@ -56,19 +56,21 @@ export async function recordMvWebm(plan,prepared,{
   }
  };
  const stopStream=()=>{
-  if(!stream)return;
   let tracks=[];
-  try{tracks=stream.getTracks()||[];}catch{
-   // A disposed stream can reject getTracks; release accessible tracks anyway.
-   for(const method of ['getVideoTracks','getAudioTracks']){
-    try{tracks.push(...(stream[method]?.()||[]));}catch{}
+  if(stream){
+   try{tracks=stream.getTracks()||[];}catch{
+    // A disposed stream can reject getTracks; release accessible tracks anyway.
+    for(const method of ['getVideoTracks','getAudioTracks']){
+     try{tracks.push(...(stream[method]?.()||[]));}catch{}
+    }
    }
   }
-  for(const t of tracks){try{t.stop();}catch{}}
+  // Audio destination tracks can exist before being attached to the canvas stream.
+  try{tracks.push(...(audioDestination?.stream.getAudioTracks()||[]));}catch{}
+  for(const t of new Set(tracks)){try{t.stop();}catch{}}
  };
  try{
   const audioEnabled=!!includeAudio;
-  let audioDestination=null;
   if(audioEnabled){
    const C=env.AudioContext||env.webkitAudioContext;
    if(!C)throw Error('오디오가 포함된 영상 저장을 지원하지 않습니다.');
