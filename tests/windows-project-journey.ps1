@@ -183,6 +183,17 @@ try {
   # Follow the existing Video Studio user route and export the generated storyboard
   # with its MIDI music as a real WebM. This is NOT an AI-generated scene.
   $report['stage'] = 'export-webm'
+  # A second download in one WebView2 session can trigger Chrome's
+  # automatic multiple-downloads permission flyout. The Windows 2025 runner
+  # does not consistently expose this flyout to UI Automation. Reopen the
+  # very same isolated project profile in a fresh EXE session so the user
+  # can execute the real MV export GUI flow as the first download.
+  Stop-MYVOCALProcess -Process $process
+  $process = $null
+  Start-Sleep -Seconds 3
+  $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
+  $window = Wait-MYVOCALWindow -Process $process
+  $report['steps'] += 'Restarted same isolated EXE profile before WebM export to avoid multiple-download permission flyout'
   Invoke-MYVOCALButton -Window $window -Caption 'Video Studio'
   $buttonType = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
