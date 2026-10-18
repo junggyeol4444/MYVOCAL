@@ -47,8 +47,8 @@ function Invoke-MYVOCALButton {
   $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 function Assert-MYVOCALProjectVisible {
-  param([System.Windows.Automation.AutomationElement]$Window, [string]$Title)
-  for ($i = 0; $i -lt 20; $i++) {
+  param([System.Windows.Automation.AutomationElement]$Window, [string]$Title, [int]$MaxChecks = 20)
+  for ($i = 0; $i -lt $MaxChecks; $i++) {
     $elements = $Window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
       [System.Windows.Automation.Condition]::TrueCondition)
     foreach ($element in $elements) {
@@ -127,8 +127,21 @@ try {
   Start-Sleep -Seconds 3
   $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
   $window = Wait-MYVOCALWindow -Process $process
-  Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
-  Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle']
+  # A newly shown WebView2 window can expose its accessible navigation before
+  # React has attached the click handler. Retry the real GUI navigation.
+  $reopenedProject = $false
+  for ($attempt = 0; $attempt -lt 10; $attempt++) {
+    Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
+    try {
+      Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
+      $reopenedProject = $true
+      break
+    } catch {
+      if ($attempt -eq 9) { throw }
+      Start-Sleep -Seconds 1
+    }
+  }
+  if (-not $reopenedProject) { throw 'Restarted project GUI navigation did not finish' }
   $report['projectPersistedAfterRestart'] = $true
   $report['steps'] += 'Created project survived EXE restart with same isolated profile'
 
@@ -190,8 +203,21 @@ try {
   $webmStarted = [DateTime]::UtcNow
   $videoButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   $webm = $null
+  $report['multipleDownloadPermissionHandled'] = $false
+  $allowName = [System.Windows.Automation.OrCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Allow'),
+    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, '허용'))
+  $allowSearch = [System.Windows.Automation.AndCondition]::new($buttonType, $allowName)
   for ($i = 0; $i -lt 120; $i++) {
     Start-Sleep -Seconds 2
+    # The second download in a WebView2 session asks the user to allow multiple
+    # downloads. Accept it via the real Windows GUI, only after the explicit
+    # '전체 MV WebM 저장' click, and only within this disposable CI profile.
+    $allowButton = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $allowSearch)
+    if ($null -ne $allowButton -and $allowButton.Current.IsEnabled) {
+      $allowButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+      $report['multipleDownloadPermissionHandled'] = $true
+    }
     $webm = Get-ChildItem -LiteralPath $downloads -Filter '*.webm' -File |
       Where-Object { $_.Length -gt 1024 -and $_.LastWriteTimeUtc -ge $webmStarted.AddSeconds(-3) -and $existingWebm -notcontains $_.FullName } |
       Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
