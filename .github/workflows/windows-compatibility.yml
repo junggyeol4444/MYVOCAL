@@ -52,6 +52,107 @@ jobs:
           if (-not (Test-Path -LiteralPath $loader)) { throw "Official x64 WebView2Loader.dll not found" }
           Copy-Item -LiteralPath $loader -Destination "WebView2Loader.dll"
           Compress-Archive -LiteralPath @("MYVOCAL-Studio-Windows.exe", "WebView2Loader.dll", "desktop/NOTICE.txt", "desktop/MIGRATE-TO-NATIVE.bat", "MYVOCAL-Studio-source/third_party/react-MIT-LICENSE.txt") -DestinationPath "MYVOCAL-Studio-Windows.zip" -Force
+      - name: Run real Windows EXE and click GUI navigation buttons
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName UIAutomationClient
+          Add-Type -AssemblyName UIAutomationTypes
+          $evidencePath = Join-Path $env:RUNNER_TEMP 'MYVOCAL-Windows-GUI-Test'
+          New-Item -ItemType Directory -Path $evidencePath -Force | Out-Null
+          $env:LOCALAPPDATA = Join-Path $evidencePath 'IsolatedProfile'
+          New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+          $env:MYVOCAL_DESKTOP_HOST = 'webview2'
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'MYVOCAL-Studio-Windows.exe'
+          $process = $null
+          $window = $null
+          $report = @{ runner = $env:RUNNER_OS; executable = $exe; stage = 'start'; buttonClicks = @(); passed = $false }
+          try {
+            if (-not (Test-Path -LiteralPath $exe)) { throw 'Windows executable missing' }
+            if (-not (Test-Path -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'WebView2Loader.dll'))) { throw 'WebView2Loader.dll missing' }
+            $process = Start-Process -FilePath $exe -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru
+            $report['processId'] = $process.Id
+            $root = [System.Windows.Automation.AutomationElement]::RootElement
+            $processCondition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $process.Id)
+            for ($i = 0; $i -lt 45; $i++) {
+              Start-Sleep -Seconds 2
+              $process.Refresh()
+              if ($process.HasExited) { throw "EXE exited during GUI startup: $($process.ExitCode)" }
+              $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $processCondition)
+              for ($w = 0; $w -lt $windows.Count; $w++) {
+                if ($windows.Item($w).Current.Name -match 'MYVOCAL') { $window = $windows.Item($w); break }
+              }
+              if ($null -ne $window) { break }
+            }
+            if ($null -eq $window) { throw 'No MYVOCAL desktop window exposed to UI Automation' }
+            $report['windowName'] = $window.Current.Name
+            $report['stage'] = 'window-visible'
+            $status = Invoke-WebRequest -Uri 'http://127.0.0.1:58319/__myvocal_status' -UseBasicParsing -TimeoutSec 10
+            if ($status.StatusCode -ne 200 -or $status.Content -notmatch 'MYVOCAL-Studio-Windows') { throw 'Running EXE did not serve expected internal status' }
+            $report['stage'] = 'ui-buttons'
+            $buttonType = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+            foreach ($label in @('Music Studio', 'Video Studio')) {
+              $button = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $nameCondition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $label)
+                $search = [System.Windows.Automation.AndCondition]::new($buttonType, $nameCondition)
+                $button = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $search)
+                if ($null -ne $button) { break }
+                Start-Sleep -Seconds 2
+              }
+              if ($null -eq $button) { throw "Could not find WebView2 UI button: $label" }
+              $invoke = $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+              $invoke.Invoke()
+              $report['buttonClicks'] += $label
+              Start-Sleep -Seconds 2
+            }
+            $report['stage'] = 'complete'
+            $report['passed'] = $true
+          } catch {
+            $report['error'] = $_.Exception.ToString()
+            throw
+          } finally {
+            try {
+              if ($null -ne $window) {
+                $box = $window.Current.BoundingRectangle
+                if ($box.Width -gt 20 -and $box.Height -gt 20 -and $box.Width -lt 4000 -and $box.Height -lt 4000) {
+                  Add-Type -AssemblyName System.Drawing
+                  $bitmap = [System.Drawing.Bitmap]::new([int]$box.Width, [int]$box.Height)
+                  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+                  try {
+                    $graphics.CopyFromScreen([int]$box.X, [int]$box.Y, 0, 0, $bitmap.Size)
+                    $bitmap.Save((Join-Path $evidencePath 'window.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+                  } finally { $graphics.Dispose(); $bitmap.Dispose() }
+                }
+              }
+            } catch { $report['screenshotError'] = $_.Exception.Message }
+            if ($null -ne $process) {
+              try {
+                $process.Refresh()
+                if (-not $process.HasExited) {
+                  $null = $process.CloseMainWindow()
+                  Start-Sleep -Seconds 2
+                  $process.Refresh()
+                  if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+                }
+              } catch { $report['shutdownError'] = $_.Exception.Message }
+            }
+            try {
+              $appLog = Join-Path $env:LOCALAPPDATA 'MYVOCAL Studio\logs\launcher.log'
+              if (Test-Path $appLog) { Copy-Item $appLog (Join-Path $evidencePath 'launcher.log') -Force }
+            } catch {}
+            $report | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $evidencePath 'result.json') -Encoding utf8
+            Get-Content (Join-Path $evidencePath 'result.json')
+          }
+      - name: Upload real Windows GUI test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gui-evidence-${{ matrix.os }}
+          path: ${{ runner.temp }}/MYVOCAL-Windows-GUI-Test/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload unsigned Windows application and tests
         uses: actions/upload-artifact@v4
         with:
