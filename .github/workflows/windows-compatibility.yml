@@ -145,6 +145,18 @@ jobs:
             $report | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $evidencePath 'result.json') -Encoding utf8
             Get-Content (Join-Path $evidencePath 'result.json')
           }
+      - name: Run isolated Windows project creation and restart GUI test
+        shell: pwsh
+        timeout-minutes: 7
+        run: ./tests/windows-project-journey.ps1
+      - name: Upload isolated Windows project journey evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-project-journey-${{ matrix.os }}
+          path: ${{ runner.temp }}/MYVOCAL-Windows-Project-Journey/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload real Windows GUI test evidence
         if: always()
         uses: actions/upload-artifact@v4
