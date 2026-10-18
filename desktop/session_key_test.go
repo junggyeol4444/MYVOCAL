@@ -27,3 +27,19 @@ func TestSessionKeyRequiresSecureEntropy(t *testing.T) {
 		t.Fatal("test entropy source invalid")
 	}
 }
+
+func TestSessionScriptIsInsertedAtFinalBodyClosingTag(t *testing.T) {
+  const input = `<!doctype html><body><div id="root"></div><script>const exported = "</body>";</script></body>`
+  const session = "<script>window.__testSessionReady=true;</script>"
+  result, err := injectSessionScript(input, session)
+  if err != nil {
+    t.Fatal(err)
+  }
+  const want = `<!doctype html><body><div id="root"></div><script>const exported = "</body>";</script><script>window.__testSessionReady=true;</script></body>`
+  if result != want {
+    t.Fatalf("session script was not placed after bundled scripts:\n%s", result)
+  }
+  if _, err := injectSessionScript("<html><div>no closing body</div></html>", session); err == nil {
+    t.Fatal("missing closing body tag was accepted")
+  }
+}
