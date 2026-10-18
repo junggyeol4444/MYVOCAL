@@ -45,7 +45,7 @@ export async function recordMvWebm(plan,prepared,{
  if(signal?.aborted)throw Error('영상 저장을 취소했습니다.');
  const canvas=canvasFactory();canvas.width=MV_VIDEO_WIDTH;canvas.height=MV_VIDEO_HEIGHT;
  if(typeof canvas.captureStream!=='function')throw Error('영상 캔버스 녹화를 지원하지 않습니다.');
- let audioContext=null,audioSource=null,audioDestination=null,stream=null,recorder=null,frameId=null;
+ let audioContext=null,audioSource=null,audioDestination=null,unattachedAudioTracks=[],stream=null,recorder=null,frameId=null;
  let activeVideoId='',lastSceneId='',lastProgress=-1;
  const allAssets=prepared?.assets||new Map();
  // Cleanup must be best-effort: a stale MP4 element or released track
@@ -65,8 +65,8 @@ export async function recordMvWebm(plan,prepared,{
     }
    }
   }
-  // Audio destination tracks can exist before being attached to the canvas stream.
-  try{tracks.push(...(audioDestination?.stream.getAudioTracks()||[]));}catch{}
+  // Release only audio destination tracks not yet attached to the canvas stream.
+  tracks.push(...unattachedAudioTracks);
   for(const t of new Set(tracks)){try{t.stop();}catch{}}
  };
  try{
@@ -86,6 +86,7 @@ export async function recordMvWebm(plan,prepared,{
    const decoded=await awaitMvAudioPreparation(()=>audioContext.decodeAudioData(raw.slice(0)),signal);
    if(!decoded?.duration)throw Error('생성한 음악을 읽지 못했습니다.');
    audioDestination=audioContext.createMediaStreamDestination();
+   unattachedAudioTracks=[...(audioDestination.stream.getAudioTracks()||[])];
    audioSource=audioContext.createBufferSource();
    audioSource.buffer=decoded;audioSource.connect(audioDestination);
   }
@@ -94,7 +95,10 @@ export async function recordMvWebm(plan,prepared,{
   if(!mimeType)throw Error(audioEnabled?'음악 포함 WebM 녹화 코덱을 지원하지 않습니다.':'WebM 녹화 코덱을 지원하지 않습니다.');
   stream=canvas.captureStream(MV_VIDEO_FPS);
   if(!stream.getVideoTracks().length)throw Error('영상 프레임 트랙을 시작하지 못했습니다.');
-  if(audioDestination)for(const t of audioDestination.stream.getAudioTracks())stream.addTrack(t);
+  if(audioDestination)for(const t of [...unattachedAudioTracks]){
+   stream.addTrack(t);
+   unattachedAudioTracks.shift();
+  }
   recorder=new env.MediaRecorder(stream,{mimeType,videoBitsPerSecond:1500000});
   const chunks=[];
   const result=new Promise((resolve,reject)=>{
