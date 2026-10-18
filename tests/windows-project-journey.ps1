@@ -214,6 +214,26 @@ try {
     # downloads. Accept it via the real Windows GUI, only after the explicit
     # '전체 MV WebM 저장' click, and only within this disposable CI profile.
     $allowButton = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $allowSearch)
+    if ($null -eq $allowButton) {
+      # The WebView2 automatic-download permission flyout can be a separate
+      # Chromium top-level popup rather than a child of our native app window.
+      # Search the Windows UIA root but only accept the Allow button located
+      # inside this app window's visible top-left permission bubble.
+      $appRect = $window.Current.BoundingRectangle
+      $candidates = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants, $allowSearch)
+      foreach ($candidate in $candidates) {
+        try {
+          $rect = $candidate.Current.BoundingRectangle
+          if ($rect.Width -gt 0 -and $rect.Width -lt 200 -and
+              $rect.X -ge $appRect.X -and $rect.X -le ($appRect.X + 460) -and
+              $rect.Y -ge $appRect.Y -and $rect.Y -le ($appRect.Y + 300)) {
+            $allowButton = $candidate
+            break
+          }
+        } catch {}
+      }
+    }
     if ($null -ne $allowButton -and $allowButton.Current.IsEnabled) {
       $allowButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
       $report['multipleDownloadPermissionHandled'] = $true
