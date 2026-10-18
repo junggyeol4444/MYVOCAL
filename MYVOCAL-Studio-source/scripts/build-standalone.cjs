@@ -45,24 +45,10 @@ const jsxRuntime=`
  function requireModule(id){if(id==='react')return r;if(id==='react-dom/client')return {createRoot:(el)=>({render:(node)=>ReactDOM.render(node,el)})};if(id==='style')return {};if(cache[id])return cache[id].exports;const code=modules[id];if(!code)throw Error('Unknown module '+id);const module={exports:{}};cache[id]=module;const req=spec=>requireModule(resolve(id,spec));new Function('module','exports','require',code)(module,module.exports,req);return module.exports;}
  requireModule('src/main.jsx');
 })();
-`.replace('__MODULES__','window.__MYVOCAL_MODULES__');
+`.replace('__MODULES__',JSON.stringify(modules));
 const sourceHtml=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const css=fs.readFileSync(path.join(src,'style.css'),'utf8');
-// Keep each inline script small enough for WebView2's HTML parser. A single
-// multi-megabyte script can leave raw module source visible instead of the UI.
-const moduleScripts=['<script>window.__MYVOCAL_MODULES__={};</script>'];
-let moduleChunk='';
-for(const [id,code] of Object.entries(modules)){
- const statement='window.__MYVOCAL_MODULES__['+JSON.stringify(id)+']='+JSON.stringify(code).replace(/</g,'\\u003c')+';\n';
- if(statement.length>180000)throw Error('Standalone module exceeds safe inline script size: '+id);
- if(moduleChunk.length+statement.length>180000){
-  moduleScripts.push('<script>'+moduleChunk+'</script>');
-  moduleChunk='';
- }
- moduleChunk+=statement;
-}
-if(moduleChunk)moduleScripts.push('<script>'+moduleChunk+'</script>');
-let html=sourceHtml.replace(/<link[^>]+href="https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)[^>]*>\s*/g,'').replace(/<script type="module" src="\/src\/main.jsx"><\/script>/,`<style>${css}</style><script>${react}\n${reactDom}</script>${moduleScripts.join('')}<script>${jsxRuntime}</script>`);
+let html=sourceHtml.replace(/<link[^>]+href="https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)[^>]*>\s*/g,'').replace(/<script type="module" src="\/src\/main.jsx"><\/script>/,`<style>${css}</style><script>${react}\n${reactDom}\n${jsxRuntime}</script>`);
 // CSP applies even when the single-file HTML is opened directly from disk.
 // The desktop HTTP host additionally sets the same network-restrictive policy.
 const offlineCsp="default-src 'none'; connect-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; form-action 'self'; base-uri 'none'; frame-src 'none'; object-src 'none'";
