@@ -61,7 +61,7 @@ jobs:
           Add-Type -AssemblyName UIAutomationTypes
           $evidencePath = Join-Path $env:RUNNER_TEMP 'MYVOCAL-Windows-GUI-Test'
           New-Item -ItemType Directory -Path $evidencePath -Force | Out-Null
-          $env:LOCALAPPDATA = Join-Path $evidencePath 'IsolatedProfile'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'MYVOCAL-Isolated-Desktop-Profile'
           New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
           $env:MYVOCAL_DESKTOP_HOST = 'webview2'
           $exe = Join-Path $env:GITHUB_WORKSPACE 'MYVOCAL-Studio-Windows.exe'
