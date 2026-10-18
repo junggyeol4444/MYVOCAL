@@ -131,6 +131,41 @@ try {
   Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle']
   $report['projectPersistedAfterRestart'] = $true
   $report['steps'] += 'Created project survived EXE restart with same isolated profile'
+
+  # Export the existing generated MIDI arrangement through the real GUI.
+  # GitHub-hosted Windows runners are disposable; no user-owned projects are opened.
+  $report['stage'] = 'export-wav'
+  Invoke-MYVOCALButton -Window $window -Caption '편집'
+  $downloads = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads'
+  New-Item -ItemType Directory -Path $downloads -Force | Out-Null
+  $existing = @(Get-ChildItem -LiteralPath $downloads -Filter '*.wav' -File | ForEach-Object { $_.FullName })
+  $exportStarted = [DateTime]::UtcNow
+  Invoke-MYVOCALButton -Window $window -Caption 'WAV 믹스 저장'
+  $wav = $null
+  for ($i = 0; $i -lt 75; $i++) {
+    Start-Sleep -Seconds 2
+    $wav = Get-ChildItem -LiteralPath $downloads -Filter '*.wav' -File |
+      Where-Object { $_.Length -gt 44 -and $_.LastWriteTimeUtc -ge $exportStarted.AddSeconds(-3) -and $existing -notcontains $_.FullName } |
+      Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($null -ne $wav) {
+      # Do not inspect a file still being downloaded.
+      if (-not (Test-Path -LiteralPath ($wav.FullName + '.crdownload'))) { break }
+      $wav = $null
+    }
+  }
+  if ($null -eq $wav) { throw "No WAV file downloaded by the real GUI into $downloads" }
+  $fileStream = [System.IO.File]::Open($wav.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+  try {
+    $reader = [System.IO.BinaryReader]::new($fileStream)
+    $riff = [System.Text.Encoding]::ASCII.GetString($reader.ReadBytes(4))
+    $null = $reader.ReadUInt32()
+    $wave = [System.Text.Encoding]::ASCII.GetString($reader.ReadBytes(4))
+    if ($riff -ne 'RIFF' -or $wave -ne 'WAVE') { throw 'Downloaded file does not have a RIFF/WAVE header' }
+  } finally { $fileStream.Dispose() }
+  Copy-Item -LiteralPath $wav.FullName -Destination (Join-Path $EvidenceDirectory 'exported-mix.wav') -Force
+  $report['wavExportedAfterRestart'] = $true
+  $report['wavBytes'] = $wav.Length
+  $report['steps'] += 'Real GUI WAV export produced a nonempty RIFF/WAVE file after EXE restart'
   $report['stage'] = 'complete'
   $report['passed'] = $true
 } catch {
