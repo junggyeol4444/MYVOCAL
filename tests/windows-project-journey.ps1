@@ -374,14 +374,25 @@ try {
   $report['stage'] = 'restore-project'
   $restoreFile = Join-Path $env:RUNNER_TEMP 'MYVOCAL-project-restore.myvocal.json'
   Copy-Item -LiteralPath $backup.FullName -Destination $restoreFile -Force
-  # WebView2 shows a Downloads flyout over the restore button after a successful
-  # backup download. Dismiss this browser-owned GUI overlay before clicking.
-  Add-Type -AssemblyName System.Windows.Forms
-  $window.SetFocus()
-  [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
-  Start-Sleep -Milliseconds 300
-  [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
-  Start-Sleep -Milliseconds 400
+  # WebView2's Downloads popup covers the Restore button. ESC alone does not
+  # dismiss it on the hosted Windows runners; click the empty Projects margin
+  # through actual user32 mouse input before invoking Restore.
+  Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public static class MYVOCALGuiMouse {
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, uint extra);
+  public static void Click(int x, int y) {
+    SetCursorPos(x,y);
+    mouse_event(2,0,0,0,0);
+    mouse_event(4,0,0,0,0);
+  }
+}
+'@
+  $windowRect = $window.Current.BoundingRectangle
+  if ($windowRect.Width -lt 500 -or $windowRect.Height -lt 400) { throw 'Unexpected EXE window bounds during backup restore' }
+  [MYVOCALGuiMouse]::Click([int]($windowRect.X + 260), [int]($windowRect.Y + 220))
+  Start-Sleep -Milliseconds 650
   Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
   $dialog = $null
   $root = [System.Windows.Automation.AutomationElement]::RootElement
