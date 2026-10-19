@@ -516,7 +516,21 @@ try {
     throw 'Native file picker not detected by Windows GUI test after direct input click'
   }
   $report['steps'] += 'Native file picker opened after direct input click in the same isolated Windows GUI session'
-  $dialog.SetFocus()
+  try { $dialog.SetFocus() }
+  catch {
+    # Windows desktop accessibility may expose the real #32770 file chooser
+    # even when UIAutomation.SetFocus is unavailable. Use the native HWND
+    # instead of treating an already-visible file chooser as a missing one.
+    $report['filePickerUIAFocusFallback'] = $_.Exception.Message
+    $nativePicker = [IntPtr]$dialog.Current.NativeWindowHandle
+    if ($nativePicker -eq [IntPtr]::Zero) {
+      $nativePicker = [MYVOCALRestoreInputClick]::FindWindow('#32770','Open')
+      if ($nativePicker -eq [IntPtr]::Zero) { $nativePicker = [MYVOCALRestoreInputClick]::FindWindow('#32770','열기') }
+    }
+    if ($nativePicker -eq [IntPtr]::Zero) { throw 'Real file chooser has no usable native HWND' }
+    $null = [MYVOCALRestoreInputClick]::SetForegroundWindow($nativePicker)
+    Start-Sleep -Milliseconds 350
+  }
   Add-Type -AssemblyName System.Windows.Forms
   $nameId = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::AutomationIdProperty,'1148')
