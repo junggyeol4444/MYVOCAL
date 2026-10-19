@@ -1,7 +1,9 @@
 import React,{useEffect,useState} from 'react';
 import Sidebar from './components/Sidebar';
 import {Icon,Status} from './components/UI';
-import {readDataState,saveData,resetCorruptData,downloadText,updateEntity,deleteEntity,projectUpdate} from './lib/store';
+import {readDataState,saveData,resetCorruptData,downloadText,updateEntity,deleteEntity,projectUpdate,STORAGE_KEY} from './lib/store';
+import {backupCharacterRemovalWithManifest,listRestorableDeletedCharacters,restoreDeletedCharacterFromManifest} from './lib/characterDeletionManifest.js';
+import {commitCharacterProfileRemoval} from './lib/characterDeletionPersistence.js';
 import {genId,newProject,now} from './lib/schema';
 import Dashboard from './pages/Dashboard';
 import AutoCreate from './pages/AutoCreate';
@@ -37,6 +39,20 @@ export default function App(){
  const notify=(message)=>setToast(message);
  const add=(type,item)=>setData(d=>updateEntity(d,type,item));
  const remove=(type,id)=>setData(d=>deleteEntity(d,type,id));
+ const listRestorableCharacters=()=>listRestorableDeletedCharacters(localStorage,STORAGE_KEY);
+ const restoreCharacterPersisted=manifestKey=>{
+  const current=readDataState();
+  if(current.status!=='ok'||JSON.stringify(current.data)!==JSON.stringify(data))throw Error('화면의 저장되지 않은 변경 사항이 있습니다. 먼저 저장 상태를 확인하세요.');
+  const result=restoreDeletedCharacterFromManifest(localStorage,STORAGE_KEY,manifestKey,localStorage.getItem(STORAGE_KEY));
+  setData(result.data);
+  return result;
+ };
+ const removeCharacterPersisted=id=>{
+  const result=commitCharacterProfileRemoval(data,id,saveData,readDataState,
+   ()=>backupCharacterRemovalWithManifest(localStorage,STORAGE_KEY,id));
+  setData(result.data);
+  return result;
+ };
  const editProject=project=>setData(d=>projectUpdate(d,project));
  const createProject=(options)=>{let project=newProject(options);if(options.pipeline97){const plan=planCreateSongVideo97(project,options.options);project=applyCreateSongVideo97(project,plan);}setData(d=>updateEntity(d,'projects',project));navigate('workspace',project.id);notify(options.pipeline97?'가사·MIDI·영상 장면 초안을 만들었습니다. 편집기에서 재생·수정하세요. AI 가창·영상 생성은 아직 미연결입니다.':'빈 프로젝트를 만들었습니다.');return project;};
  const current=data.projects.find(p=>p.id===route.projectId);
@@ -69,7 +85,7 @@ export default function App(){
   case 'music': content=<Workspace {...workspaceProps} studio="music"/>;break;
   case 'voices': content=<Voices data={data} add={add} remove={remove} notify={notify}/>;break;
   case 'training': content=<Training data={data} add={add} remove={remove} notify={notify} navigate={navigate}/>;break;
-  case 'characters': content=<Characters data={data} add={add} remove={remove} notify={notify}/>;break;
+  case 'characters': content=<Characters data={data} add={add} remove={remove} notify={notify} removeCharacterPersisted={removeCharacterPersisted} listRestorableCharacters={listRestorableCharacters} restoreCharacterPersisted={restoreCharacterPersisted}/>;break;
   case 'video': content=<Video {...workspaceProps} mode="video"/>;break;
   case 'pv': content=<Video {...workspaceProps} mode="pv"/>;break;
   case 'learning': content=<Learning data={data} add={add} remove={remove} notify={notify}/>;break;

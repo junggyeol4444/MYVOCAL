@@ -20,6 +20,8 @@ import {AssetPreview,Button,Empty,Field,Icon,Modal,Notice,SectionHead,Status} fr
 import {genId,now,rightsOptions} from '../lib/schema';
 import {putFile,removeFile} from '../lib/assetDb';
 import {downloadText} from '../lib/store';
+import {characterDependents} from '../lib/voiceDeletionSafety.js';
+import CharacterRestorePanel from '../components/CharacterRestorePanel.jsx';
 import {LOOK_FIELDS,LOOK_LIMIT,addCharacterLook,approveCharacterLook,deleteCharacterLook,reviewCharacterLook,summarizeCharacterLooks,updateCharacterLook,exportCharacterLookPack,importCharacterLookPack} from '../lib/characterLooks.js';
 import {SHOT_LIMIT,CAMERA_CHOICES,addCharacterShot,updateCharacterShot,deleteCharacterShot,reviewCharacterShot,summarizeCharacterShots,exportCharacterShotPlan,importCharacterShotPlan,getCharacterShotTimeline,SHOT_IMPORT_MAX_BYTES} from '../lib/characterShots.js';
 import {buildCharacterCastTimeline,exportCharacterCastTimeline} from '../lib/characterCast.js';
@@ -38,7 +40,7 @@ const cameraLabels={wide:'와이드',medium:'미디엄','close-up':'클로즈업
 const blankShot=()=>({title:'',lookId:'',startSec:'0',endSec:'5',camera:'medium',direction:''});
 const vocalPartLabels={lead:'리드',harmony:'화음',adlib:'애드리브',spoken:'대사'};
 const blankVocalCue=()=>({shotId:'',startSec:'0',endSec:'5',part:'lead',lyric:'',note:''});
-export default function Characters({data,add,remove,notify}){
+export default function Characters({data,add,remove,notify,removeCharacterPersisted,listRestorableCharacters,restoreCharacterPersisted}){
  const [layerFor,setLayerFor]=useState(null);
  const [animationFor,setAnimationFor]=useState(null);
  const [modelFor,setModelFor]=useState(null);
@@ -206,7 +208,19 @@ export default function Characters({data,add,remove,notify}){
    setBusy(false);close(true);
   }catch(err){await Promise.allSettled(saved.map(id=>removeFile(id)));notify('캐릭터 등록 실패 (새로 저장한 자료는 복구 시도): '+err.message);setBusy(false);}
  };
- return <><SectionHead eyebrow="CHARACTER IDENTITY" title="Character Studio" description="캐릭터·실제 사람·3D 모델의 외형 기준을 로컬 라이브러리에 기록하고 수정합니다." action={<Button variant="primary" icon="plus" onClick={()=>begin()}>새 캐릭터 등록</Button>}/>
+ const deleteCharacter=character=>{
+  if(busy)return;
+  const dependents=characterDependents(data,character);
+  if(dependents.length){notify('삭제할 수 없습니다: '+dependents.join(', '));return;}
+  if(!confirm(`'${character.name}' 캐릭터 프로필을 목록에서 제거할까요? 첨부 원본 파일은 삭제하지 않고 보존합니다.`))return;
+  setBusy(true);
+  try{
+   const result=removeCharacterPersisted(character.id);
+   notify(`프로필 제거 완료. 원본 ${result.preservedFileIds.length}개 보존 · 메타데이터 복구 키: ${result.backupKey}`);
+  }catch(error){notify('캐릭터 삭제 처리 결과 확인 필요: '+error.message);}
+  finally{setBusy(false);}
+ };
+ return <><CharacterRestorePanel listBackups={listRestorableCharacters} onRestore={restoreCharacterPersisted} notify={notify}/><SectionHead eyebrow="CHARACTER IDENTITY" title="Character Studio" description="캐릭터·실제 사람·3D 모델의 외형 기준을 로컬 라이브러리에 기록하고 수정합니다." action={<Button variant="primary" icon="plus" onClick={()=>begin()}>새 캐릭터 등록</Button>}/>
  <div className="feature-strip"><div className="feature-symbol"><Icon name="user" size={27}/></div><div><strong>MANUAL VOCAL CUE BACKUP · STEP68</strong><p>기존 캐릭터·룩·컷 계획을 유지하면서 컷별 리드·화음·대사 등 수동 보컬 시간표를 등록하고 겹치는 구간을 비교합니다. 음성 생성·립싱크·영상 렌더링은 제공하지 않습니다.</p></div><Status>수동 기준 설정 · AI 미연결</Status></div>
  {data.characters.length>0&&<section className="cast-board" aria-label="다중 캐릭터 출연 보드">
   <div className="cast-board-head"><div><strong>MULTI-CHARACTER CAST · STEP66</strong><p>기존 CHARACTER SHOT BOARD · STEP65의 캐릭터별 수동 컷을 시간순으로 통합합니다. 동시에 등장하는 캐릭터는 의도적인 동시 출연으로 표시하며, 원본 컷은 변경하지 않습니다.</p></div><Button onClick={exportCast}>캐스팅 JSON 저장</Button></div>
@@ -275,7 +289,7 @@ export default function Characters({data,add,remove,notify}){
  </div>;})}
  <div className="look-actions"><Button icon="plus" disabled={!(c.shots||[]).length||(c.vocalCues||[]).length>=VOCAL_CUE_LIMIT} onClick={()=>beginVocalCue(c)}>보컬 큐 추가</Button><Button onClick={()=>exportVocalCuePack(c)}>보컬 큐 개별 백업</Button><label className="btn" style={{cursor:'pointer'}}>보컬 큐 JSON 복원<input type="file" accept=".json,application/json" style={{display:'none'}} onChange={e=>{const file=e.target.files?.[0];if(file)importVocalCuePack(c,file);e.target.value='';}}/></label></div>
  </div>
- <div className="asset-footer"><span className="identity-label"><Icon name="lock" size={14}/> 수동 기준 기록 · 자동 일관성 미구현</span><Button icon="sliders" onClick={()=>begin(c)}>설정 편집</Button><button className="icon-btn danger" title="삭제" onClick={()=>{if(confirm(`'${c.name}'을 삭제하시겠습니까? 연결된 프로젝트는 자동 수정되지 않습니다.`)){remove('characters',c.id);c.assets?.forEach(a=>removeFile(a.id).catch(()=>{}));}}}><Icon name="trash" size={17}/></button></div></div></div>;})}</div>:<Empty icon="user" title="아직 등록된 캐릭터가 없습니다" description="본인 자료나 사용 허가가 있는 사람·캐릭터 자료를 등록하세요." action={<Button variant="primary" icon="plus" onClick={()=>begin()}>첫 캐릭터 등록</Button>}/>}
+ <div className="asset-footer"><span className="identity-label"><Icon name="lock" size={14}/> 수동 기준 기록 · 자동 일관성 미구현</span><Button icon="sliders" onClick={()=>begin(c)}>설정 편집</Button><button className="icon-btn danger" title="삭제" onClick={()=>deleteCharacter(c)}><Icon name="trash" size={17}/></button></div></div></div>;})}</div>:<Empty icon="user" title="아직 등록된 캐릭터가 없습니다" description="본인 자료나 사용 허가가 있는 사람·캐릭터 자료를 등록하세요." action={<Button variant="primary" icon="plus" onClick={()=>begin()}>첫 캐릭터 등록</Button>}/>}
  <Notice>MV 컷 계획은 시간 및 텍스트 메타데이터이며 비디오 프레임을 렌더링하지 않습니다. 외형 정보·룩 프리셋·기준 변화 감지는 사용자가 직접 입력한 텍스트를 비교합니다. 룩·컷·보컬 큐 JSON 가져오기는 동일 캐릭터 ID만 허용하고, 컷 ID·시간 충돌·누락된 룩을 검사한 뒤 전부 통과할 때만 저장합니다. 얼굴 인식·AI 캐릭터 생성·고급 3D 무대 자동 생성·자동 Identity Lock·립싱크는 아직 제공하지 않습니다. 기본 3D 모델 프리뷰는 STEP83에서 지원합니다. 원본 자료는 로컬 IndexedDB에 보관됩니다.</Notice>
  {modelFor&&<Modal title={`STEP83 · 3D 캐릭터 시스템 · ${modelFor.name}`} onClose={()=>setModelFor(null)}><Character3dEditor character={data.characters.find(c=>c.id===modelFor.id)||modelFor} onSave={profile=>{add('characters',profile);setModelFor(null);}} notify={notify}/></Modal>}
  {performanceFor&&<Modal title={`STEP89 · 직접 연기 및 악기 연주 연결 · ${performanceFor.name}`} onClose={()=>setPerformanceFor(null)}><CharacterPerformance89Editor character={data.characters.find(c=>c.id===performanceFor.id)||performanceFor} projects={data.projects} onSave={profile=>{add('characters',profile);setPerformanceFor(null);}} notify={notify}/></Modal>}
