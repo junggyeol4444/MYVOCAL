@@ -29,3 +29,26 @@ test('virtual singer or voicebank still referencing the voice blocks deletion',(
  assert.equal(voiceDependents({...data,projects:[],virtualSingers:[{id:'s',voiceId:'v'}]},me).length,1);
  assert.equal(voiceDependents({...data,projects:[],voicebanks:[{id:'b',voiceId:'v'}]},me).length,1);
 });
+
+test('다른 목소리가 공유하는 녹음 원본은 샘플 삭제에서 보호한다',()=>{
+ const shared={...data,voices:[me,{id:'other',name:'두 번째 목소리',assetId:'take2'}],projects:[],trainingPlans:[]};
+ assert.ok(sampleDependents(shared,'v','take2').some(x=>x.includes('두 번째 목소리')));
+});
+test('다른 목소리의 학습 준비 기록이 참조하는 샘플은 삭제하지 않는다',()=>{
+ const shared={...data,projects:[],trainingPlans:[{id:'external-plan',voiceId:'o',sampleSnapshot:[{id:'take1'}]}]};
+ assert.ok(sampleDependents(shared,'v','take1').some(x=>x.includes('학습 기록')));
+ assert.throws(()=>voiceOwnedFileIds(shared,me),/공유/);
+});
+test('체크포인트와 같은 원본을 목소리나 곡에서 쓰면 모델 삭제를 차단한다',()=>{
+ const model=data.voiceModels[1];
+ const shared={...data,projects:[{id:'external-song',title:'보존할 곡',tracks:[{clips:[{assetId:model.assetId}]}]}],voices:[me,{id:'o',name:'다른 목소리',assetId:model.assetId}]};
+ const uses=modelDependents(shared,model);
+ assert.ok(uses.some(x=>x.includes('보존할 곡')));
+ assert.ok(uses.some(x=>x.includes('다른 목소리')));
+});
+test('학습 자료에서 사용하는 모델 파일과 모델에서 사용하는 샘플 파일은 삭제하지 않는다',()=>{
+ const d={...data,projects:[],trainingPlans:[{id:'external',voiceId:'o',sampleIds:['checkpoint-file']}],voiceModels:[{id:'model',voiceId:'v',assetId:'checkpoint-file'},{id:'other-model',voiceId:'o',assetId:'take2'}]};
+ assert.ok(modelDependents(d,d.voiceModels[0]).some(x=>x.includes('학습 기록')));
+ assert.ok(sampleDependents(d,'v','take2').some(x=>x.includes('모델')));
+ assert.throws(()=>voiceOwnedFileIds(d,me),/공유/);
+});
