@@ -383,6 +383,42 @@ try {
   $report['backupBytes'] = $backup.Length
   $report['steps'] += 'Existing GUI exported a validated project and generated MIDI track backup'
 
+  # Add real files produced by this EXE (WAV/WebM) and a tiny PNG to a
+  # disposable *copy* of the real-GUI project backup. This tests the normal
+  # GUI import and GUI re-export with media bytes, without changing the
+  # original source project or using a browser console / source-level shortcut.
+  $report['stage'] = 'prepare-media-backup-fixture'
+  $mediaFixturePath = Join-Path $EvidenceDirectory 'MYVOCAL-QA-Media-Restore.myvocal.json'
+  $audioFileBytes = [System.IO.File]::ReadAllBytes($wav.FullName)
+  $videoFileBytes = [System.IO.File]::ReadAllBytes($webm.FullName)
+  $pngBytes = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/v9kAAAAASUVORK5CYII=')
+  $mediaSamples = @(
+    @{ id='qa-audio'; name='qa-original.wav'; type='audio/wav'; bytes=$audioFileBytes },
+    @{ id='qa-video'; name='qa-export.webm'; type='video/webm'; bytes=$videoFileBytes },
+    @{ id='qa-image'; name='qa-pixel.png'; type='image/png'; bytes=$pngBytes }
+  )
+  foreach ($sample in $mediaSamples) {
+    $backupData.assets | Add-Member -NotePropertyName $sample.id -NotePropertyValue @{
+      name=$sample.name
+      type=$sample.type
+      dataUrl=('data:' + $sample.type + ';base64,' + [Convert]::ToBase64String($sample.bytes))
+    } -Force
+  }
+  $track = $backupData.project.tracks[0]
+  $track.clips = @($track.clips) + @([pscustomobject]@{
+    id='qa-media-clip'; assetId='qa-audio'; startBar=1; bars=1
+  })
+  $scene = $backupData.project.scenes[0]
+  $scene | Add-Member -NotePropertyName 'imageAssetId' -NotePropertyValue 'qa-image' -Force
+  $scene | Add-Member -NotePropertyName 'videoClipAssetId' -NotePropertyValue 'qa-video' -Force
+  $backupData | ConvertTo-Json -Depth 100 -Compress |
+    Set-Content -LiteralPath $mediaFixturePath -Encoding utf8
+  $fixture = Get-Content -LiteralPath $mediaFixturePath -Raw -Encoding utf8 | ConvertFrom-Json
+  if (@($fixture.assets.PSObject.Properties).Count -ne 3) { throw 'Real-media restore fixture did not contain 3 assets' }
+  $report['testFixtureMediaAssets'] = 3
+  $report['testFixtureMediaBytes'] = $audioFileBytes.Length + $videoFileBytes.Length + $pngBytes.Length
+  $report['steps'] += 'Prepared disposable portable backup with EXE-exported WAV/WebM and PNG bytes'
+
   # The previous separate-user Windows GUI was visibly opening the native
   # picker, but its shell tried to access C:\Users\runneradmin\Desktop
   # and showed an Access denied modal. Keep the disposable LOCALAPPDATA
@@ -392,7 +428,7 @@ try {
   Stop-MYVOCALProcess -Process $process
   $process = $null
   Start-Sleep -Seconds 3
-  $restoreFile = $backup.FullName
+  $restoreFile = $mediaFixturePath
   $startRestoredSession = {
     Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
   }
@@ -503,6 +539,54 @@ try {
   if (-not $persisted) { throw 'Imported project vanished after EXE restart in isolated Windows profile' }
   $report['projectRestoredPersistedAfterRestart'] = $true
   $report['steps'] += 'Imported project persisted after real EXE restart in same isolated Windows profile'
+
+  # Re-export the restored project through its real GUI action. The restored
+  # project is prepended in the Projects page and its backup button is first.
+  $report['stage'] = 'verify-restored-media-rebackup'
+  $knownBackups = @(Get-ChildItem -LiteralPath $downloads -Filter '*.myvocal.json' -File |
+    ForEach-Object { $_.FullName })
+  $mediaBackupStarted = [DateTime]::UtcNow
+  Invoke-MYVOCALButton -Window $window -Caption '전체 백업'
+  $mediaRebackup = $null
+  for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    Start-Sleep -Seconds 1
+    $mediaRebackup = Get-ChildItem -LiteralPath $downloads -Filter '*.myvocal.json' -File |
+      Where-Object {
+        $_.Length -gt 1000 -and $_.LastWriteTimeUtc -ge $mediaBackupStarted.AddSeconds(-3) -and
+        $knownBackups -notcontains $_.FullName
+      } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($null -ne $mediaRebackup -and -not (Test-Path -LiteralPath ($mediaRebackup.FullName + '.crdownload'))) { break }
+    $mediaRebackup = $null
+  }
+  if ($null -eq $mediaRebackup) { throw 'GUI did not export restored project with original WAV/WebM/PNG files' }
+  $mediaBackupData = Get-Content -LiteralPath $mediaRebackup.FullName -Raw -Encoding utf8 | ConvertFrom-Json
+  if ($mediaBackupData.project.title -ne $restoredTitle) {
+    throw 'Re-export selected the original project instead of the restored project'
+  }
+  $restoredAssets = @($mediaBackupData.assets.PSObject.Properties)
+  if ($restoredAssets.Count -ne $mediaSamples.Count) {
+    throw "Restored GUI backup asset count mismatch: $($restoredAssets.Count)"
+  }
+  foreach ($sample in $mediaSamples) {
+    $found = @($restoredAssets | Where-Object { $_.Value.name -eq $sample.name })
+    if ($found.Count -ne 1) { throw "Restored media missing or duplicated: $($sample.name)" }
+    if ($found[0].Name -eq $sample.id) { throw "Restored asset ID not remapped: $($sample.name)" }
+    if ($found[0].Value.type -ne $sample.type) { throw "Restored media MIME changed: $($sample.name)" }
+    $url = [string]$found[0].Value.dataUrl
+    if (-not $url.StartsWith('data:' + $sample.type + ';base64,')) {
+      throw "Restored media data URL invalid: $($sample.name)"
+    }
+    $bytes = [Convert]::FromBase64String($url.Substring($url.IndexOf(',') + 1))
+    $hash = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $sourceHash = [Convert]::ToHexString($hash.ComputeHash($sample.bytes))
+      $restoredHash = [Convert]::ToHexString($hash.ComputeHash($bytes))
+    } finally { $hash.Dispose() }
+    if ($sourceHash -ne $restoredHash) { throw "Restored media bytes changed: $($sample.name)" }
+  }
+  $report['mediaGuiRestoreAndRebackupVerified'] = $true
+  $report['mediaGuiAssetCount'] = $restoredAssets.Count
+  $report['steps'] += 'Real Windows EXE GUI restored WAV/WebM/PNG bytes, persisted across restart, and re-exported exact SHA-256 matching media'
   Stop-MYVOCALProcess -Process $process
   $process = $null
   $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
