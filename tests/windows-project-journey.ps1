@@ -397,7 +397,33 @@ try {
   }
   if (-not $originalReady) { throw 'Original project missing after clean restore-session restart' }
   $report['steps'] += 'Reopened the same isolated project in a fresh EXE window before Restore'
-  Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
+  # Native file pickers require an actual trusted mouse gesture from the
+  # Windows foreground window; UIA InvokePattern alone may not open the picker.
+  $restoreButton = Find-MYVOCALButton -Window $window -Caption '프로젝트 복원'
+  $restoreRect = $restoreButton.Current.BoundingRectangle
+  $appRect = $window.Current.BoundingRectangle
+  if ($restoreRect.Width -lt 30 -or $restoreRect.Height -lt 20 -or
+      $restoreRect.X -lt $appRect.X -or $restoreRect.Y -lt $appRect.Y -or
+      $restoreRect.Right -gt $appRect.Right -or $restoreRect.Bottom -gt $appRect.Bottom) {
+    throw 'Real Restore button is not fully visible inside the EXE window'
+  }
+  Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public static class MYVOCALRestorePointer {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr h);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, uint extra);
+  public static void Click(int x, int y) {
+    if (!SetCursorPos(x,y)) throw new System.ComponentModel.Win32Exception("SetCursorPos failed");
+    mouse_event(2,0,0,0,0);
+    mouse_event(4,0,0,0,0);
+  }
+}
+'@
+  [MYVOCALRestorePointer]::SetForegroundWindow([IntPtr]$window.Current.NativeWindowHandle) | Out-Null
+  Start-Sleep -Milliseconds 500
+  [MYVOCALRestorePointer]::Click([int]($restoreRect.X + $restoreRect.Width/2), [int]($restoreRect.Y + $restoreRect.Height/2))
+  $report['steps'] += 'Clicked the actual Restore button screen rectangle using trusted Windows mouse input'
   $dialog = $null
   $root = [System.Windows.Automation.AutomationElement]::RootElement
   $winType = [System.Windows.Automation.PropertyCondition]::new(
@@ -417,10 +443,19 @@ try {
     # A newly initialized WebView2 UI may expose the button before React
     # attaches its input handler. Retry the same real GUI action.
     if ($i -gt 0 -and $i % 8 -eq 0) {
-      Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
+      $restoreRect = (Find-MYVOCALButton -Window $window -Caption '프로젝트 복원').Current.BoundingRectangle
+      [MYVOCALRestorePointer]::Click([int]($restoreRect.X + $restoreRect.Width/2), [int]($restoreRect.Y + $restoreRect.Height/2))
     }
   }
-  if ($null -eq $dialog) { throw 'Restore click did not open a native Windows file dialog in a fresh session' }
+  if ($null -eq $dialog) {
+    $titles = @()
+    $top = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winType)
+    for ($t = 0; $t -lt $top.Count; $t++) {
+      try { $titles += ($top.Item($t).Current.Name + ' (' + $top.Item($t).Current.ClassName + ')') } catch {}
+    }
+    $report['openWindowTitlesAtRestore'] = $titles
+    throw ('Native file picker not found after actual Restore mouse click. Windows: ' + ($titles -join ' | '))
+  }
   $report['steps'] += 'Restore opened a native Windows file-picker dialog'
   $dialog.SetFocus()
   Start-Sleep -Milliseconds 300
