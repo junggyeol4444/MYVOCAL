@@ -97,6 +97,8 @@ $report = [ordered]@{
   projectCreated = $false
   projectPersistedAfterRestart = $false
   webmCancelSafe = $false
+  projectBackupDownloaded = $false
+  projectRestoredViaGui = $false
   steps = @()
 }
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
@@ -313,6 +315,107 @@ try {
   if ($hashAfterCancel -ne $savedWebmHash) { throw 'Cancellation altered the previously saved WebM' }
   $report['webmCancelSafe'] = $true
   $report['steps'] += 'Cancelled a real in-progress WebM recording; GUI returned idle and previous file was preserved'
+
+  # Preserve the generated project through the existing real-GUI backup and
+  # restore workflow, using only this disposable Windows runner profile.
+  $report['stage'] = 'backup-project'
+  Stop-MYVOCALProcess -Process $process
+  $process = $null
+  Start-Sleep -Seconds 3
+  $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
+  $window = Wait-MYVOCALWindow -Process $process
+  $projectPageReady = $false
+  for ($attempt = 0; $attempt -lt 10; $attempt++) {
+    Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
+    try {
+      Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
+      $projectPageReady = $true
+      break
+    } catch {
+      if ($attempt -eq 9) { throw }
+      Start-Sleep -Seconds 1
+    }
+  }
+  if (-not $projectPageReady) { throw 'Projects page did not become ready after EXE restart' }
+  $previousBackups = @(Get-ChildItem -LiteralPath $downloads -Filter '*.myvocal.json' -File | ForEach-Object { $_.FullName })
+  $backupStarted = [DateTime]::UtcNow
+  Invoke-MYVOCALButton -Window $window -Caption '전체 백업'
+  $backup = $null
+  for ($i = 0; $i -lt 45; $i++) {
+    Start-Sleep -Seconds 1
+    $backup = Get-ChildItem -LiteralPath $downloads -Filter '*.myvocal.json' -File |
+      Where-Object { $_.Length -gt 500 -and $_.LastWriteTimeUtc -ge $backupStarted.AddSeconds(-3) -and $previousBackups -notcontains $_.FullName } |
+      Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($null -ne $backup -and -not (Test-Path -LiteralPath ($backup.FullName + '.crdownload'))) { break }
+    $backup = $null
+  }
+  if ($null -eq $backup) { throw 'The real Projects GUI did not download a .myvocal.json backup' }
+  $backupData = Get-Content -LiteralPath $backup.FullName -Raw -Encoding utf8 | ConvertFrom-Json
+  if ($backupData.format -ne 'MYVOCAL_PROJECT_BACKUP' -or $backupData.formatVersion -ne 2) {
+    throw 'Downloaded project backup has an unexpected format'
+  }
+  if ($backupData.project.title -ne $report['projectTitle'] -or @($backupData.project.tracks).Count -lt 4) {
+    throw 'Project title or tracks did not survive the actual GUI backup'
+  }
+  $noteCount = @($backupData.project.tracks | ForEach-Object { $_.midiNotes } | Where-Object { $null -ne $_ }).Count
+  if ($noteCount -eq 0) { throw 'Project backup did not preserve generated MIDI tracks' }
+  Copy-Item -LiteralPath $backup.FullName -Destination (Join-Path $EvidenceDirectory 'project-backup.myvocal.json') -Force
+  $report['projectBackupDownloaded'] = $true
+  $report['backupBytes'] = $backup.Length
+  $report['steps'] += 'Existing GUI exported a validated project and generated MIDI track backup'
+
+  # Restore by clicking the actual application button and selecting the file
+  # in the real Windows Open dialog. Never directly call application code.
+  $report['stage'] = 'restore-project'
+  $restoreFile = Join-Path $env:RUNNER_TEMP 'MYVOCAL-project-restore.myvocal.json'
+  Copy-Item -LiteralPath $backup.FullName -Destination $restoreFile -Force
+  Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
+  $dialog = $null
+  $root = [System.Windows.Automation.AutomationElement]::RootElement
+  $winCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Window)
+  for ($i = 0; $i -lt 30; $i++) {
+    Start-Sleep -Seconds 1
+    $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winCondition)
+    foreach ($w in $windows) {
+      if ($w.Current.Name -match '^(Open|열기)
+  $report['passed'] = $true
+} catch {
+  $report['error'] = $_.Exception.ToString()
+  throw
+} finally {
+  try { Save-MYVOCALWindowCapture -Window $window -Path (Join-Path $EvidenceDirectory 'project-journey.png') }
+  catch { $report['screenshotError'] = $_.Exception.Message }
+  try { Stop-MYVOCALProcess -Process $process }
+  catch { $report['shutdownError'] = $_.Exception.Message }
+  try {
+    $appLog = Join-Path $profileRoot 'MYVOCAL Studio\logs\launcher.log'
+    if (Test-Path -LiteralPath $appLog) { Copy-Item -LiteralPath $appLog -Destination (Join-Path $EvidenceDirectory 'launcher.log') -Force }
+  } catch {}
+  $report | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $EvidenceDirectory 'result.json') -Encoding utf8
+  Get-Content -LiteralPath (Join-Path $EvidenceDirectory 'result.json')
+  $env:LOCALAPPDATA = $previousLocalAppData
+  $env:MYVOCAL_DESKTOP_HOST = $previousHostMode
+}
+ -or $w.Current.ClassName -eq '#32770') {
+        $dialog = $w
+        break
+      }
+    }
+    if ($null -ne $dialog) { break }
+  }
+  if ($null -eq $dialog) { throw 'The GUI project restore button did not open a Windows file dialog' }
+  Add-Type -AssemblyName System.Windows.Forms
+  $dialog.SetFocus()
+  Start-Sleep -Milliseconds 300
+  [System.Windows.Forms.SendKeys]::SendWait($restoreFile)
+  [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+  $restoredTitle = $report['projectTitle'] + ' (복원)'
+  Assert-MYVOCALProjectVisible -Window $window -Title $restoredTitle -MaxChecks 30
+  $report['projectRestoredViaGui'] = $true
+  $report['steps'] += 'Existing GUI restored a second project from the downloaded backup without replacing the original'
+  Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
   $report['stage'] = 'complete'
   $report['passed'] = $true
 } catch {
