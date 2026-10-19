@@ -96,6 +96,7 @@ $report = [ordered]@{
   projectTitle = '새 음악 프로젝트'
   projectCreated = $false
   projectPersistedAfterRestart = $false
+  webmCancelSafe = $false
   steps = @()
 }
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
@@ -270,6 +271,48 @@ try {
   $report['webmExportedAfterRestart'] = $true
   $report['webmBytes'] = $webm.Length
   $report['steps'] += 'Real GUI Video Studio exported an EBML/WebM file with the generated song'
+
+  # Start another WebM export, cancel it after actual recording progress, and
+  # ensure neither the first export nor the user's isolated project is overwritten.
+  $report['stage'] = 'cancel-webm'
+  $savedWebmHash = (Get-FileHash -LiteralPath $webm.FullName -Algorithm SHA256).Hash
+  $knownWebm = @(Get-ChildItem -LiteralPath $downloads -Filter '*.webm' -File | ForEach-Object { $_.FullName })
+  $recordingCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Button)
+  Invoke-MYVOCALButton -Window $window -Caption '전체 MV WebM 저장'
+  $cancelButton = $null
+  $recordingStarted = $false
+  for ($i = 0; $i -lt 60; $i++) {
+    Start-Sleep -Milliseconds 500
+    $buttons = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $recordingCondition)
+    foreach ($button in $buttons) {
+      $caption = $button.Current.Name
+      if ($caption -match '^WebM 기록 중 ([1-9][0-9]*)%') { $recordingStarted = $true }
+      if ($caption -eq '저장 취소' -and $button.Current.IsEnabled) { $cancelButton = $button }
+    }
+    if ($recordingStarted -and $null -ne $cancelButton) { break }
+  }
+  if (-not $recordingStarted -or $null -eq $cancelButton) {
+    throw 'Real WebM recording progress and cancel button did not become available'
+  }
+  $cancelButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  $cancelSettled = $false
+  for ($i = 0; $i -lt 40; $i++) {
+    Start-Sleep -Milliseconds 500
+    $exportAgain = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $searchCondition)
+    if ($null -ne $exportAgain -and $exportAgain.Current.IsEnabled) { $cancelSettled = $true; break }
+  }
+  if (-not $cancelSettled) { throw 'WebM export GUI did not return to idle after cancellation' }
+  # Allow an asynchronous/delayed download to surface before declaring success.
+  Start-Sleep -Seconds 3
+  $unexpectedWebm = @(Get-ChildItem -LiteralPath $downloads -Filter '*.webm' -File |
+    Where-Object { $knownWebm -notcontains $_.FullName })
+  if ($unexpectedWebm.Count -gt 0) { throw 'Cancelled export unexpectedly created a WebM download' }
+  $hashAfterCancel = (Get-FileHash -LiteralPath $webm.FullName -Algorithm SHA256).Hash
+  if ($hashAfterCancel -ne $savedWebmHash) { throw 'Cancellation altered the previously saved WebM' }
+  $report['webmCancelSafe'] = $true
+  $report['steps'] += 'Cancelled a real in-progress WebM recording; GUI returned idle and previous file was preserved'
   $report['stage'] = 'complete'
   $report['passed'] = $true
 } catch {
