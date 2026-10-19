@@ -395,7 +395,8 @@ try {
   $mediaSamples = @(
     @{ id='qa-audio'; name='qa-original.wav'; type='audio/wav'; bytes=$audioFileBytes },
     @{ id='qa-video'; name='qa-export.webm'; type='video/webm'; bytes=$videoFileBytes },
-    @{ id='qa-image'; name='qa-pixel.png'; type='image/png'; bytes=$pngBytes }
+    @{ id='qa-image'; name='qa-pixel.png'; type='image/png'; bytes=$pngBytes },
+    @{ id='qa-checkpoint'; name='qa-external-model.bin'; type='application/octet-stream'; bytes=[byte[]](1,2,3,4,5,6,7,8,9) }
   )
   foreach ($sample in $mediaSamples) {
     $backupData.assets | Add-Member -NotePropertyName $sample.id -NotePropertyValue @{
@@ -411,13 +412,28 @@ try {
   $scene = $backupData.project.scenes[0]
   $scene | Add-Member -NotePropertyName 'imageAssetId' -NotePropertyValue 'qa-image' -Force
   $scene | Add-Member -NotePropertyName 'videoClipAssetId' -NotePropertyValue 'qa-video' -Force
+  # This is a synthetic checkpoint file to test persistence, NOT a trained AI model.
+  $backupData.project.voiceId = 'qa-voice'
+  $backupData.project | Add-Member -NotePropertyName 'singingEngine' -NotePropertyValue @{
+    port=7867; modelId='qa-model'
+  } -Force
+  $backupData.profiles.voices = @([pscustomobject]@{
+    id='qa-voice'; name='MYVOCAL QA Voice'; rights='self'
+    assets=@([pscustomobject]@{id='qa-audio';fileName='qa-original.wav'})
+  })
+  $backupData.profiles | Add-Member -NotePropertyName 'voiceModels' -NotePropertyValue @(
+    [pscustomobject]@{id='qa-model';voiceId='qa-voice';name='Synthetic checkpoint fixture';engineId='svc';assetId='qa-checkpoint';status='imported-unverified'}
+  ) -Force
+  $backupData.profiles | Add-Member -NotePropertyName 'trainingPlans' -NotePropertyValue @(
+    [pscustomobject]@{id='qa-plan';voiceId='qa-voice';voiceName='MYVOCAL QA Voice';engineId='generic';status='prepared';sampleIds=@('qa-audio');sampleSnapshot=@([pscustomobject]@{id='qa-audio';fileName='qa-original.wav'})}
+  ) -Force
   $backupData | ConvertTo-Json -Depth 100 -Compress |
     Set-Content -LiteralPath $mediaFixturePath -Encoding utf8
   $fixture = Get-Content -LiteralPath $mediaFixturePath -Raw -Encoding utf8 | ConvertFrom-Json
-  if (@($fixture.assets.PSObject.Properties).Count -ne 3) { throw 'Real-media restore fixture did not contain 3 assets' }
-  $report['testFixtureMediaAssets'] = 3
-  $report['testFixtureMediaBytes'] = $audioFileBytes.Length + $videoFileBytes.Length + $pngBytes.Length
-  $report['steps'] += 'Prepared disposable portable backup with EXE-exported WAV/WebM and PNG bytes'
+  if (@($fixture.assets.PSObject.Properties).Count -ne 4) { throw 'Real-media restore fixture did not contain 4 assets' }
+  $report['testFixtureMediaAssets'] = 4
+  $report['testFixtureMediaBytes'] = $audioFileBytes.Length + $videoFileBytes.Length + $pngBytes.Length + 9
+  $report['steps'] += 'Prepared disposable portable backup with WAV/WebM/PNG, synthetic checkpoint, voice and training records'
 
   # The previous separate-user Windows GUI was visibly opening the native
   # picker, but its shell tried to access C:\Users\runneradmin\Desktop
@@ -564,6 +580,34 @@ try {
     throw 'Re-export selected the original project instead of the restored project'
   }
   $restoredAssets = @($mediaBackupData.assets.PSObject.Properties)
+  $restoredVoices = @($mediaBackupData.profiles.voices)
+  $restoredModels = @($mediaBackupData.profiles.voiceModels)
+  $restoredPlans = @($mediaBackupData.profiles.trainingPlans)
+  if ($restoredVoices.Count -ne 1 -or $restoredModels.Count -ne 1 -or $restoredPlans.Count -ne 1) {
+    throw 'GUI backup did not retain the restored linked voice, checkpoint and training job'
+  }
+  $restoredVoice=$restoredVoices[0];$restoredModel=$restoredModels[0];$restoredPlan=$restoredPlans[0]
+  if ($restoredVoice.id -eq 'qa-voice' -or $restoredModel.id -eq 'qa-model' -or
+      $restoredPlan.id -eq 'qa-plan' -or
+      $restoredModel.voiceId -ne $restoredVoice.id -or
+      $restoredPlan.voiceId -ne $restoredVoice.id -or
+      $mediaBackupData.project.voiceId -ne $restoredVoice.id -or
+      $mediaBackupData.project.singingEngine.modelId -ne $restoredModel.id) {
+    throw 'GUI rebackup voice/model/training IDs were not remapped and linked'
+  }
+  if (@($restoredVoice.assets).Count -ne 1 -or
+      $restoredVoice.assets[0].id -ne $restoredPlan.sampleIds[0] -or
+      $restoredPlan.sampleSnapshot[0].id -ne $restoredPlan.sampleIds[0]) {
+    throw 'GUI rebackup training sample ID does not match the restored voice recording'
+  }
+  $audioEntry=@($restoredAssets | Where-Object { $_.Value.name -eq 'qa-original.wav' })
+  $checkpointEntry=@($restoredAssets | Where-Object { $_.Value.name -eq 'qa-external-model.bin' })
+  if ($audioEntry.Count -ne 1 -or $checkpointEntry.Count -ne 1 -or
+      $restoredVoice.assets[0].id -ne $audioEntry[0].Name -or
+      $restoredModel.assetId -ne $checkpointEntry[0].Name) {
+    throw 'GUI rebackup checkpoint/recording media links were not preserved'
+  }
+  $report['linkedVoiceModelTrainingGuiVerified'] = $true
   if ($restoredAssets.Count -ne $mediaSamples.Count) {
     throw "Restored GUI backup asset count mismatch: $($restoredAssets.Count)"
   }
@@ -586,7 +630,7 @@ try {
   }
   $report['mediaGuiRestoreAndRebackupVerified'] = $true
   $report['mediaGuiAssetCount'] = $restoredAssets.Count
-  $report['steps'] += 'Real Windows EXE GUI restored WAV/WebM/PNG bytes, persisted across restart, and re-exported exact SHA-256 matching media'
+  $report['steps'] += 'Real Windows EXE GUI restored WAV/WebM/PNG/checkpoint, linked voice/model/training records, and SHA-256 matching media'
   Stop-MYVOCALProcess -Process $process
   $process = $null
   $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru

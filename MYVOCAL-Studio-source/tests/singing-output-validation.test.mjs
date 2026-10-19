@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {inspectSingingWav} from '../src/lib/singingOutputValidation.js';
+import {inspectSingingWav,assertUsableSingingWav} from '../src/lib/singingOutputValidation.js';
 function wav({encoding=1,bits=16,channels=1,rate=48000,samples=[0,1000,-1000]}={}){
  const size=samples.length*bits/8, b=new Uint8Array(44+size),v=new DataView(b.buffer);
  const tag=(p,s)=>{for(let i=0;i<s.length;i++)b[p+i]=s.charCodeAt(i)};
@@ -18,3 +18,17 @@ test('rejects empty audio',()=>assert.equal(inspectSingingWav(wav({samples:[]}))
 test('rejects invalid channel count',()=>assert.equal(inspectSingingWav(wav({channels:0})).valid,false));
 test('rejects invalid sample rate',()=>assert.equal(inspectSingingWav(wav({rate:0})).valid,false));
 test('rejects non WAV bytes',()=>{let b=wav();b[0]=0;assert.equal(inspectSingingWav(b).valid,false)});
+
+test('singing WAV gate accepts an audible 0.1-second PCM recording',()=>{
+ const input=wav({samples:Array(4800).fill(2500)});
+ const inspected=assertUsableSingingWav(input);
+ assert.equal(inspected.valid,true);
+ assert.ok(inspected.peak>0.001);
+ assert.ok(inspected.durationSec>=0.099);
+});
+test('singing WAV gate refuses silent, truncated and very short engine output',()=>{
+ assert.throws(()=>assertUsableSingingWav(wav({samples:Array(4800).fill(0)})),/소리가 없는/);
+ assert.throws(()=>assertUsableSingingWav(wav({samples:[1000,-1000]})),/길이가/);
+ const bad=wav({samples:Array(4800).fill(1000)});bad[4]=0;
+ assert.throws(()=>assertUsableSingingWav(bad),/손상된/);
+});

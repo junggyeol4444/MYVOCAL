@@ -36,3 +36,13 @@ export function inspectSingingWav(input) {
   if(nonFinite)return fail('Non-finite audio samples');
   return {valid:true,channels,sampleRate,bits,encoding,frames,durationSec:frames/sampleRate,peak,nonFinite};
 }
+
+/** Prevent an engine from claiming usable singing audio for a silent, cut-off
+ * or malformed WAV. This is DSP integrity only, not an AI inference attestation. */
+export function assertUsableSingingWav(input){
+ const info=inspectSingingWav(input);
+ if(!info.valid)throw Error('엔진에서 손상된 WAV를 반환했습니다: '+info.reason);
+ if(info.durationSec>90||info.durationSec<0.03)throw Error('가창 WAV 길이가 허용된 범위를 벗어났습니다.');
+ if(info.peak<0.001)throw Error('가창 엔진에서 소리가 없는 WAV를 반환했습니다.');
+ return info;
+}
