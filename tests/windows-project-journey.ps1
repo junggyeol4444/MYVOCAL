@@ -99,6 +99,7 @@ $report = [ordered]@{
   webmCancelSafe = $false
   projectBackupDownloaded = $false
   projectRestoredViaGui = $false
+  projectRestoredPersistedAfterRestart = $false
   steps = @()
 }
 New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
@@ -374,53 +375,102 @@ try {
   $report['stage'] = 'restore-project'
   $restoreFile = Join-Path $env:RUNNER_TEMP 'MYVOCAL-project-restore.myvocal.json'
   Copy-Item -LiteralPath $backup.FullName -Destination $restoreFile -Force
-  # WebView2's Downloads popup covers the Restore button. ESC alone does not
-  # dismiss it on the hosted Windows runners; click the empty Projects margin
-  # through actual user32 mouse input before invoking Restore.
-  Add-Type -TypeDefinition @'
-using System.Runtime.InteropServices;
-public static class MYVOCALGuiMouse {
-  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, uint extra);
-  public static void Click(int x, int y) {
-    SetCursorPos(x,y);
-    mouse_event(2,0,0,0,0);
-    mouse_event(4,0,0,0,0);
+  # A WebView2 download bubble stays over the Restore button after backup.
+  # Close/reopen ONLY this isolated EXE with the same data profile: the first
+  # WebM export uses this same restart pattern and already passed both runners.
+  Stop-MYVOCALProcess -Process $process
+  $process = $null
+  Start-Sleep -Seconds 3
+  $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
+  $window = Wait-MYVOCALWindow -Process $process
+  $originalReady = $false
+  for ($attempt = 0; $attempt -lt 10; $attempt++) {
+    Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
+    try {
+      Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
+      $originalReady = $true
+      break
+    } catch {
+      if ($attempt -eq 9) { throw }
+      Start-Sleep -Seconds 1
+    }
   }
-}
-'@
-  $windowRect = $window.Current.BoundingRectangle
-  if ($windowRect.Width -lt 500 -or $windowRect.Height -lt 400) { throw 'Unexpected EXE window bounds during backup restore' }
-  [MYVOCALGuiMouse]::Click([int]($windowRect.X + 260), [int]($windowRect.Y + 220))
-  Start-Sleep -Milliseconds 650
+  if (-not $originalReady) { throw 'Original project missing after clean restore-session restart' }
+  $report['steps'] += 'Reopened the same isolated project in a fresh EXE window before Restore'
   Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
   $dialog = $null
   $root = [System.Windows.Automation.AutomationElement]::RootElement
-  $winCondition = [System.Windows.Automation.PropertyCondition]::new(
+  $winType = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window)
-  for ($i = 0; $i -lt 30; $i++) {
-    Start-Sleep -Seconds 1
-    $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winCondition)
+  for ($i = 0; $i -lt 40; $i++) {
+    Start-Sleep -Milliseconds 750
+    $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winType)
     foreach ($w in $windows) {
-      if ($w.Current.Name -match '^(Open|열기)$' -or $w.Current.ClassName -eq '#32770') {
+      if ($w.Current.Name -match '^(Open|열기|Open File|파일 열기)$' -or
+          ($w.Current.ClassName -eq '#32770' -and $w.Current.Name -match 'Open|열기')) {
         $dialog = $w
         break
       }
     }
     if ($null -ne $dialog) { break }
+    # A newly initialized WebView2 UI may expose the button before React
+    # attaches its input handler. Retry the same real GUI action.
+    if ($i -gt 0 -and $i % 8 -eq 0) {
+      Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
+    }
   }
-  if ($null -eq $dialog) { throw 'The GUI project restore button did not open a Windows file dialog' }
-  Add-Type -AssemblyName System.Windows.Forms
+  if ($null -eq $dialog) { throw 'Restore click did not open a native Windows file dialog in a fresh session' }
+  $report['steps'] += 'Restore opened a native Windows file-picker dialog'
   $dialog.SetFocus()
   Start-Sleep -Milliseconds 300
-  [System.Windows.Forms.SendKeys]::SendWait($restoreFile)
+  Add-Type -AssemblyName System.Windows.Forms
+  $nameIdCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '1148')
+  $fileNameEdit = $dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $nameIdCondition)
+  if ($null -ne $fileNameEdit) {
+    try {
+      $inputPattern = $fileNameEdit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+      $inputPattern.SetValue($restoreFile)
+    } catch {
+      $fileNameEdit.SetFocus()
+      [System.Windows.Forms.SendKeys]::SendWait('^a')
+      [System.Windows.Forms.SendKeys]::SendWait($restoreFile)
+    }
+  } else {
+    # Standard Windows common-dialog keyboard shortcut for "File name".
+    [System.Windows.Forms.SendKeys]::SendWait('%n')
+    [System.Windows.Forms.SendKeys]::SendWait($restoreFile)
+  }
+  Start-Sleep -Milliseconds 250
   [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
   $restoredTitle = $report['projectTitle'] + ' (복원)'
   Assert-MYVOCALProjectVisible -Window $window -Title $restoredTitle -MaxChecks 30
   $report['projectRestoredViaGui'] = $true
   $report['steps'] += 'Existing GUI restored a second project from the downloaded backup without replacing the original'
   Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
+  $report['stage'] = 'verify-restored-restart'
+  Stop-MYVOCALProcess -Process $process
+  $process = $null
+  Start-Sleep -Seconds 3
+  $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
+  $window = Wait-MYVOCALWindow -Process $process
+  $restartedBoth = $false
+  for ($attempt = 0; $attempt -lt 10; $attempt++) {
+    Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
+    try {
+      Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
+      Assert-MYVOCALProjectVisible -Window $window -Title $restoredTitle -MaxChecks 3
+      $restartedBoth = $true
+      break
+    } catch {
+      if ($attempt -eq 9) { throw }
+      Start-Sleep -Seconds 1
+    }
+  }
+  if (-not $restartedBoth) { throw 'Original and restored projects were not both visible after restart' }
+  $report['projectRestoredPersistedAfterRestart'] = $true
+  $report['steps'] += 'Original and restored projects both survived another real EXE restart'
   $report['stage'] = 'complete'
   $report['passed'] = $true
 } catch {
