@@ -17,7 +17,7 @@ export function voiceDependents(data,voice){
 export function modelDependents(data,model){
  const uses=[];
  for(const p of data.projects||[])if(p.singingEngine?.modelId===model.id)uses.push('프로젝트 '+(p.title||p.id));
- for(const other of data.voiceModels||[])if(other.id!==model.id&&other.assetId&&other.assetId===model.assetId)uses.push('모델 '+(other.name||other.id));
+ for(const other of data.voiceModels||[])if(other.id!==model.id&&model.assetId&&(other.assetId===model.assetId||other.sourceSampleId===model.assetId))uses.push('모델 '+(other.name||other.id));
  if(model.assetId){
   for(const v of data.voices||[])if(v.assetId===model.assetId||(v.assets||[]).some(s=>s.id===model.assetId))uses.push('목소리 '+(v.name||v.id));
   for(const p of data.trainingPlans||[])if((p.sampleIds||[]).includes(model.assetId)||(p.sampleSnapshot||[]).some(s=>s?.id===model.assetId))uses.push('학습 기록 '+(p.voiceName||p.id));
@@ -28,7 +28,10 @@ export function modelDependents(data,model){
 export function voiceOwnedFileIds(data,voice){
  const owned=[voice.assetId,...(voice.assets||[]).map(s=>s.id),...(data.voiceModels||[]).filter(m=>m.voiceId===voice.id).map(m=>m.assetId)].filter(Boolean);
  const others=new Set((data.voices||[]).filter(v=>v.id!==voice.id).flatMap(v=>[v.assetId,...(v.assets||[]).map(s=>s.id)]).filter(Boolean));
- for(const m of data.voiceModels||[])if(m.voiceId!==voice.id&&m.assetId)others.add(m.assetId);
+ for(const m of data.voiceModels||[])if(m.voiceId!==voice.id){
+  if(m.assetId)others.add(m.assetId);
+  if(m.sourceSampleId)others.add(m.sourceSampleId);
+ }
  for(const p of data.trainingPlans||[])if(p.voiceId!==voice.id){
   for(const id of p.sampleIds||[])if(id)others.add(id);
   for(const s of p.sampleSnapshot||[])if(s?.id)others.add(s.id);

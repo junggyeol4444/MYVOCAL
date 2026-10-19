@@ -52,3 +52,25 @@ test('학습 자료에서 사용하는 모델 파일과 모델에서 사용하�
  assert.ok(sampleDependents(d,'v','take2').some(x=>x.includes('모델')));
  assert.throws(()=>voiceOwnedFileIds(d,me),/공유/);
 });
+
+test('다른 목소리 모델의 sourceSampleId가 가리키는 원본도 삭제하지 않는다',()=>{
+ const owned={id:'checkpoint',voiceId:'v',assetId:'checkpoint-file'};
+ const foreign={id:'foreign',voiceId:'o',sourceSampleId:'take2'};
+ const shared={...data,projects:[],trainingPlans:[],voiceModels:[owned,foreign]};
+ assert.throws(()=>voiceOwnedFileIds(shared,me),/공유/);
+ const sharedCheckpoint={...shared,voiceModels:[owned,{...foreign,sourceSampleId:'checkpoint-file'}]};
+ assert.ok(modelDependents(sharedCheckpoint,owned).some(x=>x.includes('모델')));
+});
+test('다른 모델이 현재 목소리의 대표 녹음 파일을 sourceSampleId로 사용하면 전체 삭제를 차단한다',()=>{
+ const d={...data,projects:[],trainingPlans:[],voiceModels:[{id:'foreign',voiceId:'o',sourceSampleId:'main-file'}]};
+ assert.throws(()=>voiceOwnedFileIds(d,me),/공유/);
+});
+test('다른 모델의 sourceSampleId가 체크포인트 파일을 참조하면 해당 체크포인트 삭제를 차단한다',()=>{
+ const target={id:'checkpoint',voiceId:'v',assetId:'checkpoint-file'};
+ const d={...data,projects:[],trainingPlans:[],voiceModels:[target,{id:'external',voiceId:'o',sourceSampleId:'checkpoint-file'}]};
+ assert.ok(modelDependents(d,target).some(x=>x.includes('모델')));
+});
+test('같은 목소리의 sourceSampleId 참조는 외부 공유로 잘못 분류하지 않는다',()=>{
+ const d={...data,projects:[],trainingPlans:[],voiceModels:[{id:'same',voiceId:'v',assetId:'own-checkpoint',sourceSampleId:'take2'}]};
+ assert.deepEqual(new Set(voiceOwnedFileIds(d,me)),new Set(['main-file','take1','take2','own-checkpoint']));
+});
