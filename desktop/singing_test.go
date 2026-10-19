@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -44,9 +45,7 @@ func TestSingingBridgeToCompatibleWAVEngine(t *testing.T) {
 			return
 		}
 		if r.URL.Path == "/v1/sing" {
-			b := make([]byte, 44)
-			copy(b, "RIFF")
-			copy(b[8:], "WAVE")
+			b := singingWavTestFixture()
 			w.Header().Set("Content-Type", "audio/wav")
 			w.Write(b)
 			return
@@ -71,7 +70,7 @@ func TestSingingBridgeToCompatibleWAVEngine(t *testing.T) {
 	b, _ := json.Marshal(req)
 	w = httptest.NewRecorder()
 	a.singingRender(w, singingReq("POST", "/api/singing/render", "testkey", b))
-	if w.Code != 200 || w.Body.Len() != 44 {
+	if w.Code != 200 || w.Body.Len() != 48 {
 		t.Fatalf("render: %d bytes %d %s", w.Code, w.Body.Len(), w.Body.String())
 	}
 }
@@ -93,9 +92,7 @@ func TestPhonemeHintsForwardedAndInvalidRejected(t *testing.T) {
 			t.Errorf("missing phonemes: %v", payload["phonemes"])
 		}
 		hits++
-		b := make([]byte, 44)
-		copy(b, "RIFF")
-		copy(b[8:], "WAVE")
+		b := singingWavTestFixture()
 		w.Write(b)
 	}))
 	defer engine.Close()
@@ -118,4 +115,35 @@ func TestPhonemeHintsForwardedAndInvalidRejected(t *testing.T) {
 	if w.Code != 400 || hits != 1 {
 		t.Fatalf("invalid overlap forwarded: status %d hits %d", w.Code, hits)
 	}
+}
+
+func singingWavTestFixture() []byte {
+ b:=make([]byte,48)
+ copy(b,"RIFF");binary.LittleEndian.PutUint32(b[4:8],40)
+ copy(b[8:12],"WAVE");copy(b[12:16],"fmt ")
+ binary.LittleEndian.PutUint32(b[16:20],16)
+ binary.LittleEndian.PutUint16(b[20:22],1)
+ binary.LittleEndian.PutUint16(b[22:24],1)
+ binary.LittleEndian.PutUint32(b[24:28],22050)
+ binary.LittleEndian.PutUint32(b[28:32],44100)
+ binary.LittleEndian.PutUint16(b[32:34],2)
+ binary.LittleEndian.PutUint16(b[34:36],16)
+ copy(b[36:40],"data")
+ binary.LittleEndian.PutUint32(b[40:44],4)
+ binary.LittleEndian.PutUint16(b[44:46],4096)
+ binary.LittleEndian.PutUint16(b[46:48],8192)
+ return b
+}
+func TestSingingWAVIntegrity(t *testing.T){
+ orig:=singingWavTestFixture()
+ if !validSingingWAV(orig){t.Fatal("real WAV rejected")}
+ badSize:=bytes.Clone(orig);binary.LittleEndian.PutUint32(badSize[4:8],0)
+ noFmt:=bytes.Clone(orig);copy(noFmt[12:16],"JUNK")
+ noData:=bytes.Clone(orig);copy(noData[36:40],"JUNK")
+ badRate:=bytes.Clone(orig);binary.LittleEndian.PutUint32(badRate[24:28],0)
+ badAlign:=bytes.Clone(orig);binary.LittleEndian.PutUint16(badAlign[32:34],3)
+ empty:=bytes.Clone(orig);binary.LittleEndian.PutUint32(empty[40:44],0)
+ for name,b:=range map[string][]byte{"size":badSize,"fmt":noFmt,"data":noData,"rate":badRate,"align":badAlign,"empty":empty,"truncated":orig[:47]}{
+  if validSingingWAV(b){t.Errorf("accepted invalid WAV %s",name)}
+ }
 }

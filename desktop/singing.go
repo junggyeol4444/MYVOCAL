@@ -178,8 +178,8 @@ func (a *appServer) singingRender(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, 502, "WAV 응답을 읽지 못했거나 32MB를 초과했습니다.")
 		return
 	}
-	if len(buf) < 44 || string(buf[0:4]) != "RIFF" || string(buf[8:12]) != "WAVE" {
-		jsonError(w, 502, "추론 서버 응답이 RIFF WAV 파일이 아닙니다.")
+	if !validSingingWAV(buf) {
+		jsonError(w, 502, "추론 서버 응답이 손상되었거나 지원하지 않는 WAV 형식입니다.")
 		return
 	}
 	w.Header().Set("Content-Type", "audio/wav")
