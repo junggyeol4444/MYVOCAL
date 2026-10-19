@@ -208,6 +208,11 @@ try {
   for ($i = 0; $i -lt 45; $i++) {
     $videoButton = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $searchCondition)
     if ($null -ne $videoButton -and $videoButton.Current.IsEnabled) { break }
+    # On a freshly opened WebView2 session, UIA may expose the sidebar button
+    # before React has attached its click handler. Retry actual navigation.
+    if ($i -gt 0 -and $i % 5 -eq 0) {
+      Invoke-MYVOCALButton -Window $window -Caption 'Video Studio'
+    }
     Start-Sleep -Seconds 2
   }
   if ($null -eq $videoButton -or -not $videoButton.Current.IsEnabled) {
