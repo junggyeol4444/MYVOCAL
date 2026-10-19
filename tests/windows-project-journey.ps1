@@ -389,8 +389,16 @@ try {
   # original source project or using a browser console / source-level shortcut.
   $report['stage'] = 'prepare-media-backup-fixture'
   $mediaFixturePath = Join-Path $EvidenceDirectory 'MYVOCAL-QA-Media-Restore.myvocal.json'
-  $audioFileBytes = [System.IO.File]::ReadAllBytes($wav.FullName)
-  $videoFileBytes = [System.IO.File]::ReadAllBytes($webm.FullName)
+  # Downloads can be cleaned up or moved by the WebView2 shell after the
+  # export steps. The evidence directory contains byte-for-byte copies made
+  # immediately after each completed export, before the EXE is restarted.
+  $stableWav = Join-Path $EvidenceDirectory 'exported-mix.wav'
+  $stableWebm = Join-Path $EvidenceDirectory 'exported-mv.webm'
+  if (-not (Test-Path -LiteralPath $stableWav) -or -not (Test-Path -LiteralPath $stableWebm)) {
+    throw 'Already verified WAV/WebM export evidence is unavailable'
+  }
+  $audioFileBytes = [System.IO.File]::ReadAllBytes($stableWav)
+  $videoFileBytes = [System.IO.File]::ReadAllBytes($stableWebm)
   $pngBytes = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/v9kAAAAASUVORK5CYII=')
   $mediaSamples = @(
     @{ id='qa-audio'; name='qa-original.wav'; type='audio/wav'; bytes=$audioFileBytes },
