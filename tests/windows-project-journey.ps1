@@ -379,26 +379,7 @@ try {
     Start-Sleep -Seconds 1
     $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winCondition)
     foreach ($w in $windows) {
-      if ($w.Current.Name -match '^(Open|열기)
-  $report['passed'] = $true
-} catch {
-  $report['error'] = $_.Exception.ToString()
-  throw
-} finally {
-  try { Save-MYVOCALWindowCapture -Window $window -Path (Join-Path $EvidenceDirectory 'project-journey.png') }
-  catch { $report['screenshotError'] = $_.Exception.Message }
-  try { Stop-MYVOCALProcess -Process $process }
-  catch { $report['shutdownError'] = $_.Exception.Message }
-  try {
-    $appLog = Join-Path $profileRoot 'MYVOCAL Studio\logs\launcher.log'
-    if (Test-Path -LiteralPath $appLog) { Copy-Item -LiteralPath $appLog -Destination (Join-Path $EvidenceDirectory 'launcher.log') -Force }
-  } catch {}
-  $report | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $EvidenceDirectory 'result.json') -Encoding utf8
-  Get-Content -LiteralPath (Join-Path $EvidenceDirectory 'result.json')
-  $env:LOCALAPPDATA = $previousLocalAppData
-  $env:MYVOCAL_DESKTOP_HOST = $previousHostMode
-}
- -or $w.Current.ClassName -eq '#32770') {
+      if ($w.Current.Name -match '^(Open|열기)$' -or $w.Current.ClassName -eq '#32770') {
         $dialog = $w
         break
       }
