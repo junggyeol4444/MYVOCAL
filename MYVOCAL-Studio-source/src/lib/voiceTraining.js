@@ -4,6 +4,7 @@ import {getFile} from './assetDb.js';
 import {checkSampleQuality,voiceDatasetManifest} from './voiceDataset.js';
 import {makeZip} from './zipStore.js';
 import {genId,now} from './schema.js';
+import {sha256Bytes} from './voiceFileHash.js';
 
 export const TRAINING_ENGINES=Object.freeze([
  {id:'generic',name:'범용 학습 데이터셋',type:'dataset-only',description:'원본 오디오 + 메타데이터 준비. 별도의 학습 프로그램 필요',connected:false},
@@ -41,6 +42,7 @@ export function createTrainingPlan(voice,{engineId='generic',preset='standard',n
  if(!quality.permitted)throw Error('본인 또는 사용 허가가 있는 목소리만 학습 준비할 수 있습니다.');
  if(!quality.total)throw Error('음성 샘플을 하나 이상 등록해 주세요.');
  const samples=sampleEntries(voice);
+ if(samples.some((s,i)=>!s.id||samples.findIndex(x=>x.id===s.id)!==i))throw Error('중복되거나 누락된 녹음 샘플 ID가 있습니다. Voice Studio의 원본을 확인하세요.');
  return {id:genId('train'),voiceId:voice.id,voiceName:voice.name,createdAt:now(),updatedAt:now(),status:'prepared',engineId,preset,notes:String(notes||'').slice(0,500),quality,
   sampleIds:samples.map(x=>x.id),sampleSnapshot:samples.map(s=>({id:s.id,fileName:s.fileName||'',capturePromptId:s.capturePromptId||'',notes:s.notes||'',analysis:s.analysis?Object.fromEntries(['duration','analyzedSeconds','medianHz','lowNote','highNote','clippedPercent','meanRmsDb','voicedPercent','voicedFrames','frames'].map(k=>[k,s.analysis[k]]).filter(([,v])=>v!==undefined)):null})),
   notice:'데이터셋 준비 기록이며 학습 작업이 실행되거나 대기열에 등록된 것이 아닙니다.'};
@@ -53,8 +55,11 @@ export async function packageTrainingPlan(plan,voice,loadFile=getFile){
  if(!getTrainingEngine(plan.engineId))throw Error('지원하지 않는 외부 학습 형식입니다.');
  if(!Array.isArray(plan.sampleSnapshot)||!plan.sampleSnapshot.length)throw Error('준비된 샘플이 없습니다.');
  const entries=[],records=[];let bytes=0;
+ const usedIds=new Set();
  for(let i=0;i<plan.sampleSnapshot.length;i++){
   const snapshot=plan.sampleSnapshot[i];
+  if(!snapshot?.id||usedIds.has(snapshot.id))throw Error('학습 준비 목록에 중복 또는 누락된 녹음 ID가 있습니다. 새 작업을 준비하세요.');
+  usedIds.add(snapshot.id);
   // Do not silently use another voice's assets or silently incorporate newer recordings.
   if(!sampleEntries(voice).some(s=>s.id===snapshot.id))throw Error(`샘플 ${i+1}이 원래 목소리 프로필에서 삭제되었습니다. 새 준비 작업을 만들어 주세요.`);
   const file=await loadFile(snapshot.id);
@@ -62,8 +67,11 @@ export async function packageTrainingPlan(plan,voice,loadFile=getFile){
   bytes+=file.size;
   if(bytes>150*1024*1024)throw Error('학습 데이터가 150MB를 넘습니다. 파일을 나누어 준비해 주세요.');
   const path=`audio/sample-${String(i+1).padStart(3,'0')}${extension(file)}`;
-  entries.push({name:path,data:new Uint8Array(await file.arrayBuffer())});
-  records.push({...snapshot,path,type:file.type||'',bytes:file.size});
+  const raw=new Uint8Array(await file.arrayBuffer());
+  if(raw.length!==file.size)throw Error('녹음 원본을 읽는 중 크기가 변경되었습니다.');
+  const sha256=await sha256Bytes(raw);
+  entries.push({name:path,data:raw});
+  records.push({...snapshot,path,type:file.type||'',bytes:file.size,sha256});
  }
  const manifest=voiceDatasetManifest(voice,records);
  const descriptor={format:'MYVOCAL_TRAINING_PLAN',version:1,id:plan.id,voiceId:plan.voiceId,voiceName:plan.voiceName,createdAt:plan.createdAt,
@@ -77,11 +85,7 @@ export async function packageTrainingPlan(plan,voice,loadFile=getFile){
   {name:'README.txt',data:encoder.encode('MYVOCAL v0.7 training preparation bundle\nNo AI training has been performed. External software must preprocess the data for its particular model format and perform training separately.\nThe voice owner must have permission to use all samples.\nImport an external checkpoint back into MYVOCAL via Voice Training, not into the current singing engine (unconnected).\n')});
  return {bytes:makeZip(entries),fileName:safeName(plan.voiceName)+'-'+plan.id+'-training-prep.zip',descriptor,manifest};
 }
-export async function sha256File(file){
- if(!globalThis.crypto?.subtle?.digest)throw Error('SHA-256을 계산할 수 없는 환경입니다.');
- const hash=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());
- return Array.from(new Uint8Array(hash)).map(x=>x.toString(16).padStart(2,'0')).join('');
-}
+export async function sha256File(file){return sha256Bytes(await file.arrayBuffer());}
 export function validateCheckpoint(file,voice){
  if(!voice||!['owned','self','licensed'].includes(voice.rights))throw Error('등록 권한을 확인해 주세요.');
  if(!file||!file.size)throw Error('체크포인트 파일을 선택하세요.');

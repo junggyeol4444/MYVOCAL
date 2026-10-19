@@ -3,6 +3,7 @@
 // singing range certification, speaker-verification, or AI voice training here.
 import {getFile} from './assetDb.js';
 import {makeZip} from './zipStore.js';
+import {sha256Bytes} from './voiceFileHash.js';
 const vowels=[['a','ㅏ','아—'],['eo','ㅓ','어—'],['i','ㅣ','이—'],['u','ㅜ','우—']];
 const registers=[['low','저음','편안한 낮은 음'],['middle','중음','자연스러운 중간 음'],['high','고음','무리 없는 높은 음']];
 export const VOICE_GUIDES=registers.flatMap(([reg,label,instruction])=>vowels.map(([vowel,letter,utterance])=>({
@@ -30,7 +31,7 @@ export function voiceDatasetManifest(voice,samples){
  return {format:'MYVOCAL_VOICE_DATASET',version:1,createdAt:new Date().toISOString(),
   voice:{name:voice.name,rights:voice.rights,style:voice.style},
   notice:'Collection only: quality checks analyze signal level / pitch detectability. Prompt and actual phoneme identity are NOT verified; no voice model is trained.',
-  samples:samples.map((s,i)=>({path:s.path,originalFileName:s.fileName,mediaType:s.type,bytes:s.bytes,promptId:s.capturePromptId||null,prompt:getVoiceGuide(s.capturePromptId)?.prompt||null,register:getVoiceGuide(s.capturePromptId)?.registerLabel||null,
+  samples:samples.map((s,i)=>({path:s.path,originalFileName:s.fileName,mediaType:s.type,bytes:s.bytes,...(s.sha256?{sha256:s.sha256}:{}),promptId:s.capturePromptId||null,prompt:getVoiceGuide(s.capturePromptId)?.prompt||null,register:getVoiceGuide(s.capturePromptId)?.registerLabel||null,
     vowel:getVoiceGuide(s.capturePromptId)?.letter||null,userNotes:s.notes||'',status:checkSampleQuality(s.analysis).status,issues:checkSampleQuality(s.analysis).issues,
     analysis:s.analysis?{duration:s.analysis.duration,analyzedSeconds:s.analysis.analyzedSeconds,medianHz:s.analysis.medianHz,lowNote:s.analysis.lowNote,highNote:s.analysis.highNote,clippedPercent:s.analysis.clippedPercent,meanRmsDb:s.analysis.meanRmsDb,voicedPercent:s.analysis.voicedPercent}:null}))};
 }
@@ -40,14 +41,19 @@ export async function packageVoiceDataset(voice,loadFile=getFile){
  if(!voice||!['self','owned','licensed'].includes(voice.rights))throw Error('본인 목소리 또는 권한이 확인된 샘플만 내보낼 수 있습니다.');
  const entries=[],records=[],samples=[...(voice.assetId?[{id:voice.assetId,fileName:voice.fileName,analysis:voice.analysis,capturePromptId:voice.capturePromptId,notes:voice.notes}]:[]),...(voice.assets||[])];
  if(samples.length===0)throw Error('내보낼 음성 샘플이 없습니다.');
+ const ids=samples.map(s=>s.id);
+ if(ids.some(id=>!id)||new Set(ids).size!==ids.length)throw Error('음성 원본 ID가 중복되거나 비어 있습니다.');
  let size=0;
  for(let i=0;i<samples.length;i++){
   const s=samples[i],file=await loadFile(s.id);
   if(!file||!file.size)throw Error(`샘플 ${i+1}의 원본 음성 파일을 찾을 수 없습니다. 다시 등록해 주세요.`);
   size+=file.size;if(size>150*1024*1024)throw Error('원본 파일의 합계가 150MB를 초과합니다. 샘플을 나눠 내보내세요.');
   const path=`audio/sample-${String(i+1).padStart(3,'0')}${extFor(file)}`;
-  entries.push({name:path,data:new Uint8Array(await file.arrayBuffer())});
-  records.push({...s,path,fileName:s.fileName||file.name||'',type:file.type||'',bytes:file.size});
+  const raw=new Uint8Array(await file.arrayBuffer());
+  if(raw.length!==file.size)throw Error('음성 원본을 읽는 중 크기가 변경됐습니다.');
+  const sha256=await sha256Bytes(raw);
+  entries.push({name:path,data:raw});
+  records.push({...s,path,fileName:s.fileName||file.name||'',type:file.type||'',bytes:file.size,sha256});
  }
  const manifest=voiceDatasetManifest(voice,records);
  entries.unshift({name:'manifest.json',data:new TextEncoder().encode(JSON.stringify(manifest,null,2))});

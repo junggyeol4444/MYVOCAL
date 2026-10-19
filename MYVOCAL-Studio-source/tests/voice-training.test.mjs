@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {TRAINING_ENGINES,assessTrainingData,createTrainingPlan,packageTrainingPlan,validateCheckpoint,buildCheckpointRecord,sampleEntries} from '../src/lib/voiceTraining.js';
 const voice={id:'v1',name:'TEST SINGER',style:'Natural',rights:'self',assets:[{id:'a1',fileName:'a.wav',capturePromptId:'middle-a',analysis:{duration:10,clippedPercent:0,meanRmsDb:-18,voicedFrames:90,voicedPercent:75}},{id:'a2',fileName:'b.wav',capturePromptId:'low-a',analysis:{duration:9,clippedPercent:0,meanRmsDb:-20,voicedFrames:80,voicedPercent:70}}]};
 test('engines are explicitly marked disconnected',()=>{assert.equal(TRAINING_ENGINES.length,3);assert.ok(TRAINING_ENGINES.every(e=>e.connected===false))});
@@ -25,3 +26,19 @@ test('checkpoint checks format size and rights, record remains unverified',()=>{
  const rec=buildCheckpointRecord(voice,file,'00','generic','x1');assert.equal(rec.singingCompatible,false);assert.equal(rec.status,'imported-unverified');
 });
 test('old profiles with original assetId remain eligible for data collection',()=>{const old={id:'v2',name:'Old',rights:'self',assetId:'original-id',fileName:'file.wav',analysis:null};assert.equal(sampleEntries(old).length,1);assert.equal(assessTrainingData(old).total,1)});
+
+test('training ZIP manifest tracks SHA-256 fingerprints of the actual raw recordings',async()=>{
+ const plan=createTrainingPlan(voice,{engineId:'rvc'});
+ const raw=Uint8Array.of(1,2,3,4,250,251);
+ const packageResult=await packageTrainingPlan(plan,voice,async()=>new File([raw],'same.wav',{type:'audio/wav'}));
+ const expected=createHash('sha256').update(raw).digest('hex');
+ assert.equal(packageResult.manifest.samples.length,2);
+ for(const sample of packageResult.manifest.samples)assert.equal(sample.sha256,expected);
+});
+test('training plan refuses duplicate recording IDs rather than packaging same sample twice',async()=>{
+ const duplicate={...voice,assets:[voice.assets[0],voice.assets[0]]};
+ assert.throws(()=>createTrainingPlan(duplicate),/중복/);
+ const plan=createTrainingPlan(voice);
+ plan.sampleSnapshot.push({...plan.sampleSnapshot[0]});
+ await assert.rejects(packageTrainingPlan(plan,voice,async()=>new File(['sample'],'s.wav')),/중복/);
+});

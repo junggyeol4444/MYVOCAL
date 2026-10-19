@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {VOICE_GUIDES,getVoiceGuide,checkSampleQuality,voiceDatasetSummary,voiceDatasetManifest,packageVoiceDataset} from '../src/lib/voiceDataset.js';
 import {crc32,makeZip} from '../src/lib/zipStore.js';
 const good={duration:8,meanRmsDb:-19,clippedPercent:0,voicedPercent:65,voicedFrames:70,lowNote:'C4',highNote:'E4',medianHz:260};
@@ -10,3 +11,14 @@ test('manifest marks label as user-provided not validated and preserves rights',
 test('ZIP CRC32 matches standard test vector',()=>{assert.equal(crc32(new TextEncoder().encode('123456789')),0xcbf43926);const zip=makeZip([{name:'a.txt',data:new TextEncoder().encode('abc')}]);assert.equal(zip[0],0x50);assert.equal(zip[zip.length-22],0x50);assert.throws(()=>makeZip([{name:'../evil',data:new Uint8Array()}]),/안전하지/);});
 test('voice dataset packages actual files and rejects missing assets',async()=>{const v={name:'내 목소리',rights:'self',style:'Natural',assetId:'x',fileName:'hello.wav',capturePromptId:'low-a',analysis:good,assets:[]};const get=async id=>new File([new Uint8Array([0,1,2,3])],'test.wav',{type:'audio/wav'});const pkg=await packageVoiceDataset(v,get);assert.ok(pkg.bytes.length>100);assert.equal(pkg.manifest.samples[0].path,'audio/sample-001.wav');assert.equal(pkg.manifest.samples[0].bytes,4);await assert.rejects(()=>packageVoiceDataset(v,async()=>null),/원본/);});
 test('reference-only rights cannot export voice training collection',async()=>{await assert.rejects(()=>packageVoiceDataset({rights:'reference'}),/권한/);});
+
+test('voice ZIP includes a local SHA-256 fingerprint for each original sample',async()=>{
+ const raw=Uint8Array.of(1,2,3,255,254);
+ const v={id:'v1',name:'Self',rights:'self',assets:[{id:'take1',fileName:'mytake.wav'}]};
+ const output=await packageVoiceDataset(v,async()=>new File([raw],'mytake.wav',{type:'audio/wav'}));
+ assert.equal(output.manifest.samples[0].sha256,createHash('sha256').update(raw).digest('hex'));
+});
+test('voice ZIP refuses duplicate original IDs rather than silently making two different entries',async()=>{
+ const v={rights:'self',assetId:'same',assets:[{id:'same',fileName:'duplicate.wav'}]};
+ await assert.rejects(packageVoiceDataset(v,async()=>new File(['audio'],'x.wav')),/중복/);
+});
