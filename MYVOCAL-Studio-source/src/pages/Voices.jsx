@@ -1,7 +1,8 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {AssetPreview,Button,Empty,Field,Icon,Modal,Notice,SectionHead,Status} from '../components/UI';
 import {genId,now,rightsOptions} from '../lib/schema';
-import {getFile,putFile,putFilesAtomic,removeFile} from '../lib/assetDb';
+import {getFile,putFile,putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb';
+import {sampleDependents,voiceDependents,voiceOwnedFileIds} from '../lib/voiceDeletionSafety.js';
 import {analyzeAudioFile,voiceAdvice} from '../lib/voiceAnalysis';
 import {VOICE_GUIDES,getVoiceGuide,checkSampleQuality,voiceDatasetSummary,downloadVoiceDataset} from '../lib/voiceDataset';
 
@@ -107,17 +108,36 @@ export default function Voices({data,add,remove,notify}){
   catch(err){notify('데이터셋 내보내기 실패: '+err.message);}finally{setBusy(false)}
  };
  const deleteSample=async(v,entry)=>{
+  if(busy||recording)return;
+  const uses=sampleDependents(data,v.id,entry.id);
+  if(uses.length){notify('사용 중인 음성 파일은 삭제할 수 없습니다: '+uses.join(', '));return;}
   if(!confirm('이 샘플을 삭제할까요? 원본 음성 데이터도 삭제됩니다.'))return;
-  if(entry.original)add('voices',{...v,assetId:'',fileName:'',analysis:null,analysisError:''});
-  else add('voices',{...v,assets:(v.assets||[]).filter(x=>x.id!==entry.id)});
-  await removeFile(entry.id).catch(()=>{});notify('샘플을 삭제했습니다.');
+  setBusy(true);
+  try{
+   await deleteFilesAtomic([entry.id]);
+   if(entry.original)add('voices',{...v,assetId:'',fileName:'',analysis:null,analysisError:''});
+   else add('voices',{...v,assets:(v.assets||[]).filter(x=>x.id!==entry.id)});
+   notify('원본 삭제 확인 후 샘플 목록을 갱신했습니다.');
+  }catch(err){notify('원본 삭제 실패 · 등록 정보 유지: '+err.message);}
+  finally{setBusy(false)}
  };
  const deleteVoice=async v=>{
-  if(!confirm(`'${v.name}' 목소리 프로필과 모든 샘플을 삭제할까요? 연결된 학습 준비 기록 및 외부 체크포인트도 삭제됩니다.`))return;
-  for(const p of data.trainingPlans||[])if(p.voiceId===v.id)remove('trainingPlans',p.id);
-  for(const m of data.voiceModels||[])if(m.voiceId===v.id){remove('voiceModels',m.id);if(m.assetId)await removeFile(m.assetId).catch(()=>{});}
-  remove('voices',v.id);for(const id of [v.assetId,...(v.assets||[]).map(x=>x.id)].filter(Boolean))await removeFile(id).catch(()=>{});
-  if(expanded===v.id)setExpanded('');notify('목소리 프로필을 삭제했습니다.');
+  if(busy||recording)return;
+  const uses=voiceDependents(data,v);
+  if(uses.length){notify('연결된 작업이 있어 목소리를 삭제할 수 없습니다: '+uses.join(', '));return;}
+  let ids;
+  try{ids=voiceOwnedFileIds(data,v)}catch(err){notify(err.message);return;}
+  if(!confirm(`'${v.name}' 목소리와 연결된 원본 ${ids.length}개, 학습 기록과 모델을 삭제할까요?`))return;
+  setBusy(true);
+  try{
+   await deleteFilesAtomic(ids);
+   for(const p of data.trainingPlans||[])if(p.voiceId===v.id)remove('trainingPlans',p.id);
+   for(const m of data.voiceModels||[])if(m.voiceId===v.id)remove('voiceModels',m.id);
+   remove('voices',v.id);
+   if(expanded===v.id)setExpanded('');
+   notify('원본 일괄 삭제 확인 후 목소리와 학습 기록을 갱신했습니다.');
+  }catch(err){notify('삭제 실패 · 원본과 프로필 유지: '+err.message);}
+  finally{setBusy(false)}
  };
  return <><SectionHead eyebrow="VOICE DATASET · RECORDING GUIDE · SIGNAL QUALITY" title="Voice Studio" description="내 목소리 샘플을 녹음하고 발음·음역별로 정리하며 품질을 점검합니다. AI 보컬 학습과 가창 합성은 아직 미구현입니다." action={<Button variant="primary" icon="plus" onClick={()=>setOpen(true)}>새 목소리 등록</Button>}/>
  <div className="feature-strip"><div className="feature-symbol"><Icon name="mic" size={28}/></div><div><strong>VOICE MODEL ≠ SINGING STYLE</strong><p>목소리 원본과 스타일을 분리해 관리합니다. 녹음 가이드와 데이터셋 내보내기를 제공하며 v1.0의 Voice Training에서 학습 준비 작업을 관리합니다. AI 가수 생성은 아직 아닙니다.</p></div><Status>학습 엔진 미연결</Status></div>

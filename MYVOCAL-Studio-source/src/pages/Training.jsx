@@ -3,6 +3,7 @@ import VocalPreview from '../components/VocalPreview';
 import {Button,Empty,Field,Icon,Notice,Panel,SectionHead,Status} from '../components/UI';
 import {genId} from '../lib/schema';
 import {getFile,putFile,removeFile} from '../lib/assetDb';
+import {modelDependents} from '../lib/voiceDeletionSafety.js';
 import {TRAINING_ENGINES,TRAINING_PRESETS,assessTrainingData,createTrainingPlan,packageTrainingPlan,validateCheckpoint,buildCheckpointRecord,sha256File} from '../lib/voiceTraining';
 const byteText=n=>n>1024*1024?(n/1024/1024).toFixed(1)+' MB':Math.round(n/1024)+' KB';
 const formatDate=s=>{try{return new Date(s).toLocaleString('ko-KR')}catch{return '-'}};
@@ -31,11 +32,17 @@ export default function Training({data,add,remove,notify,navigate}){
  });
  const downloadCheckpoint=model=>run(async()=>{
   const file=await getFile(model.assetId);if(!file)throw Error('체크포인트 원본이 없습니다.');
+  if(model.sha256 && (await sha256File(file))!==model.sha256)throw Error('원본 체크포인트의 SHA-256이 등록할 때와 다릅니다. 교체·손상된 파일은 내보낼 수 없습니다.');
   const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=model.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2500);
   notify('원본 체크포인트를 내려받았습니다.');
  });
- const deleteCheckpoint=model=>run(async()=>{if(!confirm(`'${model.name}' 체크포인트를 로컬에서 삭제할까요?`))return;
-  remove('voiceModels',model.id);if(model.assetId)await removeFile(model.assetId);notify('체크포인트를 삭제했습니다.');
+ const deleteCheckpoint=model=>run(async()=>{
+  const uses=modelDependents(data,model);
+  if(uses.length)throw Error('사용 중인 모델 원본을 삭제할 수 없습니다: '+uses.join(', '));
+  if(!confirm(`'${model.name}' 체크포인트를 로컬에서 삭제할까요?`))return;
+  if(model.assetId)await removeFile(model.assetId);
+  remove('voiceModels',model.id);
+  notify('체크포인트 원본을 삭제한 뒤 모델 등록 정보를 갱신했습니다.');
  });
  return <>
   <SectionHead eyebrow="VOICE TRAINING · MODEL REGISTRY · LOCAL VOCAL PREVIEW" title="Voice Training Manager" description="목소리 학습 데이터를 준비하고 샘플 기반 보컬 미리보기를 생성합니다. 실제 AI 보컬 학습·가사 합성은 미연결입니다. 가사·MIDI 싱크는 Music Studio에서 편집할 수 있습니다." action={<Button icon="mic" onClick={()=>navigate('voices')}>녹음 스튜디오</Button>}/>
