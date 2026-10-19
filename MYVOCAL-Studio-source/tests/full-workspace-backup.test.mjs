@@ -30,3 +30,12 @@ test('foreign ZIP payloads and oversized backups are refused',()=>{
  assert.throws(()=>parseFullWorkspaceZip(new Uint8Array(22)),/ZIP/);
  assert.throws(()=>emptyWorkspace({projects:{},voices:[],characters:[]}),/형식/);
 });
+
+test('rejects malformed voicebank, virtual singer and settings objects before export or import',async()=>{
+ const broken=[{voicebanks:{}},{virtualSingers:{foo:1}},{settings:[]},{settings:null}];
+ for(const change of broken){
+  const data={...sample(),...change};
+  await assert.rejects(createFullWorkspaceZip(data,[]),/형식/);
+  assert.throws(()=>emptyWorkspace(data),/형식/);
+ }
+});

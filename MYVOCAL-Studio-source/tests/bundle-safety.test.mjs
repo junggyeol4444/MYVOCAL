@@ -90,3 +90,16 @@ test('150 MiB allowed source media fits the single-asset encoded backup bound',(
  // Import must still reject a bundle that exceeds the original 150 MiB decoded total.
  assert.equal(MAX_TOTAL_MEDIA_BYTES,150*1024*1024);
 });
+
+test('v2 optional voice model and training plan lists are validated but old archives remain supported',()=>{
+ const base={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,profiles:{voices:[],characters:[]},assets:{}};
+ assert.equal(validateBundleEnvelope(base),base);
+ for(const bad of [null,{},'bad',[null],[{id:'',name:'x',voiceId:'v'}],[{id:'same',name:'x',voiceId:'v'},{id:'same',name:'y',voiceId:'v'}]]){
+  assert.throws(()=>validateBundleEnvelope({...base,profiles:{...base.profiles,voiceModels:bad}}),/프로필/);
+ }
+ assert.throws(()=>validateBundleEnvelope({...base,profiles:{...base.profiles,trainingPlans:[{id:'p',voiceId:'v'}]}}),/프로필/);
+ const valid={...base,profiles:{voices:[{id:'v',name:'Voice'}],characters:[],
+  voiceModels:[{id:'m',name:'model',voiceId:'v'}],
+  trainingPlans:[{id:'p',voiceId:'v',voiceName:'Voice'}]}};
+ assert.equal(validateBundleEnvelope(valid),valid);
+});

@@ -6,7 +6,7 @@ import {downloadProjectBundle,importProjectBundle} from '../lib/projectBundle';
 export default function Projects({data,navigate,createProject,remove,add,notify}){
  const [busy,setBusy]=React.useState('');
  const importProject=async e=>{const input=e.currentTarget;const f=input.files?.[0];if(!f)return;setBusy('프로젝트 복원 중');
-  try{const imported=await importProjectBundle(f);for(const v of imported.voices)add('voices',v);for(const c of imported.characters)add('characters',c);add('projects',imported.project);
+  try{const imported=await importProjectBundle(f);for(const v of imported.voices)add('voices',v);for(const c of imported.characters)add('characters',c);for(const m of imported.voiceModels||[])add('voiceModels',m);for(const job of imported.trainingPlans||[])add('trainingPlans',job);add('projects',imported.project);
    notify(imported.portable?'프로젝트와 첨부 파일을 복원했습니다.':'JSON 메타데이터를 복원했습니다. 오디오 원본은 포함되지 않은 형식입니다.');
   }catch(err){notify('가져오기 실패: '+err.message)}finally{setBusy('');input.value='';}};
  const exportFull=async p=>{setBusy('백업 생성 중');try{const count=await downloadProjectBundle(p,data);notify(`프로젝트 백업 완료 · 포함된 원본 파일 ${count}개`)}catch(e){notify('백업 실패: '+e.message)}finally{setBusy('')}};

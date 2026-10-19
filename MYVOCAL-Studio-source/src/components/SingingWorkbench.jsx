@@ -5,6 +5,7 @@ import {lyricVowel,VOWEL_NAMES,guessVowelModels,renderVowelSinging} from '../lib
 import {genId} from '../lib/schema';
 import {putFile,removeFile} from '../lib/assetDb';
 import {readAudioInfo} from '../lib/audioEngine';
+import {inspectSingingWav} from '../lib/singingOutputValidation.js';
 import {renderOfflineVocalGuide,renderOfflineVocalGuideSelection,guideSyllableSequence} from '../lib/offlineVocalGuide';
 import {hangulHint,singingCapabilitiesView,engineModelCompatibility,buildSingingRequest,appendRenderHistory} from '../lib/singingBridge';
 import EngineManager from './EngineManager';
@@ -87,7 +88,11 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   const compatibility=engineModelCompatibility(capability,checkpoint);
   if(!compatibility.ok)throw Error(compatibility.warning);
   const req=buildSingingRequest(number,p,alignment,voice,checkpoint,phonemePlan);
-  const res=await requestBridge('/api/singing/render',req),blob=await res.blob();if(blob.size<44)throw Error('엔진에서 유효한 WAV를 받지 못했습니다.');
+  const res=await requestBridge('/api/singing/render',req),blob=await res.blob();
+  const info=inspectSingingWav(await blob.arrayBuffer());
+  if(!info.valid)throw Error('엔진에서 손상된 WAV를 반환했습니다: '+info.reason);
+  if(info.durationSec>90||info.durationSec<0.03)throw Error('가창 WAV 길이가 허용된 범위를 벗어났습니다.');
+  if(info.peak<0.001)throw Error('가창 엔진에서 소리가 없는 WAV를 반환했습니다.');
   changeResult(blob,'engine',alignment.cues.length);
   const job={id:genId('singjob'),at:new Date().toISOString(),mode:capability?.mode==='demo'?'외부 데모':'외부 엔진',result:'WAV 수신',notes:alignment.cues.length,engine:capability?.name||'미확인'};
   onChange({...p,singingEngine:{port:number,modelId:checkpoint?.id||''},singingJobs:appendRenderHistory(p.singingJobs,job)});

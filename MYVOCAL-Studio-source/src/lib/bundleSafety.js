@@ -11,7 +11,14 @@ export function validateBundleEnvelope(input) {
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion !== 2) throw new Error('지원하지 않는 프로젝트 백업 버전입니다.');
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion === 2) {
   if (input.profiles != null && (typeof input.profiles !== 'object' || Array.isArray(input.profiles) || !Array.isArray(input.profiles.voices) || !Array.isArray(input.profiles.characters))) throw new Error('백업 프로필 목록이 잘못되었습니다.');
-  if (input.profiles && (input.profiles.voices.length > 500 || input.profiles.characters.length > 500)) throw new Error('백업 프로필 수가 제한을 초과했습니다.');
+  if (input.profiles) {
+   for (const group of ['voices','characters','voiceModels','trainingPlans']) {
+    if (input.profiles[group]!==undefined && !Array.isArray(input.profiles[group]))
+     throw new Error('백업 프로필 목록이 잘못되었습니다.');
+    if ((input.profiles[group]||[]).length > 500)
+     throw new Error('백업 프로필 수가 제한을 초과했습니다.');
+   }
+  }
   // Do not allow untrusted profile IDs to become object prototype properties.
   // Validate before the importer builds a map of regenerated voice/character IDs.
   if (input.profiles) {
@@ -19,11 +26,12 @@ export function validateBundleEnvelope(input) {
    // The importer uses one ID map for both libraries, so a cross-library
    // collision could silently connect a voice to the wrong profile.
    const seen = new Set();
-   for (const group of ['voices', 'characters']) {
-    for (const profile of input.profiles[group]) {
+   for (const group of ['voices', 'characters', 'voiceModels', 'trainingPlans']) {
+    for (const profile of input.profiles[group]||[]) {
      if (!profile || typeof profile !== 'object' || Array.isArray(profile) ||
          typeof profile.id !== 'string' || !profile.id || reservedIds.has(profile.id) ||
-         typeof profile.name !== 'string' || !profile.name || seen.has(profile.id)) {
+         (group==='trainingPlans' ? typeof profile.voiceName !== 'string' || !profile.voiceName : typeof profile.name !== 'string' || !profile.name) || seen.has(profile.id) ||
+         (group==='voiceModels'||group==='trainingPlans') && (typeof profile.voiceId !== 'string' || !profile.voiceId)) {
       throw new Error('백업 프로필 ID 또는 이름이 잘못되었습니다.');
      }
      seen.add(profile.id);

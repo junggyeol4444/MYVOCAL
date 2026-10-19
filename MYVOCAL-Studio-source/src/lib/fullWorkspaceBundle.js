@@ -42,9 +42,10 @@ export function readStoredWorkspaceZip(input){
 function validateData(data){
  if(!data||Array.isArray(data)||typeof data!=='object'||!Array.isArray(data.projects)||
     !Array.isArray(data.voices)||!Array.isArray(data.characters))fail('MYVOCAL 프로젝트 데이터 형식 오류');
- for(const key of ['projects','voices','characters','learning','trainingPlans','voiceModels','musicStyles','videoStyles']){
+ for(const key of ['projects','voices','characters','learning','trainingPlans','voiceModels','voicebanks','virtualSingers','musicStyles','videoStyles']){
   if(data[key]!==undefined&&!Array.isArray(data[key]))fail('프로필 목록 데이터 형식 오류: '+key);
  }
+ if(data.settings!==undefined && (!data.settings||typeof data.settings!=='object'||Array.isArray(data.settings)))fail('설정 데이터 형식 오류');
  return {...initialData,...data};
 }
 export function emptyWorkspace(data){
