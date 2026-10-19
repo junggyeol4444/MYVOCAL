@@ -149,6 +149,11 @@ jobs:
         shell: pwsh
         timeout-minutes: 7
         run: ./tests/windows-project-journey.ps1
+      - name: Diagnose native Windows file picker separately after GUI failure
+        if: failure()
+        shell: pwsh
+        timeout-minutes: 2
+        run: ./tests/windows-file-dialog-probe.ps1
       - name: Upload isolated Windows project journey evidence
         if: always()
         uses: actions/upload-artifact@v4
