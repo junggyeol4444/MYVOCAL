@@ -369,6 +369,14 @@ try {
   $report['stage'] = 'restore-project'
   $restoreFile = Join-Path $env:RUNNER_TEMP 'MYVOCAL-project-restore.myvocal.json'
   Copy-Item -LiteralPath $backup.FullName -Destination $restoreFile -Force
+  # WebView2 shows a Downloads flyout over the restore button after a successful
+  # backup download. Dismiss this browser-owned GUI overlay before clicking.
+  Add-Type -AssemblyName System.Windows.Forms
+  $window.SetFocus()
+  [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+  Start-Sleep -Milliseconds 300
+  [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+  Start-Sleep -Milliseconds 400
   Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
   $dialog = $null
   $root = [System.Windows.Automation.AutomationElement]::RootElement
