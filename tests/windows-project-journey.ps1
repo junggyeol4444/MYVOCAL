@@ -9,6 +9,15 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class MYVOCALRestoreInputClick {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+}
+'@
 
 function Wait-MYVOCALWindow {
   param([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds = 90)
@@ -419,7 +428,20 @@ try {
   if (-not $restoreButtonReady) { throw 'Restore button unavailable in clean ordinary-user EXE' }
   $buttonRect = $button.Current.BoundingRectangle
   if ($buttonRect.Width -le 20 -or $buttonRect.Height -le 15) { throw 'Restore button has no valid screen bounds' }
-  $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  # Click the file input itself, not React's former synthetic hidden-input
+  # button handler or UIA InvokePattern. The input covers the visible action.
+  $hwnd = [IntPtr]$window.Current.NativeWindowHandle
+  if ($hwnd -eq [IntPtr]::Zero) { throw 'No native MYVOCAL window handle for direct file-input click' }
+  $null = [MYVOCALRestoreInputClick]::SetForegroundWindow($hwnd)
+  Start-Sleep -Milliseconds 450
+  $centerX = [int][Math]::Round($buttonRect.X + $buttonRect.Width / 2)
+  $centerY = [int][Math]::Round($buttonRect.Y + $buttonRect.Height / 2)
+  if (-not [MYVOCALRestoreInputClick]::SetCursorPos($centerX,$centerY)) { throw 'Could not target native file input overlay' }
+  Start-Sleep -Milliseconds 150
+  [MYVOCALRestoreInputClick]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 90
+  [MYVOCALRestoreInputClick]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)
+  $report['restoreInputDirectClickAttempted'] = $true
   $root = [System.Windows.Automation.AutomationElement]::RootElement
   $winType = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
@@ -435,9 +457,7 @@ try {
       }
     }
     if ($null -ne $dialog) { break }
-    if ($i -gt 0 -and $i % 8 -eq 0) {
-      Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
-    }
+    # Avoid repeating the previous UIA/synthetic click after an absent dialog.
   }
   if ($null -eq $dialog) {
     $report['filePickerDeniedUnderOrdinaryUser'] = $true
