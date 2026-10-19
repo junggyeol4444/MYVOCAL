@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {validateMediaDataUrl,validateMediaMetadata} from '../src/lib/base64Safety.js';
+import {MAX_ASSET_DATA_URL_LENGTH} from '../src/lib/bundleSafety.js';
 test('accepts valid bounded media base64',()=>{
  assert.deepEqual(validateMediaDataUrl('data:audio/wav;base64,AAE=',8),{mime:'audio/wav',payload:'AAE='});
 });
@@ -26,4 +27,10 @@ test('rejects noncanonical padding bits and nested Base64 padding',()=>{
  }
  assert.equal(validateMediaDataUrl('data:audio/wav;base64,AA==').payload,'AA==');
  assert.equal(validateMediaDataUrl('data:audio/wav;base64,AAA=').payload,'AAA=');
+});
+
+test('data URL parser shares the import media ceiling and retains explicit smaller limits',()=>{
+ assert.ok(MAX_ASSET_DATA_URL_LENGTH > 130*1024*1024);
+ assert.equal(validateMediaDataUrl('data:video/webm;base64,AA==').payload,'AA==');
+ assert.throws(()=>validateMediaDataUrl('data:video/webm;base64,AAAA',3),/너무 큽니다/);
 });

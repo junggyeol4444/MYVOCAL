@@ -1,5 +1,6 @@
 // Strict, bounded base64 validation before allocating decoded media bytes.
-export function validateMediaDataUrl(value, maxBase64Length=130*1024*1024){
+import {MAX_ASSET_DATA_URL_LENGTH} from './bundleSafety.js';
+export function validateMediaDataUrl(value, maxBase64Length=MAX_ASSET_DATA_URL_LENGTH){
  if(typeof value!=='string')throw new Error('파일 데이터 형식이 잘못되었습니다.');
  const match=/^data:([a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*);base64,/.exec(value);
  if(!match)throw new Error('유효하지 않은 미디어 데이터 URL입니다.');

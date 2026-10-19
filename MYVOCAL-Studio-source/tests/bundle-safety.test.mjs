@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateBundleEnvelope,MAX_ASSETS} from '../src/lib/bundleSafety.js';
+import {validateBundleEnvelope,MAX_ASSETS,MAX_ASSET_DATA_URL_LENGTH,MAX_BUNDLE_BYTES,MAX_TOTAL_MEDIA_BYTES} from '../src/lib/bundleSafety.js';
 test('accepts legacy projects without changing them',()=>{const p={title:'old',tracks:[]};assert.equal(validateBundleEnvelope(p),p)});
 test('rejects malformed v2 assets before any writes',()=>{for(const assets of [null,[],{x:{dataUrl:'bad'}},{x:null}])assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets}))});
 test('rejects excessive asset count',()=>{const assets=Object.fromEntries(Array.from({length:MAX_ASSETS+1},(_,i)=>[String(i),{dataUrl:'data:;base64,AA=='}]));assert.throws(()=>validateBundleEnvelope({format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,assets}))});
@@ -81,4 +81,12 @@ test('rejects an ID collision between voice and character libraries',()=>{
  const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,
   profiles:{voices:[{id:'shared-1',name:'My Voice'}],characters:[{id:'shared-1',name:'My Character'}]},assets:{}};
  assert.throws(()=>validateBundleEnvelope(input),/프로필/);
+});
+
+test('150 MiB allowed source media fits the single-asset encoded backup bound',()=>{
+ const maxBase64Length=Math.ceil(MAX_TOTAL_MEDIA_BYTES/3)*4;
+ assert.ok(MAX_ASSET_DATA_URL_LENGTH >= maxBase64Length+'data:application/octet-stream;base64,'.length);
+ assert.ok(MAX_ASSET_DATA_URL_LENGTH < MAX_BUNDLE_BYTES);
+ // Import must still reject a bundle that exceeds the original 150 MiB decoded total.
+ assert.equal(MAX_TOTAL_MEDIA_BYTES,150*1024*1024);
 });
