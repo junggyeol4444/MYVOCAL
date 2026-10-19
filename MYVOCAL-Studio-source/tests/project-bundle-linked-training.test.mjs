@@ -21,21 +21,21 @@ test('project backup includes linked voice training, stored checkpoints and orig
  const data={
   voices:[{id:'voiceA',name:'Me',assets:[{id:'sampleA'}]},{id:'voiceB',name:'Other',assetId:'sampleB'}],
   characters:[],
-  voiceModels:[{id:'modelA',voiceId:'voiceA',name:'My checkpoint',assetId:'checkpointA'},{id:'modelB',voiceId:'voiceB',name:'Other',assetId:'checkpointB'}],
+  voiceModels:[{id:'modelA',voiceId:'voiceA',name:'My checkpoint',assetId:'checkpointA',sourceSampleId:'external-sample'},{id:'modelB',voiceId:'voiceB',name:'Other',assetId:'checkpointB'}],
   trainingPlans:[{id:'planA',voiceId:'voiceA',voiceName:'Me',sampleIds:['sampleA'],sampleSnapshot:[{id:'sampleA'}]},
    {id:'planB',voiceId:'voiceB',voiceName:'Other',sampleIds:['sampleB']}]
  };
  const profiles=linkedProfiles(project,data);
  assert.deepEqual(profiles.voiceModels.map(m=>m.id),['modelA']);
  assert.deepEqual(profiles.trainingPlans.map(p=>p.id),['planA']);
- assert.deepEqual(new Set(assetsOf(project,profiles)),new Set(['sampleA','checkpointA']));
+ assert.deepEqual(new Set(assetsOf(project,profiles)),new Set(['sampleA','checkpointA','external-sample']));
 });
 test('portable project restore remaps training job sample references, checkpoint bytes and project voice',async t=>{
  const files=sandbox(t);
  const media=(name,type,s)=>({name,type,dataUrl:`data:${type};base64,${Buffer.from(s).toString('base64')}`});
  const input={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,project:{id:'prj',title:'Song',voiceId:'voiceA',characterId:'',tracks:[],sections:[],scenes:[],singingEngine:{modelId:'modelA',port:7867}},
   profiles:{voices:[{id:'voiceA',name:'My voice',assets:[{id:'sampleA'}]}],characters:[],
-   voiceModels:[{id:'modelA',name:'Own checkpoint',voiceId:'voiceA',assetId:'checkpointA',engineId:'svc'}],
+   voiceModels:[{id:'modelA',name:'Own checkpoint',voiceId:'voiceA',assetId:'checkpointA',sourceSampleId:'sampleA',engineId:'svc'}],
    trainingPlans:[{id:'planA',voiceId:'voiceA',voiceName:'My voice',sampleIds:['sampleA'],sampleSnapshot:[{id:'sampleA',fileName:'voice.wav'}]}]},
   assets:{sampleA:media('voice.wav','audio/wav',[1,2,3,4]),checkpointA:media('model.onnx','application/octet-stream',[5,6,7])}};
  const imported=await importProjectBundle(new File([JSON.stringify(input)],'backup.json',{type:'application/json'}));
@@ -44,6 +44,8 @@ test('portable project restore remaps training job sample references, checkpoint
  assert.notEqual(v.id,'voiceA');assert.equal(m.voiceId,v.id);assert.equal(p.voiceId,v.id);
  assert.notEqual(m.id,'modelA');assert.equal(imported.project.singingEngine.modelId,m.id);
  assert.notEqual(m.assetId,'checkpointA');assert.ok(files.has(m.assetId));
+ assert.equal(m.sourceSampleId,v.assets[0].id,'restored model must point at restored sample');
+ assert.notEqual(m.sourceSampleId,'sampleA');
  assert.notEqual(p.sampleIds[0],'sampleA');assert.equal(p.sampleIds[0],v.assets[0].id);
  assert.equal(p.sampleSnapshot[0].id,p.sampleIds[0]);
  assert.deepEqual([...new Uint8Array(await files.get(m.assetId).arrayBuffer())],[5,6,7]);
