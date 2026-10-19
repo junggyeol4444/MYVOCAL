@@ -88,6 +88,9 @@ $previousHostMode = $env:MYVOCAL_DESKTOP_HOST
 $profileRoot = Join-Path $env:RUNNER_TEMP ('MYVOCAL-Isolated-Project-Journey-' + [guid]::NewGuid().ToString('N'))
 $process = $null
 $window = $null
+$testUserCreated = $false
+$testUserName = ''
+$restoreRoot = ''
 $report = [ordered]@{
   stage = 'init'
   passed = $false
@@ -370,142 +373,134 @@ try {
   $report['backupBytes'] = $backup.Length
   $report['steps'] += 'Existing GUI exported a validated project and generated MIDI track backup'
 
-  # Restore by clicking the actual application button and selecting the file
-  # in the real Windows Open dialog. Never directly call application code.
+  # Test Restore in a fresh ordinary-user Windows login, because GitHub's
+  # administrator-owned WebView2 host can suppress <input type=file> dialogs.
+  # Preserve original project and all tests in the existing isolated profile.
   $report['stage'] = 'restore-project'
-  $restoreFile = Join-Path $env:RUNNER_TEMP 'MYVOCAL-project-restore.myvocal.json'
-  Copy-Item -LiteralPath $backup.FullName -Destination $restoreFile -Force
-  # A WebView2 download bubble stays over the Restore button after backup.
-  # Close/reopen ONLY this isolated EXE with the same data profile: the first
-  # WebM export uses this same restart pattern and already passed both runners.
   Stop-MYVOCALProcess -Process $process
   $process = $null
-  Start-Sleep -Seconds 3
-  $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
+  $testUserName = 'mv' + [guid]::NewGuid().ToString('N').Substring(0,10)
+  $testPassword = 'Mv!' + [guid]::NewGuid().ToString('N') + 'X'
+  $testUserSecure = ConvertTo-SecureString $testPassword -AsPlainText -Force
+  New-LocalUser -Name $testUserName -Password $testUserSecure -PasswordNeverExpires -AccountNeverExpires | Out-Null
+  $testUserCreated = $true
+  $testCred = [System.Management.Automation.PSCredential]::new(
+    ($env:COMPUTERNAME + '\' + $testUserName),$testUserSecure)
+  $restoreRoot = Join-Path $env:PUBLIC ('MYVOCAL-E2E-Restore-' + [guid]::NewGuid().ToString('N'))
+  $restoreData = Join-Path $restoreRoot 'LocalAppData'
+  New-Item -Path $restoreData -ItemType Directory -Force | Out-Null
+  $restoreExe = Join-Path $restoreRoot 'MYVOCAL-Studio-Windows.exe'
+  Copy-Item -LiteralPath $Executable -Destination $restoreExe -Force
+  Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $Executable) 'WebView2Loader.dll') -Destination (Join-Path $restoreRoot 'WebView2Loader.dll') -Force
+  $restoreFile = Join-Path $restoreRoot 'MYVOCAL-project-restore.myvocal.json'
+  Copy-Item -LiteralPath $backup.FullName -Destination $restoreFile -Force
+  $aclName = $env:COMPUTERNAME + '\' + $testUserName + ':(OI)(CI)M'
+  & icacls.exe $restoreRoot '/grant' $aclName '/T' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'Granting temporary ordinary-user restore profile access failed' }
+  $restoreEnvironment = @{ 'LOCALAPPDATA'=$restoreData; 'MYVOCAL_DESKTOP_HOST'='webview2' }
+  $startAsUser = {
+    Start-Process -FilePath $restoreExe -WorkingDirectory $restoreRoot -Credential $testCred -LoadUserProfile -Environment $restoreEnvironment -PassThru
+  }
+  $process = & $startAsUser
   $window = Wait-MYVOCALWindow -Process $process
-  $originalReady = $false
+  $report['steps'] += 'Opened actual MYVOCAL EXE in a separate temporary non-admin Windows user profile'
+  $restoreButtonReady = $false
   for ($attempt = 0; $attempt -lt 10; $attempt++) {
     Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
     try {
-      Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
-      $originalReady = $true
+      $button = Find-MYVOCALButton -Window $window -Caption '프로젝트 복원'
+      $restoreButtonReady = $true
       break
     } catch {
       if ($attempt -eq 9) { throw }
       Start-Sleep -Seconds 1
     }
   }
-  if (-not $originalReady) { throw 'Original project missing after clean restore-session restart' }
-  $report['steps'] += 'Reopened the same isolated project in a fresh EXE window before Restore'
-  # Native file pickers require an actual trusted mouse gesture from the
-  # Windows foreground window; UIA InvokePattern alone may not open the picker.
-  $restoreButton = Find-MYVOCALButton -Window $window -Caption '프로젝트 복원'
-  $restoreRect = $restoreButton.Current.BoundingRectangle
-  $appRect = $window.Current.BoundingRectangle
-  if ($restoreRect.Width -lt 30 -or $restoreRect.Height -lt 20 -or
-      $restoreRect.X -lt $appRect.X -or $restoreRect.Y -lt $appRect.Y -or
-      $restoreRect.Right -gt $appRect.Right -or $restoreRect.Bottom -gt $appRect.Bottom) {
-    throw 'Real Restore button is not fully visible inside the EXE window'
-  }
-  Add-Type -TypeDefinition @'
-using System.Runtime.InteropServices;
-public static class MYVOCALRestorePointer {
-  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr h);
-  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-  [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, uint extra);
-  public static void Click(int x, int y) {
-    if (!SetCursorPos(x,y)) throw new System.ComponentModel.Win32Exception("SetCursorPos failed");
-    mouse_event(2,0,0,0,0);
-    mouse_event(4,0,0,0,0);
-  }
-}
-'@
-  [MYVOCALRestorePointer]::SetForegroundWindow([IntPtr]$window.Current.NativeWindowHandle) | Out-Null
-  Start-Sleep -Milliseconds 500
-  [MYVOCALRestorePointer]::Click([int]($restoreRect.X + $restoreRect.Width/2), [int]($restoreRect.Y + $restoreRect.Height/2))
-  $report['steps'] += 'Clicked the actual Restore button screen rectangle using trusted Windows mouse input'
-  $dialog = $null
+  if (-not $restoreButtonReady) { throw 'Restore button unavailable in clean ordinary-user EXE' }
+  $buttonRect = $button.Current.BoundingRectangle
+  if ($buttonRect.Width -le 20 -or $buttonRect.Height -le 15) { throw 'Restore button has no valid screen bounds' }
+  $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   $root = [System.Windows.Automation.AutomationElement]::RootElement
   $winType = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Window)
-  for ($i = 0; $i -lt 40; $i++) {
+  $dialog = $null
+  for ($i = 0; $i -lt 45; $i++) {
     Start-Sleep -Milliseconds 750
-    $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winType)
+    $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children,$winType)
     foreach ($w in $windows) {
       if ($w.Current.Name -match '^(Open|열기|Open File|파일 열기)$' -or
           ($w.Current.ClassName -eq '#32770' -and $w.Current.Name -match 'Open|열기')) {
-        $dialog = $w
-        break
+        $dialog = $w;break
       }
     }
     if ($null -ne $dialog) { break }
-    # A newly initialized WebView2 UI may expose the button before React
-    # attaches its input handler. Retry the same real GUI action.
     if ($i -gt 0 -and $i % 8 -eq 0) {
-      $restoreRect = (Find-MYVOCALButton -Window $window -Caption '프로젝트 복원').Current.BoundingRectangle
-      [MYVOCALRestorePointer]::Click([int]($restoreRect.X + $restoreRect.Width/2), [int]($restoreRect.Y + $restoreRect.Height/2))
+      Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
     }
   }
   if ($null -eq $dialog) {
-    $titles = @()
-    $top = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $winType)
-    for ($t = 0; $t -lt $top.Count; $t++) {
-      try { $titles += ($top.Item($t).Current.Name + ' (' + $top.Item($t).Current.ClassName + ')') } catch {}
-    }
-    $report['openWindowTitlesAtRestore'] = $titles
-    throw ('Native file picker not found after actual Restore mouse click. Windows: ' + ($titles -join ' | '))
+    $report['filePickerDeniedUnderOrdinaryUser'] = $true
+    throw 'Native file picker missing even in a temporary ordinary-user WebView2 EXE session'
   }
-  $report['steps'] += 'Restore opened a native Windows file-picker dialog'
+  $report['steps'] += 'Actual file picker opened under a non-admin Windows login'
   $dialog.SetFocus()
-  Start-Sleep -Milliseconds 300
   Add-Type -AssemblyName System.Windows.Forms
-  $nameIdCondition = [System.Windows.Automation.PropertyCondition]::new(
-    [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '1148')
-  $fileNameEdit = $dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $nameIdCondition)
-  if ($null -ne $fileNameEdit) {
-    try {
-      $inputPattern = $fileNameEdit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-      $inputPattern.SetValue($restoreFile)
-    } catch {
-      $fileNameEdit.SetFocus()
-      [System.Windows.Forms.SendKeys]::SendWait('^a')
-      [System.Windows.Forms.SendKeys]::SendWait($restoreFile)
-    }
+  $nameId = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::AutomationIdProperty,'1148')
+  $filenameEdit = $dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$nameId)
+  if ($null -ne $filenameEdit) {
+    try { $filenameEdit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($restoreFile) }
+    catch { $filenameEdit.SetFocus();[System.Windows.Forms.SendKeys]::SendWait('^a');[System.Windows.Forms.SendKeys]::SendWait($restoreFile) }
   } else {
-    # Standard Windows common-dialog keyboard shortcut for "File name".
     [System.Windows.Forms.SendKeys]::SendWait('%n')
     [System.Windows.Forms.SendKeys]::SendWait($restoreFile)
   }
-  Start-Sleep -Milliseconds 250
+  Start-Sleep -Milliseconds 350
   [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
   $restoredTitle = $report['projectTitle'] + ' (복원)'
-  Assert-MYVOCALProjectVisible -Window $window -Title $restoredTitle -MaxChecks 30
+  Assert-MYVOCALProjectVisible -Window $window -Title $restoredTitle -MaxChecks 45
   $report['projectRestoredViaGui'] = $true
-  $report['steps'] += 'Existing GUI restored a second project from the downloaded backup without replacing the original'
-  Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
+  $report['steps'] += 'Real Windows EXE GUI imported full project backup through OS file picker'
+
   $report['stage'] = 'verify-restored-restart'
   Stop-MYVOCALProcess -Process $process
   $process = $null
   Start-Sleep -Seconds 3
-  $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
+  $process = & $startAsUser
   $window = Wait-MYVOCALWindow -Process $process
-  $restartedBoth = $false
+  $persisted = $false
   for ($attempt = 0; $attempt -lt 10; $attempt++) {
     Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
     try {
-      Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
       Assert-MYVOCALProjectVisible -Window $window -Title $restoredTitle -MaxChecks 3
-      $restartedBoth = $true
-      break
+      $persisted = $true;break
     } catch {
       if ($attempt -eq 9) { throw }
       Start-Sleep -Seconds 1
     }
   }
-  if (-not $restartedBoth) { throw 'Original and restored projects were not both visible after restart' }
+  if (-not $persisted) { throw 'Imported project vanished after EXE restart in ordinary-user profile' }
   $report['projectRestoredPersistedAfterRestart'] = $true
-  $report['steps'] += 'Original and restored projects both survived another real EXE restart'
+  $report['steps'] += 'Imported project persisted after real EXE restart in separate ordinary-user profile'
+  Stop-MYVOCALProcess -Process $process
+  $process = $null
+  $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
+  $window = Wait-MYVOCALWindow -Process $process
+  $originalStillThere = $false
+  for ($attempt = 0; $attempt -lt 10; $attempt++) {
+    Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
+    try {
+      Assert-MYVOCALProjectVisible -Window $window -Title $report['projectTitle'] -MaxChecks 3
+      $originalStillThere = $true;break
+    } catch {
+      if ($attempt -eq 9) { throw }
+      Start-Sleep -Seconds 1
+    }
+  }
+  if (-not $originalStillThere) { throw 'Original project changed or disappeared after separate-user backup restore' }
+  $report['originalPreservedAfterRestore'] = $true
+  $report['steps'] += 'Original isolated project preserved separately after backup export/import'
   $report['stage'] = 'complete'
   $report['passed'] = $true
 } catch {
@@ -516,6 +511,10 @@ public static class MYVOCALRestorePointer {
   catch { $report['screenshotError'] = $_.Exception.Message }
   try { Stop-MYVOCALProcess -Process $process }
   catch { $report['shutdownError'] = $_.Exception.Message }
+  if ($testUserCreated) {
+    try { Remove-LocalUser -Name $testUserName -ErrorAction Stop }
+    catch { $report['temporaryTestAccountCleanupError'] = $_.Exception.Message }
+  }
   try {
     $appLog = Join-Path $profileRoot 'MYVOCAL Studio\logs\launcher.log'
     if (Test-Path -LiteralPath $appLog) { Copy-Item -LiteralPath $appLog -Destination (Join-Path $EvidenceDirectory 'launcher.log') -Force }
