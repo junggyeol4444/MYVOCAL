@@ -9,6 +9,16 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class MYVOCALRestoreInputClick {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string className, string windowName);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+}
+'@
 
 function Wait-MYVOCALWindow {
   param([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds = 90)
@@ -373,37 +383,23 @@ try {
   $report['backupBytes'] = $backup.Length
   $report['steps'] += 'Existing GUI exported a validated project and generated MIDI track backup'
 
-  # Test Restore in a fresh ordinary-user Windows login, because GitHub's
-  # administrator-owned WebView2 host can suppress <input type=file> dialogs.
-  # Preserve original project and all tests in the existing isolated profile.
+  # The previous separate-user Windows GUI was visibly opening the native
+  # picker, but its shell tried to access C:\Users\runneradmin\Desktop
+  # and showed an Access denied modal. Keep the disposable LOCALAPPDATA
+  # data sandbox while restoring under the SAME desktop login used for
+  # the successful project creation, backup and export GUI actions.
   $report['stage'] = 'restore-project'
   Stop-MYVOCALProcess -Process $process
   $process = $null
-  $testUserName = 'mv' + [guid]::NewGuid().ToString('N').Substring(0,10)
-  $testPassword = 'Mv!' + [guid]::NewGuid().ToString('N') + 'X'
-  $testUserSecure = ConvertTo-SecureString $testPassword -AsPlainText -Force
-  New-LocalUser -Name $testUserName -Password $testUserSecure -PasswordNeverExpires -AccountNeverExpires | Out-Null
-  $testUserCreated = $true
-  $testCred = [System.Management.Automation.PSCredential]::new(
-    ($env:COMPUTERNAME + '\' + $testUserName),$testUserSecure)
-  $restoreRoot = Join-Path $env:PUBLIC ('MYVOCAL-E2E-Restore-' + [guid]::NewGuid().ToString('N'))
-  $restoreData = Join-Path $restoreRoot 'LocalAppData'
-  New-Item -Path $restoreData -ItemType Directory -Force | Out-Null
-  $restoreExe = Join-Path $restoreRoot 'MYVOCAL-Studio-Windows.exe'
-  Copy-Item -LiteralPath $Executable -Destination $restoreExe -Force
-  Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $Executable) 'WebView2Loader.dll') -Destination (Join-Path $restoreRoot 'WebView2Loader.dll') -Force
-  $restoreFile = Join-Path $restoreRoot 'MYVOCAL-project-restore.myvocal.json'
-  Copy-Item -LiteralPath $backup.FullName -Destination $restoreFile -Force
-  $aclName = $env:COMPUTERNAME + '\' + $testUserName + ':(OI)(CI)M'
-  & icacls.exe $restoreRoot '/grant' $aclName '/T' | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw 'Granting temporary ordinary-user restore profile access failed' }
-  $restoreEnvironment = @{ 'LOCALAPPDATA'=$restoreData; 'MYVOCAL_DESKTOP_HOST'='webview2' }
-  $startAsUser = {
-    Start-Process -FilePath $restoreExe -WorkingDirectory $restoreRoot -Credential $testCred -LoadUserProfile -Environment $restoreEnvironment -PassThru
+  Start-Sleep -Seconds 3
+  $restoreFile = $backup.FullName
+  $startRestoredSession = {
+    Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
   }
-  $process = & $startAsUser
+  $process = & $startRestoredSession
   $window = Wait-MYVOCALWindow -Process $process
-  $report['steps'] += 'Opened actual MYVOCAL EXE in a separate temporary non-admin Windows user profile'
+  $report['restoreUserContext'] = 'existing-isolated-Windows-runner-desktop'
+  $report['steps'] += 'Opened EXE after restart under existing Windows GUI login with unchanged isolated app data'
   $restoreButtonReady = $false
   for ($attempt = 0; $attempt -lt 10; $attempt++) {
     Invoke-MYVOCALButton -Window $window -Caption '내 프로젝트'
@@ -416,10 +412,23 @@ try {
       Start-Sleep -Seconds 1
     }
   }
-  if (-not $restoreButtonReady) { throw 'Restore button unavailable in clean ordinary-user EXE' }
+  if (-not $restoreButtonReady) { throw 'Restore button unavailable in restarted Windows EXE' }
   $buttonRect = $button.Current.BoundingRectangle
   if ($buttonRect.Width -le 20 -or $buttonRect.Height -le 15) { throw 'Restore button has no valid screen bounds' }
-  $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+  # Click the file input itself, not React's former synthetic hidden-input
+  # button handler or UIA InvokePattern. The input covers the visible action.
+  $hwnd = [IntPtr]$window.Current.NativeWindowHandle
+  if ($hwnd -eq [IntPtr]::Zero) { throw 'No native MYVOCAL window handle for direct file-input click' }
+  $null = [MYVOCALRestoreInputClick]::SetForegroundWindow($hwnd)
+  Start-Sleep -Milliseconds 450
+  $centerX = [int][Math]::Round($buttonRect.X + $buttonRect.Width / 2)
+  $centerY = [int][Math]::Round($buttonRect.Y + $buttonRect.Height / 2)
+  if (-not [MYVOCALRestoreInputClick]::SetCursorPos($centerX,$centerY)) { throw 'Could not target native file input overlay' }
+  Start-Sleep -Milliseconds 150
+  [MYVOCALRestoreInputClick]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 90
+  [MYVOCALRestoreInputClick]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)
+  $report['restoreInputDirectClickAttempted'] = $true
   $root = [System.Windows.Automation.AutomationElement]::RootElement
   $winType = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
@@ -435,15 +444,26 @@ try {
       }
     }
     if ($null -ne $dialog) { break }
-    if ($i -gt 0 -and $i % 8 -eq 0) {
-      Invoke-MYVOCALButton -Window $window -Caption '프로젝트 복원'
+    # Some runner accessibility trees omit desktop dialogs despite a visible
+    # Win32 '#32770' Open window. Check its HWND rather than falsely reporting
+    # that the picker was never opened. Do not click the input repeatedly.
+    $pickerHwnd = [MYVOCALRestoreInputClick]::FindWindow('#32770','Open')
+    if ($pickerHwnd -eq [IntPtr]::Zero) {
+      $pickerHwnd = [MYVOCALRestoreInputClick]::FindWindow('#32770','열기')
     }
+    if ($pickerHwnd -ne [IntPtr]::Zero) {
+      $report['filePickerVisibleViaWin32'] = $true
+      try { $dialog = [System.Windows.Automation.AutomationElement]::FromHandle($pickerHwnd) }
+      catch { $report['filePickerUIAFromHandleError'] = $_.Exception.Message }
+      if ($null -ne $dialog) { break }
+    }
+    # Avoid repeating the previous UIA/synthetic click after an absent dialog.
   }
   if ($null -eq $dialog) {
-    $report['filePickerDeniedUnderOrdinaryUser'] = $true
-    throw 'Native file picker missing even in a temporary ordinary-user WebView2 EXE session'
+    $report['filePickerMissingInRunnerSession'] = $true
+    throw 'Native file picker not detected by Windows GUI test after direct input click'
   }
-  $report['steps'] += 'Actual file picker opened under a non-admin Windows login'
+  $report['steps'] += 'Native file picker opened after direct input click in the same isolated Windows GUI session'
   $dialog.SetFocus()
   Add-Type -AssemblyName System.Windows.Forms
   $nameId = [System.Windows.Automation.PropertyCondition]::new(
@@ -467,7 +487,7 @@ try {
   Stop-MYVOCALProcess -Process $process
   $process = $null
   Start-Sleep -Seconds 3
-  $process = & $startAsUser
+  $process = & $startRestoredSession
   $window = Wait-MYVOCALWindow -Process $process
   $persisted = $false
   for ($attempt = 0; $attempt -lt 10; $attempt++) {
@@ -480,9 +500,9 @@ try {
       Start-Sleep -Seconds 1
     }
   }
-  if (-not $persisted) { throw 'Imported project vanished after EXE restart in ordinary-user profile' }
+  if (-not $persisted) { throw 'Imported project vanished after EXE restart in isolated Windows profile' }
   $report['projectRestoredPersistedAfterRestart'] = $true
-  $report['steps'] += 'Imported project persisted after real EXE restart in separate ordinary-user profile'
+  $report['steps'] += 'Imported project persisted after real EXE restart in same isolated Windows profile'
   Stop-MYVOCALProcess -Process $process
   $process = $null
   $process = Start-Process -FilePath $Executable -WorkingDirectory (Split-Path -Parent $Executable) -PassThru
@@ -498,59 +518,12 @@ try {
       Start-Sleep -Seconds 1
     }
   }
-  if (-not $originalStillThere) { throw 'Original project changed or disappeared after separate-user backup restore' }
+  if (-not $originalStillThere) { throw 'Original project changed or disappeared after backup restore' }
   $report['originalPreservedAfterRestore'] = $true
-  $report['steps'] += 'Original isolated project preserved separately after backup export/import'
+  $report['steps'] += 'Original isolated project preserved after GUI backup export/import without overwrite'
   $report['stage'] = 'complete'
   $report['passed'] = $true
 } catch {
-  # Independent native OpenFileDialog control probe under the SAME temporary
-  # non-admin Windows account that just ran the MYVOCAL restore GUI.
-  # This does not click MYVOCAL, change any project, or replace the failed result.
-  if ($report['stage'] -eq 'restore-project' -and $testUserCreated -and $restoreRoot -and $null -ne $testCred) {
-    $report['sameUserNativePickerProbe'] = 'not-run'
-    $control = $null
-    try {
-      $pickerScript = Join-Path $restoreRoot 'MYVOCAL-OrdinaryUser-NativePicker-Probe.ps1'
-      @'
-Add-Type -AssemblyName System.Windows.Forms
-$picker = [System.Windows.Forms.OpenFileDialog]::new()
-$picker.Title = 'MYVOCAL Same User Native Picker Control'
-$picker.Filter = 'JSON files (*.json)|*.json'
-[void]$picker.ShowDialog()
-'@ | Set-Content -LiteralPath $pickerScript -Encoding UTF8
-      $powershell = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
-      $control = Start-Process -FilePath $powershell -WorkingDirectory $restoreRoot -Credential $testCred -LoadUserProfile -ArgumentList @('-NoProfile','-STA','-File',('"'+$pickerScript+'"')) -PassThru
-      $windowType = [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-        [System.Windows.Automation.ControlType]::Window)
-      $rootElement = [System.Windows.Automation.AutomationElement]::RootElement
-      $shown = $false
-      for ($attempt=0; $attempt -lt 30; $attempt++) {
-        Start-Sleep -Milliseconds 500
-        $windows = $rootElement.FindAll([System.Windows.Automation.TreeScope]::Children,$windowType)
-        foreach ($candidate in $windows) {
-          if ($candidate.Current.Name -eq 'MYVOCAL Same User Native Picker Control') {
-            $shown = $true
-            $report['sameUserNativePickerClass'] = $candidate.Current.ClassName
-            break
-          }
-        }
-        if ($shown) { break }
-        $control.Refresh()
-        if ($control.HasExited) { $report['sameUserControlExitedEarly'] = $true;break }
-      }
-      $report['sameUserNativePickerProbe'] = if ($shown) {'visible'} else {'not-visible'}
-    } catch {
-      $report['sameUserNativePickerProbe'] = 'diagnostic-error'
-      $report['sameUserNativePickerProbeError'] = $_.Exception.Message
-    } finally {
-      if ($null -ne $control) {
-        try { $control.Refresh();if (-not $control.HasExited) { Stop-Process -Id $control.Id -Force -ErrorAction Stop } }
-        catch { $report['sameUserPickerCleanupError'] = $_.Exception.Message }
-      }
-    }
-  }
   $report['error'] = $_.Exception.ToString()
   throw
 } finally {
