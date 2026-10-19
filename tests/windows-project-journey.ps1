@@ -504,6 +504,53 @@ try {
   $report['stage'] = 'complete'
   $report['passed'] = $true
 } catch {
+  # Independent native OpenFileDialog control probe under the SAME temporary
+  # non-admin Windows account that just ran the MYVOCAL restore GUI.
+  # This does not click MYVOCAL, change any project, or replace the failed result.
+  if ($report['stage'] -eq 'restore-project' -and $testUserCreated -and $restoreRoot -and $null -ne $testCred) {
+    $report['sameUserNativePickerProbe'] = 'not-run'
+    $control = $null
+    try {
+      $pickerScript = Join-Path $restoreRoot 'MYVOCAL-OrdinaryUser-NativePicker-Probe.ps1'
+      @'
+Add-Type -AssemblyName System.Windows.Forms
+$picker = [System.Windows.Forms.OpenFileDialog]::new()
+$picker.Title = 'MYVOCAL Same User Native Picker Control'
+$picker.Filter = 'JSON files (*.json)|*.json'
+[void]$picker.ShowDialog()
+'@ | Set-Content -LiteralPath $pickerScript -Encoding UTF8
+      $powershell = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
+      $control = Start-Process -FilePath $powershell -WorkingDirectory $restoreRoot -Credential $testCred -LoadUserProfile -ArgumentList @('-NoProfile','-STA','-File',('"'+$pickerScript+'"')) -PassThru
+      $windowType = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Window)
+      $rootElement = [System.Windows.Automation.AutomationElement]::RootElement
+      $shown = $false
+      for ($attempt=0; $attempt -lt 30; $attempt++) {
+        Start-Sleep -Milliseconds 500
+        $windows = $rootElement.FindAll([System.Windows.Automation.TreeScope]::Children,$windowType)
+        foreach ($candidate in $windows) {
+          if ($candidate.Current.Name -eq 'MYVOCAL Same User Native Picker Control') {
+            $shown = $true
+            $report['sameUserNativePickerClass'] = $candidate.Current.ClassName
+            break
+          }
+        }
+        if ($shown) { break }
+        $control.Refresh()
+        if ($control.HasExited) { $report['sameUserControlExitedEarly'] = $true;break }
+      }
+      $report['sameUserNativePickerProbe'] = if ($shown) {'visible'} else {'not-visible'}
+    } catch {
+      $report['sameUserNativePickerProbe'] = 'diagnostic-error'
+      $report['sameUserNativePickerProbeError'] = $_.Exception.Message
+    } finally {
+      if ($null -ne $control) {
+        try { $control.Refresh();if (-not $control.HasExited) { Stop-Process -Id $control.Id -Force -ErrorAction Stop } }
+        catch { $report['sameUserPickerCleanupError'] = $_.Exception.Message }
+      }
+    }
+  }
   $report['error'] = $_.Exception.ToString()
   throw
 } finally {
