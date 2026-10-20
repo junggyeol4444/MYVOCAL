@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Empty,Field,Icon,Notice,Panel,SectionHead,Modal} from '../components/UI';
 import VirtualBand90Editor from '../components/VirtualBand90Editor.jsx';
+import LocalAiStoryboardPanel from '../components/LocalAiStoryboardPanel.jsx';
 import Pv95Editor from '../components/Pv95Editor.jsx';
 import {interpretMvInstruction93,applyMvInstruction93,undoMvInstruction93} from '../lib/mvNaturalEdit93.js';
 import {prepareCharacterReplace94,applyCharacterReplace94,undoCharacterReplace94} from '../lib/characterReplace94.js';
@@ -353,6 +354,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  if(!p)return <>{!embedded&&<SectionHead eyebrow="VIDEO STUDIO" title={mode==='pv'?'Vocal Synth PV':'Music Video Studio'}/>}<Empty icon="video" title="프로젝트를 먼저 만들어 주세요" description="각 프로젝트에서 씬 구성과 캐릭터 연출을 설정할 수 있습니다." action={<Button variant="primary" icon="plus" onClick={()=>navigate('create')}>프로젝트 만들기</Button>}/></>;
  return <>{!embedded&&<SectionHead eyebrow={mode==='pv'?'VOCAL SYNTH PV':'STORYBOARD EDITOR'} title={mode==='pv'?'Vocal Synth PV':'Music Video Studio'} description="곡에 맞춰 장면을 편집하고, 실제 화면과 음악을 이어 WebM 뮤직비디오로 저장합니다." action={<Button icon="folder" onClick={()=>navigate('projects')}>프로젝트 보기</Button>}/>}
  <div className="video-project-banner"><Icon name="music" size={20}/><strong>{p.title}</strong><span>·</span><span>{p.bpm} BPM</span><span className="banner-stretch"/><span>Step78 로컬 SVD 장면별 영상 클립 연결</span></div>
+ <LocalAiStoryboardPanel project={p} onChange={onChange} notify={notify}/>
  <Panel title="STEP93 · AI 영상 자연어 수정" description="로컬 명령 문법으로 선택한 장면의 속성 하나만 안전하게 편집합니다. 미리보기·확인 후 적용하며 AI 모델 추론이 아닙니다.">
  <Field label="장면 자연어 명령"><input aria-label="Step93 자연어 명령" maxLength={500} value={natural93} onChange={e=>{setNatural93(e.target.value);setReview93(null);}} placeholder="배경을 비 오는 밤거리로 바꿔"/></Field>
  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}><Button disabled={!current} onClick={reviewNatural93}>변경 내용 검토</Button><Button disabled={!review93} onClick={applyNatural93}>검토한 수정 적용</Button><Button disabled={!p.videoEdits93?.history?.length} onClick={()=>{try{onChange(undoMvInstruction93(p));notify('직전 장면 문구 복원 완료');}catch(e){notify(e.message);}}}>직전 수정 되돌리기</Button></div>
