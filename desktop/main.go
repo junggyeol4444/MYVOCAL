@@ -104,6 +104,8 @@ func (a *appServer) routes() *http.ServeMux {
 	mux.HandleFunc("/api/character-mv/generate", a.characterMVGenerate)
 	mux.HandleFunc("/api/video/health", a.videoHealth)
 	mux.HandleFunc("/api/video/generate", a.videoGenerate)
+	mux.HandleFunc("/api/video/mp4/status", a.mvMP4Status)
+	mux.HandleFunc("/api/video/mp4", a.mvMP4Convert)
 	mux.HandleFunc("/api/openutau/inspect", a.openUtauInspect)
 	mux.HandleFunc("/api/singing/health", a.singingHealth)
 	mux.HandleFunc("/api/singing/capabilities", a.singingCapabilities)

@@ -4,12 +4,13 @@ import {getFile} from '../lib/assetDb.js';
 import {AudioEngine,audioEnd,mixdownWav} from '../lib/audioEngine.js';
 import {planMvVideoRender,loadMvVideoAssets,findMvVideoScene,drawMvVideoFrame,syncMvPreviewClips,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT} from '../lib/mvVideoRender.js';
 import {recordMvWebm,assertMvExportEnvironment} from '../lib/mvWebmRecorder.js';
+import {queryLocalMp4Status,convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {buildMvLyricCaptions} from '../lib/mvLyricCaptions.js';
 
-function saveMovie(blob,project){
+function saveMovie(blob,project,extension='webm'){
  const name=String(project.title||'myvocal').replace(/[^가-힣A-Za-z0-9_-]/g,'_').slice(0,64);
  const url=URL.createObjectURL(blob),a=document.createElement('a');
- a.href=url;a.download=`MYVOCAL-${name}-music-video.webm`;
+ a.href=url;a.download=`MYVOCAL-${name}-music-video.${extension}`;
  document.body.append(a);a.click();a.remove();
  setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
@@ -17,6 +18,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  const canvas=useRef(null),abort=useRef(null),mounted=useRef(true),previewAudio=useRef(null);
  const [prepared,setPrepared]=useState(null),[loadError,setLoadError]=useState('');
  const [busy,setBusy]=useState(false),[progress,setProgress]=useState(0),[includeSound,setIncludeSound]=useState(true),[showCaptions,setShowCaptions]=useState(true);
+ const [mp4Status,setMp4Status]=useState({ready:false,message:'로컬 FFmpeg 확인 중…'});
  let plan=null,planError='';
  try{plan=planMvVideoRender(project,characters);}catch(e){planError=e.message;}
  const assetsSignature=JSON.stringify((project?.scenes||[]).map(s=>[s.id,s.imageAssetId,s.videoClipAssetId,s.videoGeneration?.mime]));
@@ -26,6 +28,12 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  const captionSignature=JSON.stringify(lyricCaptions.captions);
  const sceneTimeline=JSON.stringify(plan?.scenes.map(s=>[s.id,s.start,s.end,s.title])||[]);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;abort.current?.abort();previewAudio.current?.stop();};},[]);
+ useEffect(()=>{
+  const controller=new AbortController();
+  queryLocalMp4Status({session:window.__MYVOCAL_SESSION_KEY||'',signal:controller.signal})
+   .then(value=>{if(!controller.signal.aborted)setMp4Status(value);}).catch(()=>{});
+  return()=>controller.abort();
+ },[]);
  useEffect(()=>{
   if(!previewAudio.current)previewAudio.current=new AudioEngine();
   const audio=previewAudio.current;
@@ -54,8 +62,9 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
   syncMvPreviewClips(plan.scenes,prepared.assets,activeScene,playing,positionSeconds);
   try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0,{captions:lyricCaptions.captions,showCaptions:captionsEnabled});}catch{}
  },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,captionSignature]);
- const startExport=async()=>{
+ const startExport=async(format='webm')=>{
   if(!plan||busy)return;
+  if(format==='mp4'&&!mp4Status.ready){notify('MP4 내보내기 준비 안 됨: '+mp4Status.message);return;}
   const controller=new AbortController();abort.current=controller;
   setBusy(true);setProgress(0);
   let resources=null;
@@ -70,8 +79,15 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
     signal:controller.signal,onProgress:n=>{if(mounted.current)setProgress(n);}
    });
    if(controller.signal.aborted)throw Error('영상 저장을 취소했습니다.');
-   saveMovie(result.blob,project);
-   notify(`장면 ${plan.scenes.length}개 · ${plan.durationSec.toFixed(1)}초짜리 실제 WebM 영상을 저장했습니다. 음악 ${useAudio?'포함':'제외'} · 싱크 가사 자막 ${captionsEnabled?'포함':'제외'}.`);
+   if(format==='mp4'){
+    const mp4=await convertRecordedWebMToMP4(result.blob,{session:window.__MYVOCAL_SESSION_KEY||'',signal:controller.signal});
+    if(controller.signal.aborted)throw Error('MP4 저장을 취소했습니다.');
+    saveMovie(mp4,project,'mp4');
+    notify(`전체 MV MP4 저장: ${plan.durationSec.toFixed(1)}초 · 음악 ${useAudio?'포함':'제외'} · 싱크 자막 ${captionsEnabled?'포함':'제외'}.`);
+   }else{
+    saveMovie(result.blob,project);
+    notify(`장면 ${plan.scenes.length}개 · ${plan.durationSec.toFixed(1)}초짜리 실제 WebM 영상을 저장했습니다. 음악 ${useAudio?'포함':'제외'} · 싱크 가사 자막 ${captionsEnabled?'포함':'제외'}.`);
+   }
   }catch(e){notify('MV 영상 저장 실패: '+e.message);}
   finally{resources?.dispose();if(mounted.current){setBusy(false);setProgress(0);}abort.current=null;}
  };
@@ -89,12 +105,14 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
   <div className="hstack" style={{gap:12,flexWrap:'wrap',alignItems:'center'}}>
    <label className="muted"><input type="checkbox" disabled={!musicExists||busy} checked={includeSound&&musicExists} onChange={e=>setIncludeSound(e.target.checked)}/> 기존 곡의 음악·보컬 믹스 포함 {musicExists?'':'(재생 가능한 음악 없음)'}</label>
    <label className="muted"><input type="checkbox" aria-label="가사 싱크 자막 영상 포함" disabled={lyricCaptions.status!=='ready'||busy} checked={captionsEnabled} onChange={e=>setShowCaptions(e.target.checked)}/> 싱크된 가사 자막 포함 {lyricCaptions.status==='ready'?(`(${lyricCaptions.captions.length}개 구간)`):'(가사 싱크 확인 필요)'}</label>
-   <Button icon="download" variant="primary" disabled={!prepared||!!loadError||busy} onClick={startExport}>{busy?`WebM 기록 중 ${progress}%`:'전체 MV WebM 저장'}</Button>
+   <Button icon="download" variant="primary" disabled={!prepared||!!loadError||busy} onClick={()=>startExport('webm')}>{busy?`MV 처리 중 ${progress}%`:'전체 MV WebM 저장'}</Button>
+   <Button icon="download" disabled={!mp4Status.ready||!prepared||!!loadError||busy} onClick={()=>startExport('mp4')}>전체 MV MP4 저장 (설치된 FFmpeg)</Button>
    {busy&&<Button onClick={()=>abort.current?.abort()}>저장 취소</Button>}
   </div>
   <p className="muted">{lyricCaptions.note}</p>
+  <p className="muted">전체 MV MP4: {mp4Status.message}. Windows EXE에서 설치된 FFmpeg로 기존 WebM 원본을 실제 H.264/AAC MP4로 변환합니다. 새 AI 영상 생성이나 외부 인터넷 전송은 하지 않습니다.</p>
   {busy&&<progress aria-label="MV 영상 저장 진행률" max="100" value={progress} style={{width:'100%',marginTop:12}}/>}
-  <p className="muted">640×360 · 12fps · 최대 5분 · 실시간 녹화(WebView2의 WebM 지원 필요). 영상 길이만큼 프로그램 창을 켜 두어야 합니다. MP4가 아닌 WebM으로 저장하며, 모델 없는 장면은 AI 영상으로 바뀌지 않습니다.</p>
+  <p className="muted">640×360 · 12fps · 최대 5분 · 실시간 녹화(WebView2의 WebM 지원 필요). 영상 길이만큼 프로그램 창을 켜 두어야 합니다. WebM은 그대로 제공하며, MP4는 로컬 FFmpeg가 설치된 경우에만 별도 변환됩니다. 모델 없는 장면은 AI 영상으로 바뀌지 않습니다.</p>
   </>:<Notice>{planError}</Notice>}
  </Panel>;
 }
