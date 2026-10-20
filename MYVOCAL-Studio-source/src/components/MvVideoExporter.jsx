@@ -105,7 +105,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
   <div className="hstack" style={{gap:12,flexWrap:'wrap',alignItems:'center'}}>
    <label className="muted"><input type="checkbox" disabled={!musicExists||busy} checked={includeSound&&musicExists} onChange={e=>setIncludeSound(e.target.checked)}/> 기존 곡의 음악·보컬 믹스 포함 {musicExists?'':'(재생 가능한 음악 없음)'}</label>
    <label className="muted"><input type="checkbox" aria-label="가사 싱크 자막 영상 포함" disabled={lyricCaptions.status!=='ready'||busy} checked={captionsEnabled} onChange={e=>setShowCaptions(e.target.checked)}/> 싱크된 가사 자막 포함 {lyricCaptions.status==='ready'?(`(${lyricCaptions.captions.length}개 구간)`):'(가사 싱크 확인 필요)'}</label>
-   <Button icon="download" variant="primary" disabled={!prepared||!!loadError||busy} onClick={()=>startExport('webm')}>{busy?`MV 처리 중 ${progress}%`:'전체 MV WebM 저장'}</Button>
+   <Button icon="download" variant="primary" disabled={!prepared||!!loadError||busy} onClick={()=>startExport('webm')}>{busy?`WebM 기록 중 ${progress}%`:'전체 MV WebM 저장'}</Button>
    <Button icon="download" disabled={!mp4Status.ready||!prepared||!!loadError||busy} onClick={()=>startExport('mp4')}>전체 MV MP4 저장 (설치된 FFmpeg)</Button>
    {busy&&<Button onClick={()=>abort.current?.abort()}>저장 취소</Button>}
   </div>
