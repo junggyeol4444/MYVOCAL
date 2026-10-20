@@ -71,3 +71,39 @@ test('server-invalid ComfyUI options fail before requesting remote images or wri
  }
  assert.equal(calls,0);
 });
+
+test('batch can use a licensed original portrait via local img2img then SVD without txt2img',async()=>{
+ const person={id:'person1',kind:'person',name:'나',rights:'self',assets:[{id:'photo1',role:'portrait',type:'image/png'}]};
+ let p={...base,scenes:[{...base.scenes[0],characterId:'person1',personMv:{personId:'person1',referenceAssetId:'photo1',denoise:.35}}]};
+ let modelInputs=[],plainCalls=0;
+ const media=new Map([['photo1',new File(['user reference'],'source.png',{type:'image/png'})]]);
+ assert.equal(planMvBatch(p).total,0);
+ assert.equal(planMvBatch(p,{includeReferences:true}).total,1);
+ await runMvBatch({project:p,data:{characters:[person]},includeReferences:true,checkpoint:'sd.safetensors',videoModel:'svd.safetensors',port:8188,session:'token',current:()=>p,commit:next=>p=next,
+  generateImage:async()=>plainCalls++,
+  generateReferencePerson:async params=>{modelInputs.push(params);return new Blob(['image result'],{type:'image/png'})},
+  generateVideo:async()=>new Blob(['clip result'],{type:'image/webp'}),
+  sourceFrame:async()=> 'data:image/png;base64,REF',loadFile:async id=>media.get(id),
+  saveFile:async(id,file)=>{assert.equal(media.has(id),false);media.set(id,file)},
+  idFactory:kind=>kind==='img'?'img_reference_1':'vid_reference_1'});
+ assert.equal(modelInputs.length,1);assert.equal(modelInputs[0].denoise,.35);
+ assert.equal(modelInputs[0].imageData,'data:image/png;base64,REF');assert.equal(plainCalls,0);
+ assert.equal(p.scenes[0].imageGeneration.source,'ComfyUI local person img2img');
+ assert.equal(p.scenes[0].videoClipAssetId,'vid_reference_1');
+ assert.ok(media.has('photo1'));
+});
+test('unlicensed person reference cannot trigger any remote inference or mutate project',async()=>{
+ const p={...base,scenes:[{...base.scenes[0],characterId:'p1',personMv:{personId:'p1',referenceAssetId:'photo1',denoise:.35}}]},orig=JSON.stringify(p);
+ let calls=0;
+ await assert.rejects(runMvBatch({project:p,data:{characters:[{id:'p1',kind:'person',rights:'reference',assets:[{id:'photo1',role:'portrait',type:'image/png'}]}]},
+ includeReferences:true,checkpoint:'sd.safetensors',videoModel:'svd.safetensors',port:8188,session:'token',current:()=>p,commit:()=>calls++,
+ generateReferencePerson:async()=>calls++}),/허가|본인|사용/);
+ assert.equal(calls,0);assert.equal(JSON.stringify(p),orig);
+});
+test('registered character image missing: stop before ComfyUI, keep user original',async()=>{
+ const p={...base,scenes:[{...base.scenes[0],characterId:'c1',characterMv:{characterId:'c1',referenceAssetId:'a1',denoise:.3}}]};
+ let calls=0;await assert.rejects(runMvBatch({project:p,data:{characters:[{id:'c1',kind:'character',rights:'owned',assets:[{id:'a1',role:'front',type:'image/png'}]}]},includeReferences:true,
+ checkpoint:'sd.safetensors',videoModel:'svd.safetensors',port:8188,session:'token',current:()=>p,commit:()=>calls++,
+ generateReferenceCharacter:async()=>calls++,loadFile:async()=>null}),/원본 PNG/);
+ assert.equal(calls,0);
+});
