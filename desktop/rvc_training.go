@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"embed"
 	"errors"
 	"fmt"
 	"io"
@@ -17,10 +18,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+//go:embed rvc_official_worker.py
+var embeddedRVCOfficialWorker embed.FS
 
 const maxRVCTrainingBundle = 151 << 20
 const maxRVCTrainedModel = 200 << 20
@@ -32,6 +38,10 @@ type rvcTrainingOptions struct {
 	Script  string
 	Args    []string
 	VoiceID string
+	Mode string
+	Epochs int
+	BatchSize int
+	GPU string
 }
 type rvcTrainingRunner func(context.Context, rvcTrainingOptions, string, string, io.Writer) error
 
@@ -78,6 +88,16 @@ func (m *rvcTrainingManager) stop() {
 func validateTrainingOptions(o rvcTrainingOptions) error {
 	if o.VoiceID == "" || len(o.VoiceID) > 128 || strings.ContainsAny(o.VoiceID, "/\\\r\n\x00") {
 		return errors.New("목소리 ID가 올바르지 않습니다")
+	}
+	if o.Mode != "" && o.Mode != "custom" && o.Mode != "official" { return errors.New("지원하지 않는 RVC 학습 방식입니다") }
+	if o.Mode == "official" {
+		if len(o.Root)>1024 || len(o.Python)>1024 || !filepath.IsAbs(o.Root) || !filepath.IsAbs(o.Python) || strings.ContainsAny(o.Root+o.Python,"\x00\r\n") { return errors.New("공식 RVC 및 Python 절대 경로가 필요합니다") }
+		if err := ensureRegular(o.Python);err!=nil{return fmt.Errorf("Python 실행 파일: %w",err)}
+		gpu,err:=strconv.Atoi(o.GPU);if err!=nil||gpu<0||gpu>15||o.Epochs<1||o.Epochs>1000||o.BatchSize<1||o.BatchSize>64 { return errors.New("공식 RVC 에포크·배치·GPU 값이 올바르지 않습니다") }
+		for _,name:=range []string{"train/preprocess.py","train/dataset/extract_f0.py","train/dataset/extract_hubert_feature.py","train/train.py","infer/cli.py","configs/v2/48k.json","assets/hubert_base/config.json","assets/pretrained_v2/f0G48k.pth","assets/pretrained_v2/f0D48k.pth"} {
+			if err:=ensureRegular(filepath.Join(o.Root,filepath.FromSlash(name)));err!=nil{return fmt.Errorf("공식 RVC 파일 %s: %w",name,err)}
+		}
+		return nil
 	}
 	if len(o.Root) > 1024 || len(o.Python) > 1024 || len(o.Script) > 1024 || !filepath.IsAbs(o.Root) || !filepath.IsAbs(o.Python) || !filepath.IsAbs(o.Script) {
 		return errors.New("학습 프로그램과 Python의 절대 경로를 지정하세요")
@@ -260,6 +280,29 @@ func plausibleTorchCheckpoint(path string) bool {
 	return (head[0] == 'P' && head[1] == 'K' && head[2] == 3 && head[3] == 4) || (head[0] == 0x80 && head[1] >= 2 && head[1] <= 5)
 }
 func runRVCTraining(ctx context.Context, o rvcTrainingOptions, dataset, output string, log io.Writer) error {
+	if o.Mode=="official" {
+		raw,err:=embeddedRVCOfficialWorker.ReadFile("rvc_official_worker.py");if err!=nil{return err}
+		script:=filepath.Join(filepath.Dir(dataset),"rvc_official_worker.py")
+		if err=os.WriteFile(script,raw,0600);err!=nil{return err}
+		defer os.Remove(script)
+		var id [16]byte;if _,err=rand.Read(id[:]);err!=nil{return err}
+		expName:="myvocal_"+hex.EncodeToString(id[:])
+		expDir:=filepath.Join(o.Root,"logs",expName)
+		defer func(){
+			marker:=filepath.Join(expDir,".myvocal-experiment")
+			info,statErr:=os.Lstat(expDir);proofInfo,proofErr:=os.Lstat(marker)
+			if statErr!=nil||!info.IsDir()||info.Mode()&os.ModeSymlink!=0||proofErr!=nil||!proofInfo.Mode().IsRegular(){return}
+			proof,readErr:=os.ReadFile(marker)
+			if readErr==nil&&string(proof)==expName{_ = os.RemoveAll(expDir)}
+		}()
+		cmd:=exec.CommandContext(ctx,o.Python,script,"--root",o.Root,"--dataset",dataset,"--output",output,"--epochs",strconv.Itoa(o.Epochs),"--batch-size",strconv.Itoa(o.BatchSize),"--gpu",o.GPU,"--experiment-name",expName)
+		cmd.Dir=o.Root;cmd.Stdin=nil;cmd.Stdout=log;cmd.Stderr=log
+		if runtime.GOOS=="windows" {
+			cmd.Cancel=func()error{if cmd.Process==nil{return os.ErrProcessDone};kill:=exec.Command("taskkill","/PID",strconv.Itoa(cmd.Process.Pid),"/T","/F");if err:=kill.Run();err!=nil{return cmd.Process.Kill()};return nil}
+		}
+		if err=cmd.Run();err!=nil{return fmt.Errorf("RVC 전처리/F0/HuBERT/학습 실패: %w",err)}
+		return nil
+	}
 	args := []string{o.Script}
 	for _, x := range o.Args {
 		args = append(args, strings.ReplaceAll(strings.ReplaceAll(x, "{dataset}", dataset), "{output}", output))
@@ -322,7 +365,9 @@ func (a *appServer) rvcTrainingStartWith(w http.ResponseWriter, r *http.Request,
 		jsonError(w, 400, "학습 인수는 JSON 문자열 배열이어야 합니다")
 		return
 	}
-	o := rvcTrainingOptions{Root: r.FormValue("root"), Python: r.FormValue("python"), Script: r.FormValue("script"), Args: args, VoiceID: r.FormValue("voiceId")}
+	epochs,_:=strconv.Atoi(r.FormValue("epochs"))
+	batch,_:=strconv.Atoi(r.FormValue("batchSize"))
+	o := rvcTrainingOptions{Root:r.FormValue("root"),Python:r.FormValue("python"),Script:r.FormValue("script"),Args:args,VoiceID:r.FormValue("voiceId"),Mode:r.FormValue("mode"),Epochs:epochs,BatchSize:batch,GPU:r.FormValue("gpu")}
 	if err := validateTrainingOptions(o); err != nil {
 		jsonError(w, 400, err.Error())
 		return

@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {transcribeStemToMidi} from '../src/lib/stemMidiClient.js';
 function input(){return new File([new Uint8Array(44+500)],'stem.wav',{type:'audio/wav'});}
-const midi=()=>new Blob([new Uint8Array([77,84,104,100,...Array(30).fill(0)])],{type:'audio/midi'});
+// Valid Type 0 MIDI: one middle-C note followed by end-of-track.
+const midi=()=>new Blob([new Uint8Array([
+  77,84,104,100,0,0,0,6,0,0,0,1,1,224,
+  77,84,114,107,0,0,0,13,
+  0,144,60,64,131,96,128,60,0,0,255,47,0
+])],{type:'audio/midi'});
 test('installed neural MIDI request returns parsed notes, not synthetic empty track',async()=>{
  let calls=0;
  const request=async(path,opt)=>{calls++;assert.equal(path,'/api/music/stems/midi');assert.equal(opt.body.get('python'),'C:\\AI\\python.exe');assert.equal(opt.headers['X-MYVOCAL-Session'],'session');return {ok:true,headers:{get:()=> 'audio/midi'},blob:async()=>midi()};};
