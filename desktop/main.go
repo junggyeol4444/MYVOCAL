@@ -95,6 +95,8 @@ func (a *appServer) routes() *http.ServeMux {
 	})
 	mux.HandleFunc("/api/system/readiness", a.systemReadiness)
 	mux.HandleFunc("/api/system/migration/complete", a.finishNativeMigration)
+	mux.HandleFunc("/api/local-ai/models", a.localAIModels)
+	mux.HandleFunc("/api/local-ai/compose", a.localAICompose)
 	mux.HandleFunc("/api/images/health", a.imageHealth)
 	mux.HandleFunc("/api/images/generate", a.imageGenerate)
 	mux.HandleFunc("/api/person-mv/generate", a.personMVGenerate)

@@ -2,6 +2,7 @@ import React,{useState} from 'react';
 import {Button,Notice,Panel} from './UI';
 import {generateOfflineDraft,applyComposition,songMoods,songLengths,COMPOSER_PARTS} from '../lib/composer';
 import GenreMixEditor from './GenreMixEditor';
+import LocalAiComposerPanel from './LocalAiComposerPanel.jsx';
 import {alignLyricNotes} from '../lib/lyricAlignment';
 import {resolveGenreMix,validateGenreMix,genreMixText} from '../lib/genreMix';
 
@@ -27,7 +28,7 @@ export default function Songwriter({project:p,onChange,notify}){
    if(parts.lyrics&&parts.midi&&!p.vocalAlignment)
     updated={...updated,vocalAlignment:alignLyricNotes(updated)};
   }catch(e){setError(e.message);return;}onChange(updated);
-  notify(`${draft.source==='openai-lyrics'?'AI 가사 제안':'로컬 작곡 초안'}을 적용했습니다. 보컬 가사 싱크를 확인하고 가창 작업실에서 WAV를 만들 수 있습니다.`);
+  notify(`${draft.source==='ollama-local'?'로컬 AI 가사·코드 제안':draft.source==='openai-lyrics'?'AI 가사 제안':'로컬 작곡 초안'}을 적용했습니다. 보컬 가사 싱크를 확인하고 가창 작업실에서 WAV를 만들 수 있습니다.`);
  };
  const notes=draft?.midiTracks?.reduce((s,t)=>s+t.midiNotes.length,0)||0;
  return <div className="mv4-composer">
@@ -40,11 +41,12 @@ export default function Songwriter({project:p,onChange,notify}){
     <div className="mv4-form-row"><label className="mv4-label">조성<select value={key} onChange={e=>setKey(e.target.value)}>{['C Major','G Major','D Major','A Major','E Major','F Major','Bb Major','A Minor','E Minor','B Minor','D Minor','G Minor','F# Minor'].map(k=><option key={k}>{k}</option>)}</select></label><label className="mv4-label">BPM<input value={bpm} type="number" min="40" max="240" onChange={e=>setBpm(e.target.value)}/></label><label className="mv4-label">마디<select value={bars} onChange={e=>setBars(+e.target.value)}>{songLengths.map(n=><option value={n} key={n}>{n} 마디</option>)}</select></label></div>
     <Notice>곡 설정과 장르 혼합·구간별 장르를 기반으로 가사 템플릿, 화성, 멜로디, 리듬을 PC에서 생성합니다. 외부 API 호출은 없습니다.</Notice>
     <Button variant="primary" className="full-width" icon="spark" onClick={draftOffline}>로컬 작곡 초안 생성 · 다른 변형 만들기</Button>
+    <LocalAiComposerPanel options={opts} onDraft={d=>{setDraft(d);setError('')}} notify={notify}/>
     {error&&<div className="mv4-error" role="alert">{error}</div>}
    </div>
    <div className="panel mv4-preview">
     <div className="panel-top"><div><h3>생성 결과 미리보기</h3><p>프로젝트 변경 전 가사와 코드, 트랙 구성을 확인하세요.</p></div></div>
-    {draft?<><div className="mv4-meta"><span>{draft.source==='openai-lyrics'?'OpenAI 가사':'로컬 규칙 작곡'}</span><span>{draft.bpm} BPM · {draft.key}</span><span>{draft.genreMix?genreMixText(draft.genreMix):draft.genre}</span><span>{draft.bars}마디 / MIDI {notes}개</span></div>
+    {draft?<><div className="mv4-meta"><span>{draft.source==='ollama-local'?'설치된 로컬 AI 모델':draft.source==='openai-lyrics'?'OpenAI 가사':'로컬 규칙 작곡'}</span><span>{draft.bpm} BPM · {draft.key}</span><span>{draft.genreMix?genreMixText(draft.genreMix):draft.genre}</span><span>{draft.bars}마디 / MIDI {notes}개</span></div>
       <div className="mv4-preview-parts"><h4>코드 진행</h4><div className="mv4-chordchips">{draft.chords.slice(0,12).map((ch,i)=><span key={i}>{ch.symbol} <small>{ch.bar}마디</small></span>)}</div></div>
       <div className="mv4-preview-parts"><h4>트랙 미리보기</h4><div className="mv4-tracklist">{draft.midiTracks.map(t=><div key={t.role}><span>{t.name}</span><strong>{t.midiNotes.length} Notes</strong></div>)}</div></div>
       <div className="mv4-preview-parts"><h4>가사 초안</h4><pre className="mv4-lyrics-preview">{draft.lyrics}</pre></div>
@@ -52,6 +54,6 @@ export default function Songwriter({project:p,onChange,notify}){
     </>:<div className="mv4-placeholder"><strong>아직 초안이 없습니다.</strong><p>왼쪽에서 로컬 작곡 초안을 생성하세요.</p></div>}
    </div>
   </div>
-  {p.compositionHistory?.length>0&&<div className="panel mv4-history"><h3>작곡 적용 기록</h3>{[...p.compositionHistory].reverse().map((x,i)=><div key={i}><span>{x.source==='openai-lyrics'?'AI 제안 + MIDI':'로컬 작곡'}</span><strong>{x.title}</strong><small>{x.notes} 음표 · {new Date(x.time).toLocaleString('ko-KR')}</small></div>)}</div>}
+  {p.compositionHistory?.length>0&&<div className="panel mv4-history"><h3>작곡 적용 기록</h3>{[...p.compositionHistory].reverse().map((x,i)=><div key={i}><span>{x.source==='ollama-local'?'로컬 AI 제안 + MIDI':x.source==='openai-lyrics'?'AI 제안 + MIDI':'로컬 작곡'}</span><strong>{x.title}</strong><small>{x.notes} 음표 · {new Date(x.time).toLocaleString('ko-KR')}</small></div>)}</div>}
  </div>;
 }
