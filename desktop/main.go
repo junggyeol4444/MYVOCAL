@@ -110,6 +110,7 @@ func (a *appServer) routes() *http.ServeMux {
 	mux.HandleFunc("/api/singing/health", a.singingHealth)
 	mux.HandleFunc("/api/singing/capabilities", a.singingCapabilities)
 	mux.HandleFunc("/api/singing/render", a.singingRender)
+	mux.HandleFunc("/api/singing/rvc/convert", a.rvcConvert)
 	mux.HandleFunc("/api/singing/engine/status", a.engineManagerStatus)
 	mux.HandleFunc("/api/singing/engine/start", a.engineManagerStart)
 	mux.HandleFunc("/api/singing/engine/stop", a.engineManagerStop)

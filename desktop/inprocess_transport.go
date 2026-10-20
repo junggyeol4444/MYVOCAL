@@ -20,6 +20,7 @@ const nativeInprocessMaxResponseBytes=80 << 20
 // MP4 converter; its real WebM source and MP4 result can exceed 16/80 MiB.
 func inprocessLimits(method,path string)(int,int){
  if method==http.MethodPost && path=="/api/video/mp4" {return int(maxMVWebMBytes),int(maxMVMP4Bytes)}
+ if method==http.MethodPost && path=="/api/singing/rvc/convert" {return int(maxRVCRequestBytes),int(maxRVCResponseBytes)}
  return nativeInprocessMaxRequestBytes,nativeInprocessMaxResponseBytes
 }
 

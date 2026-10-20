@@ -10,6 +10,7 @@ import {renderOfflineVocalGuide,renderOfflineVocalGuideSelection,guideSyllableSe
 import {hangulHint,singingCapabilitiesView,engineModelCompatibility,buildSingingRequest,appendRenderHistory} from '../lib/singingBridge';
 import {renderLongSinging} from '../lib/longSingingRender.js';
 import EngineManager from './EngineManager';
+import RvcVoiceConversion from './RvcVoiceConversion.jsx';
 import {isPhonemePlanStale} from '../lib/phonemePlan';
 
 const guideVowelLabel=v=>({a:'ㅏ',eo:'ㅓ',o:'ㅗ',u:'ㅜ',eu:'ㅡ',i:'ㅣ'})[v]||v;
@@ -136,6 +137,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    {alignment&&<Notice>가사 발음 힌트: {alignment.cues.filter(c=>c.lyric?.trim()&&c.lyric.trim()!=='—').slice(0,5).map(c=>`${c.lyric.slice(0,8)} → ${guideSyllableSequence(c.lyric).map(s=>`${guideOnsetLabel(s.onset)}+${guideVowelLabel(s.vowel)}`).join('·')}`).join(' / ')||'가사가 있는 음표 없음'} · 한 음표 최대 24음절 · 자음 힌트는 실제 발음이 아닙니다.</Notice>}
    {!alignment&&<Notice>먼저 가사·MIDI 싱크를 생성하세요. 등록된 목소리가 없어도 실행할 수 있습니다.</Notice>}
   </Panel>
+  <RvcVoiceConversion project={p} onChange={onChange} notify={notify}/>
   <Panel title="C. 별도 로컬 Singing 엔진 연결" description="Windows EXE가 같은 PC의 127.0.0.1에 사용자가 실행한 별도 로컬 프로세스로 가사·음표·모델 참조를 보내고 WAV를 받아옵니다. v1.2부터 설치된 엔진의 프로세스를 직접 시작할 수 있습니다.">
    <EngineManager port={port} onPort={setPort} requestBridge={requestBridge} notify={notify}/>
    <div className="mv10-grid"><Field label="로컬 엔진 포트"><input aria-label="외부 엔진 포트" value={port} onChange={e=>{setPort(e.target.value);setBridgeState('연결 확인 전');setCapability(null)}} placeholder="7867" inputMode="numeric"/></Field>
