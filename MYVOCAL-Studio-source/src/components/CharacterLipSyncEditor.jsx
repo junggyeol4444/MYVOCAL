@@ -5,9 +5,10 @@ import {readAudioInfo} from '../lib/audioEngine';
 import {getFile} from '../lib/assetDb.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
 import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
+import {isAlignmentStale} from '../lib/lyricAlignment.js';
 export default function CharacterLipSyncEditor({character,onSave,notify,projects=[]}){
  const [source,setSource]=useState(character.lipSync?lipSyncLines(character.lipSync):'0.000,0.300,ㅁ,마\n0.300,0.600,ㅏ,마');
- const eligible=(projects||[]).filter(p=>p?.vocalAlignment?.cues?.length);
+ const eligible=(projects||[]).filter(p=>p?.vocalAlignment?.cues?.length&&!isAlignmentStale(p,p.vocalAlignment));
  const [projectId,setProjectId]=useState(''),[assetId,setAssetId]=useState(''),[audio,setAudio]=useState(null),[processing,setProcessing]=useState(false),[audioError,setAudioError]=useState('');
  const activeProject=eligible.find(p=>p.id===projectId)||eligible[0];
  const storedVocal=projectVocalSources(activeProject);
@@ -32,6 +33,7 @@ export default function CharacterLipSyncEditor({character,onSave,notify,projects
  const [time,setTime]=useState(0);let result,error='';try{result=parseLipSyncLines(source);}catch(e){error=e.message;}
  const duration=result?.cues.at(-1)?.endMs/1000||0;const active=result?visemeAt(result,time):{viseme:'sil',weight:0,lyric:''};
  return <div className="modal-form"><Notice>STEP85 · 캐릭터 Lip Sync. 음소 타이밍은 자동 추측하지 않습니다. Singing에서 확보한 시간 또는 직접 검토한 시간을 초 단위로 입력하세요. 기존 2D 입 영역과 3D VRM 표정 모프에 연결됩니다. 모델에 해당 모프가 없으면 3D 입 모양은 변하지 않습니다.</Notice>
+ <Notice>프로젝트 MIDI·가사가 바뀌어 이전 싱크가 오래된 경우에는 Singing 작업실에서 싱크를 다시 생성해야 합니다.</Notice>
  <Notice>실제 보컬 WAV의 음량과 프로젝트 가사·MIDI 싱크를 사용해 입 모양을 제안합니다. 음소 자동 인식·신경망 얼굴 변형은 아니며, 만들어진 시간표를 아래에서 수정·검토한 뒤 저장하세요.</Notice>
  {eligible.length>0&&<><Field label="가사·MIDI가 있는 프로젝트"><select value={projectId||eligible[0].id} disabled={processing} onChange={e=>{setProjectId(e.target.value);setAssetId("");setAudioError("")}}>{eligible.map(p=><option key={p.id} value={p.id}>{p.title||p.id}</option>)}</select></Field>
  {storedVocal.length>0&&<><Field label="프로젝트에 저장된 보컬 WAV"><select value={selectedStoredId} disabled={processing} onChange={e=>setAssetId(e.target.value)}>{storedVocal.map(s=><option key={s.assetId} value={s.assetId}>{s.trackName} · {s.name}</option>)}</select></Field>

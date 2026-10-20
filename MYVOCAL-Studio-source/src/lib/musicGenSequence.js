@@ -68,9 +68,10 @@ export function joinMusicGenWaves(waves,{crossfadeSec=.5}={}){
 export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec=.5,prompts=[],signal,onProgress=()=>{},generate=generateMusicGenAudio,session}={}){
  if(!Number.isInteger(segments)||segments<2||segments>MAX_SEQUENCE_SEGMENTS)throw Error('긴 반주는 2~8구간이어야 합니다.');
  musicGenSettingsValid(settings);
+ if(!Number.isFinite(crossfadeSec)||crossfadeSec<.1||crossfadeSec>1.5||crossfadeSec>=settings.seconds/2)throw Error('크로스페이드는 0.1~1.5초, 구간 길이보다 충분히 짧아야 합니다.');
  if(!Number.isInteger(settings.seed)||settings.seed+segments-1>2147483647)throw Error('랜덤 시드 범위가 초과됐습니다.');
  if(!Array.isArray(prompts)||prompts.length>MAX_SEQUENCE_SEGMENTS||prompts.some(x=>typeof x!=='string'||[...x].length>600))throw Error('구간별 음악 설명이 올바르지 않습니다.');
- const parts=[];
+ const parts=[];let baseline=null;
  for(let i=0;i<segments;i++){
   if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.');
   const prompt=prompts[i]?.trim()||settings.prompt;
@@ -79,6 +80,12 @@ export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec
   if(!(segment instanceof Blob))throw Error('MusicGen이 실제 WAV를 반환하지 않았습니다.');
   const bytes=new Uint8Array(await segment.arrayBuffer());
   if(bytes.length>12*1024*1024)throw Error('MusicGen 구간 파일 용량 초과');
+  assertUsableSingingWav(bytes,{maxDurationSec:30});
+  const part=parsePcm16(bytes);
+  if(part.frames/part.rate<=crossfadeSec)throw Error('MusicGen 구간이 연결에 너무 짧습니다.');
+  if(baseline&&(part.channels!==baseline.channels||part.rate!==baseline.rate))
+   throw Error('MusicGen 모델이 구간마다 다른 샘플레이트·채널 WAV를 생성했습니다. 모델 설정을 확인하세요.');
+  baseline||={channels:part.channels,rate:part.rate};
   parts.push(bytes);
   onProgress(i+1,segments);
  }

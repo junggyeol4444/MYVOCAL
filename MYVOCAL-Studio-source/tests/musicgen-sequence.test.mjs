@@ -40,3 +40,14 @@ test('cancellation after a segment stops all later inferences and delivers no ou
  await assert.rejects(generateMusicGenSequence({python:'D:\\AI\\python.exe',modelDir:'D:\\Music',prompt:'Cinematic rock',seconds:3,seed:3},{segments:4,signal:controller.signal,generate:async()=>{calls++;controller.abort();return new Blob([wav(3)],{type:'audio/wav'});}}),/취소/);
  assert.equal(calls,1);
 });
+
+test('invalid fade is rejected before spending any local GPU inference',async()=>{
+ let calls=0;
+ await assert.rejects(generateMusicGenSequence({python:'D:\\AI\\python.exe',modelDir:'D:\\Music',prompt:'Cinematic instrumental',seconds:3,seed:3},{segments:3,crossfadeSec:2,generate:async()=>{calls++;return new Blob([wav(3)],{type:'audio/wav'});}}),/크로스페이드/);
+ assert.equal(calls,0);
+});
+test('mismatched PCM format stops the remaining MusicGen requests early',async()=>{
+ let calls=0;
+ await assert.rejects(generateMusicGenSequence({python:'D:\\AI\\python.exe',modelDir:'D:\\Music',prompt:'Cinematic instrumental',seconds:3,seed:3},{segments:5,generate:async()=>{calls++;return new Blob([wav(3,calls===1?8000:16000)],{type:'audio/wav'});}}),/다른 샘플레이트/);
+ assert.equal(calls,2);
+});
