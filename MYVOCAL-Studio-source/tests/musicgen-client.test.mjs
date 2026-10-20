@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {musicGenSettingsValid,generateMusicGenAudio} from '../src/musicGenClient.js';
+import {musicGenSettingsValid,generateMusicGenAudio} from '../src/lib/musicGenClient.js';
 const config={python:'D:\\AI\\python.exe',modelDir:'D:\\AI\\musicgen',prompt:'Piano and strings',seconds:5,seed:7};
 function wav(){let b=new Uint8Array(44+32000*2),v=new DataView(b.buffer);for(const [i,k] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']])for(let j=0;j<4;j++)b[i+j]=k.charCodeAt(j);v.setUint32(4,b.length-8,true);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,32000,true);v.setUint32(28,64000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);v.setUint32(40,b.length-44,true);return new Blob([b],{type:'audio/wav'});}
 test('required installed model and bounded duration',()=>{assert.equal(musicGenSettingsValid(config),config);assert.throws(()=>musicGenSettingsValid({...config,seconds:40}),/길이/);});
