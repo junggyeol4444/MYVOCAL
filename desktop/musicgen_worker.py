@@ -24,7 +24,28 @@ def check_arguments(args):
         raise ValueError('시드 범위가 올바르지 않습니다')
     if not pathlib.Path(args.output).is_absolute():
         raise ValueError('출력 WAV 절대 경로가 필요합니다')
+    if getattr(args,'audio_prompt',None):
+        path=pathlib.Path(args.audio_prompt)
+        if not path.is_absolute() or not path.is_file():
+            raise ValueError('연속 생성 원본 WAV 경로가 유효하지 않습니다')
+        if args.seconds>20:
+            raise ValueError('연속 MusicGen 추론은 최대 20초입니다')
     return model
+
+
+def load_prompt_pcm(path):
+    """Input is a locally created short 16-bit PCM WAV, never a remote URL."""
+    with wave.open(str(path), 'rb') as reader:
+        channels=reader.getnchannels()
+        rate=reader.getframerate()
+        width=reader.getsampwidth()
+        count=reader.getnframes()
+        if channels not in (1,2) or width!=2 or not 3*rate<=count<=8*rate:
+            raise ValueError('연속 MusicGen 원본은 3~8초 PCM WAV여야 합니다')
+        frame=reader.readframes(count)
+    if len(frame)!=count*channels*2:
+        raise ValueError('MusicGen 연결 WAV가 잘렸습니다')
+    return frame,rate,channels,count
 
 
 def write_pcm_wave(path, audio, rate):
@@ -67,7 +88,18 @@ def generate(args):
     processor = AutoProcessor.from_pretrained(str(model_path), local_files_only=True, trust_remote_code=False)
     model = MusicgenForConditionalGeneration.from_pretrained(str(model_path), local_files_only=True, trust_remote_code=False).to(device)
     model.eval()
-    inputs = processor(text=[args.prompt], padding=True, return_tensors='pt')
+    prompt_frames=0
+    if args.audio_prompt:
+        import numpy as np
+        raw,source_rate,channels,prompt_frames=load_prompt_pcm(args.audio_prompt)
+        if source_rate!=int(model.config.audio_encoder.sampling_rate):
+            raise ValueError('연속 생성 오디오 레이트가 로컬 MusicGen 모델과 다릅니다')
+        pcm=np.frombuffer(raw,dtype='<i2').astype('float32').reshape((-1,channels))
+        # Processor audio prompting uses one mono reference waveform.
+        mono=pcm.mean(axis=1)/32768.0
+        inputs=processor(text=[args.prompt], audio=mono, sampling_rate=source_rate,padding=True,return_tensors='pt')
+    else:
+        inputs=processor(text=[args.prompt], padding=True, return_tensors='pt')
     inputs = {k: v.to(device) for k,v in inputs.items()}
     # MusicGen uses 50 audio tokens/s and its native model limit is ~30 s.
     with torch.inference_mode():
@@ -75,7 +107,15 @@ def generate(args):
     rate = int(model.config.audio_encoder.sampling_rate)
     if samples.ndim != 3 or samples.shape[0] != 1 or samples.shape[1] not in (1,2):
         raise ValueError('MusicGen 오디오 출력이 지원 형식이 아닙니다')
-    arrays = samples[0].detach().cpu().float().tolist()
+    result=samples[0].detach().cpu().float()
+    if args.audio_prompt:
+        # MusicGen returns prompt+newly generated audio. Never report the old
+        # prompt as newly generated music. Reject short or incompatible output.
+        new_frames=args.seconds*rate
+        if result.shape[-1] < prompt_frames+new_frames-rate:
+            raise ValueError('MusicGen 연속 생성 출력이 요청보다 짧습니다')
+        result=result[:,-new_frames:]
+    arrays=result.tolist()
     write_pcm_wave(args.output, arrays, rate)
 
 
@@ -86,6 +126,7 @@ def main(argv=None):
     parser.add_argument('--prompt', required=True)
     parser.add_argument('--seconds', type=int, required=True)
     parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--audio-prompt', default=None)
     args = parser.parse_args(argv)
     try:
         generate(args)

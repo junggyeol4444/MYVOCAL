@@ -3,6 +3,22 @@
 import {generateMusicGenAudio,musicGenSettingsValid} from './musicGenClient.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 export const MAX_SEQUENCE_SEGMENTS=8;
+export function musicGenContinuationPrompt(previous,{seconds=6}={}){
+ const bytes=previous instanceof Uint8Array?previous:new Uint8Array(previous);
+ const p=parsePcm16(bytes);
+ if(!Number.isFinite(seconds)||seconds<3||seconds>8)throw Error('연속 생성 문맥은 3~8초여야 합니다.');
+ const kept=Math.round(p.rate*seconds);
+ if(p.frames<kept)throw Error('이전 MusicGen WAV가 문맥 구간보다 짧습니다.');
+ const end=p.pcm.subarray((p.frames-kept)*p.channels*2);
+ const out=new Uint8Array(44+end.length),v=new DataView(out.buffer);
+ for(const [i,text] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']])for(let n=0;n<4;n++)out[i+n]=text.charCodeAt(n);
+ v.setUint32(4,out.length-8,true);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,p.channels,true);
+ v.setUint32(24,p.rate,true);v.setUint32(28,p.rate*p.channels*2,true);v.setUint16(32,p.channels*2,true);v.setUint16(34,16,true);
+ v.setUint32(40,end.length,true);out.set(end,44);
+ // Bounded: 8s * 96kHz * stereo PCM; no off-device API or media storage.
+ let binary='';for(let i=0;i<out.length;i+=32768)binary+=String.fromCharCode(...out.subarray(i,i+32768));
+ return btoa(binary);
+}
 export const MAX_SEQUENCE_BYTES=64*1024*1024;
 function parsePcm16(bytes){
  const b=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
@@ -65,9 +81,11 @@ export function joinMusicGenWaves(waves,{crossfadeSec=.5}={}){
  assertUsableSingingWav(out,{maxDurationSec:240});
  return new File([out],'MYVOCAL-MusicGen-긴반주.wav',{type:'audio/wav'});
 }
-export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec=.5,prompts=[],signal,onProgress=()=>{},generate=generateMusicGenAudio,session}={}){
+export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec=.5,prompts=[],continuation=false,signal,onProgress=()=>{},generate=generateMusicGenAudio,session}={}){
  if(!Number.isInteger(segments)||segments<2||segments>MAX_SEQUENCE_SEGMENTS)throw Error('긴 반주는 2~8구간이어야 합니다.');
  musicGenSettingsValid(settings);
+ if(typeof continuation!=='boolean')throw Error('MusicGen 연결 모드가 올바르지 않습니다.');
+ if(continuation&&settings.seconds>20)throw Error('이전 음원 기반 연속 생성은 구간당 20초까지입니다.');
  if(!Number.isFinite(crossfadeSec)||crossfadeSec<.1||crossfadeSec>1.5||crossfadeSec>=settings.seconds/2)throw Error('크로스페이드는 0.1~1.5초, 구간 길이보다 충분히 짧아야 합니다.');
  if(!Number.isInteger(settings.seed)||settings.seed+segments-1>2147483647)throw Error('랜덤 시드 범위가 초과됐습니다.');
  if(!Array.isArray(prompts)||prompts.length>MAX_SEQUENCE_SEGMENTS||prompts.some(x=>typeof x!=='string'||[...x].length>600))throw Error('구간별 음악 설명이 올바르지 않습니다.');
@@ -75,7 +93,9 @@ export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec
  for(let i=0;i<segments;i++){
   if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.');
   const prompt=prompts[i]?.trim()||settings.prompt;
-  const segment=await generate({...settings,prompt,seed:settings.seed+i},{session,signal});
+  const next={...settings,prompt,seed:settings.seed+i};
+  if(continuation&&i>0)next.audioPrompt=musicGenContinuationPrompt(parts[i-1],{seconds:Math.min(6,settings.seconds)});
+  const segment=await generate(next,{session,signal});
   if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.');
   if(!(segment instanceof Blob))throw Error('MusicGen이 실제 WAV를 반환하지 않았습니다.');
   const bytes=new Uint8Array(await segment.arrayBuffer());

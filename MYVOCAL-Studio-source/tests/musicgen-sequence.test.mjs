@@ -51,3 +51,24 @@ test('mismatched PCM format stops the remaining MusicGen requests early',async()
  await assert.rejects(generateMusicGenSequence({python:'D:\\AI\\python.exe',modelDir:'D:\\Music',prompt:'Cinematic instrumental',seconds:3,seed:3},{segments:5,generate:async()=>{calls++;return new Blob([wav(3,calls===1?8000:16000)],{type:'audio/wav'});}}),/다른 샘플레이트/);
  assert.equal(calls,2);
 });
+
+test('audio continuation mode passes a valid short WAV to the following model inference only',async()=>{
+ const requests=[];
+ await generateMusicGenSequence({python:'D:\\AI\\python.exe',modelDir:'D:\\Music',prompt:'cinematic rock',seconds:7,seed:7},
+ {segments:3,crossfadeSec:.5,continuation:true,generate:async cfg=>{
+   requests.push(cfg);
+   return new Blob([wav(7)],{type:'audio/wav'});
+ }});
+ assert.equal(requests[0].audioPrompt,undefined);
+ assert.ok(requests[1].audioPrompt?.length>1000);
+ assert.ok(requests[2].audioPrompt?.length>1000);
+ const prompt=Uint8Array.from(atob(requests[1].audioPrompt),c=>c.charCodeAt(0));
+ assert.equal(String.fromCharCode(...prompt.slice(0,4)),'RIFF');
+ assert.equal(new DataView(prompt.buffer).getUint32(40,true),6*8000*2);
+});
+test('overlong neural continuation rejected before any model calls',async()=>{
+ let calls=0;
+ await assert.rejects(generateMusicGenSequence({python:'D:\\AI\\python.exe',modelDir:'D:\\Music',prompt:'cinematic rock',seconds:22,seed:7},
+ {segments:3,continuation:true,generate:async()=>{calls++}}),/20초/);
+ assert.equal(calls,0);
+});

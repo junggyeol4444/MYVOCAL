@@ -2,6 +2,7 @@ package main
 import (
  "bytes"
  "context"
+ "encoding/base64"
  "encoding/json"
  "net/http"
  "net/http/httptest"
@@ -37,3 +38,10 @@ func TestMusicGenRejectsFakeAudioAndCleansTemporaryDir(t *testing.T){
  if _,err:=os.Stat(outputDir);!os.IsNotExist(err){t.Fatal("generated output directory not removed")}
 }
 func TestMusicGenEmbeddedWorkerPresent(t *testing.T){b,err:=embeddedMusicGenWorker.ReadFile("musicgen_worker.py");if err!=nil||!bytes.Contains(b,[]byte("local_files_only=True")){t.Fatal("offline MusicGen worker not bundled")}}
+func TestMusicGenContinuationInputIsPCMAndTimeBounded(t *testing.T) {
+ c:=testMusicGenCfg(t)
+ c.AudioPrompt=base64.StdEncoding.EncodeToString(sampleRVCWAV())
+ if err:=validateMusicGenInput(c);err==nil {t.Fatal("sample too short or wrong format must not act as a continuation")}
+ c.AudioPrompt="!!!"
+ if validateMusicGenInput(c)==nil {t.Fatal("invalid base64 accepted")}
+}

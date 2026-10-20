@@ -3,6 +3,8 @@ export const MAX_MUSICGEN_WAV=12*1024*1024;
 export function musicGenSettingsValid(settings){
  if(!settings||typeof settings.python!=='string'||typeof settings.modelDir!=='string'||typeof settings.prompt!=='string')throw Error('로컬 MusicGen 실행 환경을 지정하세요.');
  if(!/python\.exe$/i.test(settings.python)||settings.modelDir.length<3||settings.modelDir.length>1024||settings.python.length>1024)throw Error('Python.exe와 로컬 MusicGen 모델 경로를 입력하세요.');
+ if(settings.audioPrompt!==undefined&&(typeof settings.audioPrompt!=='string'||settings.audioPrompt.length>3*1024*1024||!/^[A-Za-z0-9+/]+={0,2}$/.test(settings.audioPrompt)))throw Error('MusicGen 연결 WAV 인코딩이 올바르지 않습니다.');
+ if(settings.audioPrompt&&settings.seconds>20)throw Error('연속 MusicGen 구간은 최대 20초입니다.');
  if(settings.prompt.trim().length<2||[...settings.prompt].length>600)throw Error('음악 설명은 2~600자입니다.');
  if(!Number.isInteger(settings.seconds)||settings.seconds<3||settings.seconds>28||!Number.isInteger(settings.seed)||settings.seed<0||settings.seed>2147483647)throw Error('음악 길이(3~28초)·시드 범위를 확인하세요.');
  return settings;
