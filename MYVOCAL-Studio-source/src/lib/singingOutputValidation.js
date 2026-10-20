@@ -42,7 +42,7 @@ export function inspectSingingWav(input) {
 export function assertUsableSingingWav(input,{maxDurationSec=90}={}){
  const info=inspectSingingWav(input);
  if(!info.valid)throw Error('엔진에서 손상된 WAV를 반환했습니다: '+info.reason);
- if(!Number.isFinite(maxDurationSec)||maxDurationSec<.03||maxDurationSec>300||info.durationSec>maxDurationSec||info.durationSec<0.03)throw Error('가창 WAV 길이가 허용된 범위를 벗어났습니다.');
+ if(!Number.isFinite(maxDurationSec)||maxDurationSec<.03||maxDurationSec>360||info.durationSec>maxDurationSec||info.durationSec<0.03)throw Error('가창 WAV 길이가 허용된 범위를 벗어났습니다.');
  if(info.peak<0.001)throw Error('가창 엔진에서 소리가 없는 WAV를 반환했습니다.');
  return info;
 }

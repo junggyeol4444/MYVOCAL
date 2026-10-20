@@ -55,12 +55,13 @@ export default function MusicGenPanel({project,onChange,notify}){
     <label><input type="checkbox" checked={sequence} disabled={busy} onChange={e=>setSequence(e.target.checked)}/> 여러 실제 MusicGen 구간을 긴 반주 WAV로 결합</label>
     {sequence&&<label><input type="checkbox" disabled={busy} checked={continuation} onChange={e=>setContinuation(e.target.checked)}/> 이전 MusicGen 음원을 참조하는 실제 오디오 연속 생성 (구간당 최대 20초)</label>}
     {sequence&&<div className="mv10-grid">
-      <Field label="연속 구간 수 (2~8)"><input type="number" min="2" max="8" value={segments} disabled={busy} onChange={e=>setSegments(e.target.value)}/></Field>
+      <Field label="연속 구간 수 (2~20)"><input type="number" min="2" max="20" value={segments} disabled={busy} onChange={e=>setSegments(e.target.value)}/></Field>
       <Field label="구간 사이 크로스페이드 초 (0.1~1.5)"><input type="number" step=".1" min=".1" max="1.5" value={fade} disabled={busy} onChange={e=>setFade(e.target.value)}/></Field>
       <Field label="구간별 설명 (한 줄당 한 구간, 선택)"><textarea rows={4} disabled={busy} value={partPrompts} onChange={e=>setPartPrompts(e.target.value)} placeholder={'피아노 인트로\n록 기타 후렴\n스트링과 드럼 마지막 후렴'}/></Field>
     </div>}
     {sequence&&<Button disabled={busy} onClick={()=>{try{const guide=musicGenSectionPrompts(latest.current,prompt);setSegments(String(guide.segments));setPartPrompts(guide.prompts.join("\n"));notify("현재 프로젝트의 실제 곡 구간 설명을 긴 반주 프롬프트에 적용했습니다.")}catch(e){setError(e.message)}}}>현재 Intro·Verse·Chorus 구간 반영</Button>}
     <Button disabled={busy} onClick={()=>{try{writeMusicGenPreferences(window.localStorage,{python,modelDir});notify('MusicGen 실행 경로만 이 PC에 저장했습니다. 녹음·음원은 저장하지 않습니다.')}catch(e){setError(e.message)}}}>로컬 Python·모델 경로 기억</Button>
+    {sequence&&<p className="muted">예상 완성 길이: {Number.isFinite(Number(segments)*Number(seconds)-(Number(segments)-1)*Number(fade)) ? Math.max(0,Number(segments)*Number(seconds)-(Number(segments)-1)*Number(fade)).toFixed(1) : "계산 불가"}초 / 최대 360초. 실제 MusicGen 연속 생성은 설치된 모델에 따라 음악적 일관성이 달라집니다.</p>}
     <p className="muted">길이 설정은 구간 하나당 초이며, 긴 반주는 구간별 독립적인 AI 오디오를 이어 붙입니다. 연속 생성은 이전 6초를 모델 입력으로 사용합니다. 장편 음악의 멜로디·리듬 일관성은 모델에 따라 달라지며 보장되지 않습니다.</p>
    </div>
    <div className="mv7-actions"><Button variant="primary" disabled={busy||!python||!modelDir} onClick={generate}>{busy?(progress||'MusicGen 생성 중'):(sequence?'긴 AI 반주 WAV 일괄 생성':'로컬 AI 반주 WAV 생성')}</Button>
