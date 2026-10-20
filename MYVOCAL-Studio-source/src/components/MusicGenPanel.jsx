@@ -3,6 +3,7 @@ import {Button,Field,Notice,Panel} from './UI';
 import {generateMusicGenAudio} from '../lib/musicGenClient.js';
 import {generateMusicGenSequence} from '../lib/musicGenSequence.js';
 import {readMusicGenPreferences,writeMusicGenPreferences} from '../lib/musicGenPreferences.js';
+import {musicGenSectionPrompts} from '../lib/musicGenSectionPrompts.js';
 import {readAudioInfo} from '../lib/audioEngine';
 import {genId} from '../lib/schema';
 import {putFileNew,removeFile} from '../lib/assetDb';
@@ -57,6 +58,7 @@ export default function MusicGenPanel({project,onChange,notify}){
       <Field label="구간 사이 크로스페이드 초 (0.1~1.5)"><input type="number" step=".1" min=".1" max="1.5" value={fade} disabled={busy} onChange={e=>setFade(e.target.value)}/></Field>
       <Field label="구간별 설명 (한 줄당 한 구간, 선택)"><textarea rows={4} disabled={busy} value={partPrompts} onChange={e=>setPartPrompts(e.target.value)} placeholder={'피아노 인트로\n록 기타 후렴\n스트링과 드럼 마지막 후렴'}/></Field>
     </div>}
+    {sequence&&<Button disabled={busy} onClick={()=>{try{const guide=musicGenSectionPrompts(latest.current,prompt);setSegments(String(guide.segments));setPartPrompts(guide.prompts.join("\n"));notify("현재 프로젝트의 실제 곡 구간 설명을 긴 반주 프롬프트에 적용했습니다.")}catch(e){setError(e.message)}}}>현재 Intro·Verse·Chorus 구간 반영</Button>}
     <Button disabled={busy} onClick={()=>{try{writeMusicGenPreferences(window.localStorage,{python,modelDir});notify('MusicGen 실행 경로만 이 PC에 저장했습니다. 녹음·음원은 저장하지 않습니다.')}catch(e){setError(e.message)}}}>로컬 Python·모델 경로 기억</Button>
     <p className="muted">길이 설정은 구간 하나당 초이며, 긴 반주는 구간별 독립적인 AI 오디오를 이어 붙입니다. 멜로디·리듬 연속성은 보장되지 않습니다.</p>
    </div>

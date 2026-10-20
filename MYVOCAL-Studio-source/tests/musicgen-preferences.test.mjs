@@ -7,4 +7,4 @@ test('stores only local model and Python paths; no recordings or tokens',()=>{
  assert.deepEqual(readMusicGenPreferences(store),{python:'D:\\AI\\python.exe',modelDir:'D:\\AI\\musicgen'});
  assert.deepEqual(Object.keys(JSON.parse(db.get(MUSICGEN_SETTINGS_KEY))).sort(),['modelDir','python','version']);
 });
-test('invalid corrupted preferences cannot crash the UI',()=>{assert.deepEqual(readMusicGenPreferences({getItem:()=>'{bad'}),{});assert.throws(()=>writeMusicGenPreferences({setItem(){}},{python:'bad\\ncmd',modelDir:'a'}),/경로/);});
+test('invalid corrupted preferences cannot crash the UI',()=>{assert.deepEqual(readMusicGenPreferences({getItem:()=>'{bad'}),{});assert.throws(()=>writeMusicGenPreferences({setItem(){}},{python:'bad'+String.fromCharCode(10)+'cmd',modelDir:'a'}),/경로/);});
