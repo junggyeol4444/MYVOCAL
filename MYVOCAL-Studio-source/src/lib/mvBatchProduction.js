@@ -25,7 +25,7 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
  const plan=planMvBatch(project);
  if(!session||typeof session!=='string')throw Error('Windows EXE의 로컬 세션이 없습니다.');
  if(!checkpoint||!videoModel||!Number.isSafeInteger(port)||port<1024||port>65535||port===58319)throw Error('ComfyUI 이미지·SVD 모델 및 포트를 확인하세요.');
- if(!Number.isSafeInteger(imageSteps)||imageSteps<1||imageSteps>100||!Number.isSafeInteger(videoSteps)||videoSteps<1||videoSteps>100||!Number.isSafeInteger(frames)||frames<14||frames>25||!Number.isSafeInteger(fps)||fps<1||fps>30||!Number.isSafeInteger(motion)||motion<1||motion>255||!Number.isSafeInteger(width)||!Number.isSafeInteger(height)||width<256||height<256||width>1536||height>1536)throw Error('이미지·영상 생성 옵션 범위가 올바르지 않습니다.');
+ if(!Number.isSafeInteger(imageSteps)||imageSteps<1||imageSteps>50||!Number.isSafeInteger(videoSteps)||videoSteps<1||videoSteps>40||!Number.isSafeInteger(frames)||(frames!==14&&frames!==25)||!Number.isSafeInteger(fps)||(fps!==6&&fps!==8)||!Number.isSafeInteger(motion)||motion<1||motion>255||!Number.isSafeInteger(width)||!Number.isSafeInteger(height)||width<256||height<256||width>1024||height>1024||width%64!==0||height%64!==0||width*height>1024*1024)throw Error('이미지·영상 생성 옵션 범위가 올바르지 않습니다.');
  if(typeof current!=='function'||typeof commit!=='function')throw Error('프로젝트 저장 연결이 필요합니다.');
  const checkCancel=()=>{if(signal?.aborted)throw Error('사용자가 자동 생성을 취소했습니다. 기존 생성 자료는 유지합니다.');};
  checkCancel();const initialId=project.id;let generatedImages=0,generatedVideos=0;
@@ -40,7 +40,7 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   if(!scene.imageAssetId){
    progress?.(`${index+1}/${plan.total}장면: ComfyUI 이미지 생성 중`);
    const seed=Math.floor(Math.random()*2000000000);
-   const blob=await generateImage({port,checkpoint,prompt:request.prompt,negative:request.negative,width,height,steps:imageSteps,seed},session);
+   const blob=await generateImage({port,checkpoint,prompt:request.prompt,negative:request.negative,width,height,steps:imageSteps,seed},session,signal);
    checkCancel();live=current();scene=live?.scenes?.find(s=>s.id===sceneId);
    if(!live||live.id!==initialId||!scene||buildSceneImageRequest(live,scene,character,direction).key!==request.key)throw Error('이미지 생성 중 장면 내용이 변경됐습니다. 기존 데이터는 그대로 유지합니다.');
    checkCancel();const id=idFactory('img');await saveFile(id,new File([blob],`MYVOCAL-MV-${sceneId}-${seed}.${blob.type==='image/jpeg'?'jpg':'png'}`,{type:blob.type}));
@@ -57,7 +57,7 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   const imageData=await sourceFrame(image);
   progress?.(`${index+1}/${plan.total}장면: SVD 영상 클립 생성 중`);
   const seed=Math.floor(Math.random()*2000000000);
-  const clip=await generateVideo({port,checkpoint:videoModel,imageData,frames,fps,steps:videoSteps,motion,seed},session);
+  const clip=await generateVideo({port,checkpoint:videoModel,imageData,frames,fps,steps:videoSteps,motion,seed},session,signal);
   checkCancel();live=current();scene=live?.scenes?.find(s=>s.id===sceneId);
   if(!live||live.id!==initialId||!scene||videoSourceKey(live,scene,request)!==sourceKey)throw Error('영상 생성 중 프로젝트 내용이 변경됐습니다. 기존 원본은 그대로 유지합니다.');
   checkCancel();const clipId=idFactory('vid');await saveFile(clipId,new File([clip],`MYVOCAL-MV-${sceneId}-${seed}.${clip.type==='video/mp4'?'mp4':'webp'}`,{type:clip.type}));

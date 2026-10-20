@@ -25,6 +25,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const [capability,setCapability]=useState(null),[engineModelId,setEngineModelId]=useState(p.singingEngine?.modelId||'');
  const [cueStart,setCueStart]=useState(1),[cueEnd,setCueEnd]=useState(4);
  const latestUrl=useRef('');
+ const externalAbortRef=useRef(null);
  const alignment=p.vocalAlignment&&!isAlignmentStale(p,p.vocalAlignment)?p.vocalAlignment:null;
  const phonemePlan=alignment&&p.phonemePlan&&!isPhonemePlanStale(alignment,p.phonemePlan)?p.phonemePlan:null;
  const voice=usable.find(v=>v.id===voiceId)||usable[0];
@@ -65,11 +66,11 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   try{onChange({...p,tracks:[...p.tracks,track]});notify('보컬 WAV가 원곡의 위치를 유지한 새 오디오 트랙에 추가됐습니다.');setStatus(`WAV를 ${startSec.toFixed(2)}초 위치에 추가했습니다.`);}
   catch(e){await removeFile(assetId).catch(()=>{});throw e}
  });
- async function requestBridge(path,body){const key=window.__MYVOCAL_SESSION_KEY;if(!key)throw Error('외부 엔진 연결은 Windows EXE에서만 사용할 수 있습니다.');
-  const method=body?'POST':'GET';const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),120000);
+ async function requestBridge(path,body,externalSignal=null){const key=window.__MYVOCAL_SESSION_KEY;if(!key)throw Error('외부 엔진 연결은 Windows EXE에서만 사용할 수 있습니다.');
+  const method=body?'POST':'GET';const controller=new AbortController();const cancel=()=>controller.abort();externalSignal?.addEventListener('abort',cancel,{once:true});if(externalSignal?.aborted)controller.abort();const timeout=setTimeout(()=>controller.abort(),120000);
   try{const response=await fetch(path,{method,headers:{'X-MYVOCAL-Session':key,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:controller.signal,cache:'no-store'});
    if(!response.ok){const err=await response.json().catch(()=>({error:`HTTP ${response.status}`}));throw Error(err.error||`HTTP ${response.status}`)}return response;
-  }finally{clearTimeout(timeout)}
+  }finally{clearTimeout(timeout);externalSignal?.removeEventListener('abort',cancel)}
  }
  const checkEngine=()=>run(async()=>{const number=safePort(port),res=await requestBridge(`/api/singing/health?port=${number}`);const info=await res.json();
   const cRes=await requestBridge(`/api/singing/capabilities?port=${number}`),cap=singingCapabilitiesView(await cRes.json());setCapability(cap);
@@ -77,7 +78,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   setBridgeState(`${info.name||'외부 엔진'} · 연결됨 · ${cap.message}`);
   onChange({...p,singingEngine:{port:number,modelId:engineModelId||cap.models[0]?.id||''}});
   notify('엔진 접속과 모델 목록 조회를 마쳤습니다. 엔진 정보는 자체 신고이며 추론 품질을 보증하지 않습니다.');});
- const renderExternal=()=>run(async()=>{if(!alignment)throw Error('먼저 가사·MIDI 싱크를 저장해 주세요.');if(!voice)throw Error('사용 허가가 있는 목소리를 선택해 주세요.');
+ const renderExternal=()=>run(async()=>{const controller=new AbortController();externalAbortRef.current=controller;try{if(!alignment)throw Error('먼저 가사·MIDI 싱크를 저장해 주세요.');if(!voice)throw Error('사용 허가가 있는 목소리를 선택해 주세요.');
   const number=safePort(port);
   let checkpoint=externalModels.find(m=>m.id===externalModelId)||null;
   if(capability?.supported&&capability.models.length){
@@ -92,19 +93,21 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   let blob,chunkCount=1;
   if(longForm){
    const combined=await renderLongSinging(alignment,{port:number,project:p,voice,model:checkpoint,
-    request:async body=>{const response=await requestBridge('/api/singing/render',body);return response.blob();},
+    request:async body=>{const response=await requestBridge('/api/singing/render',body,controller.signal);return response.blob();},
+    signal:controller.signal,
     onProgress:(done,total)=>{chunkCount=total;setStatus(`외부 가창 엔진 분할 처리 ${done}/${total} · 기존 프로젝트는 보존됩니다.`);}
    });
    blob=combined.wav;
   }else{
    const req=buildSingingRequest(number,p,alignment,voice,checkpoint,phonemePlan);
-   const res=await requestBridge('/api/singing/render',req);blob=await res.blob();
+   const res=await requestBridge('/api/singing/render',req,controller.signal);blob=await res.blob();
   }
   assertUsableSingingWav(await blob.arrayBuffer(),{maxDurationSec:longForm?300:90});
   changeResult(blob,'engine',alignment.cues.length);
   const job={id:genId('singjob'),at:new Date().toISOString(),mode:capability?.mode==='demo'?'외부 데모':'외부 엔진',result:longForm?'긴 곡 WAV 합성 수신':'WAV 수신',notes:alignment.cues.length,engine:capability?.name||'미확인'};
   onChange({...p,singingEngine:{port:number,modelId:checkpoint?.id||''},singingJobs:appendRenderHistory(p.singingJobs,job)});
   setStatus(capability?.mode==='demo'?'외부 데모 엔진에서 테스트 WAV를 받았습니다. 실제 AI 가창이 아닙니다.':longForm?`외부 엔진 ${chunkCount}개 구간 WAV를 타임라인에 맞게 결합했습니다. 모델·품질을 직접 확인하세요. 긴 곡은 음소 힌트를 아직 전송하지 않습니다.`:'외부 엔진에서 WAV를 받아왔습니다. 품질과 모델 종류는 직접 검증해 주세요.');notify('외부 엔진 WAV 수신 성공.');
+ }finally{externalAbortRef.current=null;}
  });
  const validCount=alignment?.cues?.filter(c=>c.lyric&&c.lyric!=='—').length||0;
  return <>
@@ -137,7 +140,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    <EngineManager port={port} onPort={setPort} requestBridge={requestBridge} notify={notify}/>
    <div className="mv10-grid"><Field label="로컬 엔진 포트"><input aria-label="외부 엔진 포트" value={port} onChange={e=>{setPort(e.target.value);setBridgeState('연결 확인 전');setCapability(null)}} placeholder="7867" inputMode="numeric"/></Field>
     <Field label="외부 체크포인트 참조 (선택)"><select value={externalModelId} onChange={e=>setExternalModelId(e.target.value)}><option value="">모델 지정 없음</option>{externalModels.map(m=><option value={m.id} key={m.id}>{m.name} ({m.engineId})</option>)}</select></Field></div>
-   <div className="mv7-actions"><Button disabled={busy} onClick={checkEngine}>엔진 · 모델 조회</Button><Button icon="wave" variant="primary" disabled={!alignment||!voice||busy} onClick={renderExternal}>{capability?.mode==='demo'?'데모 테스트 WAV 생성':'외부 엔진으로 보컬 WAV 생성'}</Button><Status>{bridgeState}</Status></div>
+   <div className="mv7-actions"><Button disabled={busy} onClick={checkEngine}>엔진 · 모델 조회</Button><Button icon="wave" variant="primary" disabled={!alignment||!voice||busy} onClick={renderExternal}>{capability?.mode==='demo'?'데모 테스트 WAV 생성':'외부 엔진으로 보컬 WAV 생성'}</Button>{busy&&externalAbortRef.current&&<Button onClick={()=>externalAbortRef.current?.abort()}>진행 중인 가창 취소</Button>}<Status>{bridgeState}</Status></div>
    {capability&&<div className="mv11-engine"><div><strong>{capability.name||'외부 엔진'}</strong><span>모드: {capability.message} · 모델 수: {capability.models.length} · 준비 상태: {capability.inferenceReady?'엔진 신고상 준비':'준비 확인 안 됨'}</span></div>
      {capability.models.length>0&&<Field label="엔진에서 사용 가능한 모델"><select value={engineModelId} onChange={e=>setEngineModelId(e.target.value)}>{capability.models.map(m=><option key={m.id} value={m.id}>{m.name} · {m.engineId||'종류 미상'} ({m.id})</option>)}</select></Field>}
      <Notice>{capability.mode==='neural'?'신경망 모드는 외부 엔진의 자체 신고입니다. 프로그램이 AI 모델이나 학습 품질을 검증한 것은 아닙니다.':capability.mode==='demo'?'데모 엔진입니다. 실제 목소리나 가사를 부르지 않습니다.':capability.message}</Notice>

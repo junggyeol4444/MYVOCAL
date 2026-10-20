@@ -42,3 +42,9 @@ test('sequential real-engine requests are combined without modifying score',asyn
  assert.equal(requested.length,3);assert.equal(output.parts,3);assert.equal((await output.wav.arrayBuffer()).byteLength>3000000,true);
  assert.equal(JSON.stringify(align),original);
 });
+test('abort between long-form model requests does not claim a finished WAV',async()=>{
+ const controller=new AbortController();let count=0;
+ await assert.rejects(renderLongSinging(align,{port:7867,project:{title:'song'},voice:{id:'me',rights:'self'},model:null,
+ signal:controller.signal,request:async req=>{count++;controller.abort();return new Blob([wav(Math.max(...req.cues.map(c=>c.endSec)))],{type:'audio/wav'});}}),/취소/);
+ assert.equal(count,1);
+});

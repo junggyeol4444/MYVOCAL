@@ -56,3 +56,18 @@ test('cancel while producing a clip keeps an earlier saved image and never links
  assert.deepEqual(writes,['img_fresh_image']);
  assert.equal(planMvBatch(current).total,1);
 });
+
+test('user cancellation aborts the actual remote ComfyUI requests, not only subsequent scenes',async()=>{
+ const controller=new AbortController(), current=structuredClone(base);let captured=null, writes=0;
+ await assert.rejects(runMvBatch({project:current,data:{characters:[]},checkpoint:'sd.safetensors',videoModel:'svd.safetensors',port:8188,session:'auth',signal:controller.signal,current:()=>current,commit:()=>writes++,
+  generateImage:async(settings,session,signal)=>{assert.equal(session,'auth');captured=signal;controller.abort();throw Error('fetch aborted')},saveFile:async()=>writes++
+ }),/fetch aborted/);
+ assert.equal(captured,controller.signal);assert.equal(writes,0);
+});
+test('server-invalid ComfyUI options fail before requesting remote images or writing media',async()=>{
+ const current=structuredClone(base);let calls=0;
+ for(const opts of [{width:1536,height:448},{width:770,height:448},{frames:20},{fps:12},{imageSteps:70},{videoSteps:60}]){
+  await assert.rejects(runMvBatch({project:current,data:{characters:[]},checkpoint:'sd.safetensors',videoModel:'svd.safetensors',port:8188,session:'auth',current:()=>current,commit:()=>calls++,generateImage:async()=>{calls++;return null},...opts}),/옵션/);
+ }
+ assert.equal(calls,0);
+});
