@@ -8,6 +8,7 @@ import {queryLocalMp4Status,convertRecordedWebMToMP4} from '../lib/mvMp4Export.j
 import {buildMvLyricCaptions} from '../lib/mvLyricCaptions.js';
 import {planMvLipSyncOverlay} from '../lib/mvLipSyncOverlay.js';
 import {readMvLipPlacement,saveMvLipPlacement} from '../lib/mvLipPlacement.js';
+import {mvExportRevision,verifyMvExportRevision} from '../lib/mvExportRevision.js';
 
 function saveMovie(blob,project,extension='webm'){
  const name=String(project.title||'myvocal').replace(/[^가-힣A-Za-z0-9_-]/g,'_').slice(0,64);
@@ -22,6 +23,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  const [busy,setBusy]=useState(false),[progress,setProgress]=useState(0),[includeSound,setIncludeSound]=useState(true),[showCaptions,setShowCaptions]=useState(true);
  const [showMouth,setShowMouth]=useState(false),[mouthX,setMouthX]=useState(50),[mouthY,setMouthY]=useState(58),[mouthSize,setMouthSize]=useState(8);
  const projectLive=useRef(project);projectLive.current=project;
+ const charactersLive=useRef(characters);charactersLive.current=characters;
  const [mp4Status,setMp4Status]=useState({ready:false,message:'로컬 FFmpeg 확인 중…'});
  let plan=null,planError='';
  try{plan=planMvVideoRender(project,characters);}catch(e){planError=e.message;}
@@ -82,7 +84,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
   setBusy(true);setProgress(0);
   let resources=null;
   const originalProject=projectLive.current;
-  const exportSceneSignature=JSON.stringify(originalProject?.scenes);
+  const initialRevision=mvExportRevision(originalProject,charactersLive.current,{includeLipSync:!!lipSyncOverlays});
   try{
    assertMvExportEnvironment();
    // Fresh playback elements keep the preview untouched throughout export.
@@ -94,11 +96,11 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
     signal:controller.signal,onProgress:n=>{if(mounted.current)setProgress(n);}
    });
    if(controller.signal.aborted)throw Error('영상 저장을 취소했습니다.');
-   if(projectLive.current?.id!==originalProject?.id||JSON.stringify(projectLive.current?.scenes)!==exportSceneSignature)throw Error('MV 저장 중 프로젝트 또는 장면이 변경됐습니다. 다시 실행하세요.');
+   verifyMvExportRevision(initialRevision,projectLive.current,charactersLive.current,{includeLipSync:!!lipSyncOverlays});
    if(format==='mp4'){
     const mp4=await convertRecordedWebMToMP4(result.blob,{session:window.__MYVOCAL_SESSION_KEY||'',signal:controller.signal});
     if(controller.signal.aborted)throw Error('MP4 저장을 취소했습니다.');
-    if(projectLive.current?.id!==originalProject?.id||JSON.stringify(projectLive.current?.scenes)!==exportSceneSignature)throw Error('MP4 변환 중 프로젝트 장면이 변경됐습니다.');
+    verifyMvExportRevision(initialRevision,projectLive.current,charactersLive.current,{includeLipSync:!!lipSyncOverlays});
     saveMovie(mp4,project,'mp4');
     notify(`전체 MV MP4 저장: ${plan.durationSec.toFixed(1)}초 · 음악 ${useAudio?'포함':'제외'} · 싱크 자막 ${captionsEnabled?'포함':'제외'}.`);
    }else{
