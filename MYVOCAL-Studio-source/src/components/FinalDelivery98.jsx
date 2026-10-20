@@ -2,7 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {Button,Notice,Panel} from './UI';
 import {getFile} from '../lib/assetDb.js';
 import {downloadProjectBundle} from '../lib/projectBundle.js';
-import {exportCapabilities98,lyricsSrt98,sceneGuideSrt98,midi98,wav98,captureMp498} from '../lib/finalExport98.js';
+import {exportCapabilities98,lyricsSrt98,sceneGuideSrt98,midi98,wav98,stemsZip98,captureMp498} from '../lib/finalExport98.js';
 import {renderPv95Canvas,pv95Frame,pv95Duration} from '../lib/vocalSynthPv95.js';
 import {auditIntegration99} from '../lib/integrationAudit99.js';
 import {acceptance100} from '../lib/acceptance100.js';
@@ -36,6 +36,7 @@ export default function FinalDelivery98({project,data,notify}){
   <canvas ref={canvas} width={768} height={432} style={{display:'none'}} aria-hidden="true"/>
   <div className="hstack" style={{flexWrap:'wrap',gap:8}}>
    <Button disabled={!caps.wav||!!busy} onClick={()=>task('WAV',async()=>downloadBlob(await wav98(project),`${stem}.wav`))}>WAV 믹스</Button>
+   <Button disabled={!caps.wav||!!busy} onClick={()=>task('트랙별 WAV Stems',async()=>downloadBlob(await stemsZip98(project),`${stem}-tracks-stems.zip`))}>트랙별 WAV Stems ZIP</Button>
    <Button disabled={!caps.midi||!!busy} onClick={()=>task('MIDI',async()=>downloadBlob(midi98(project),`${stem}.mid`))}>MIDI</Button>
    <Button disabled={!caps.srt||!!busy} onClick={()=>task('가사 SRT',async()=>downloadText(lyricsSrt98(project),`${stem}-lyrics.srt`))}>가사 SRT</Button>
    <Button disabled={!caps.storyboardSrt||!!busy} onClick={()=>task('장면 SRT',async()=>downloadText(sceneGuideSrt98(project,data.characters),`${stem}-scenes.srt`))}>장면 가이드 SRT</Button>
@@ -43,7 +44,7 @@ export default function FinalDelivery98({project,data,notify}){
    <Button disabled={!!busy} onClick={()=>task('전체 프로젝트 백업',async()=>{await downloadProjectBundle(project,data);})}>전체 프로젝트 백업</Button>
    {busy==='MP4'&&<Button onClick={()=>cancelRef.current?.abort()}>MP4 출력 취소</Button>}
   </div><p role="status">{message||caps.notes}</p>
-  <Notice>MP4는 브라우저에서 MP4(MediaRecorder) 인코더를 실제 지원하고, 유효한 오디오가 있고, PV가 30초 이하일 때만 출력합니다. 미지원 환경에서는 버튼을 비활성화합니다. WebM을 MP4로 이름만 바꾸지 않습니다. WAV·MIDI·자막은 해당 원본과 정렬 데이터가 있어야 활성화됩니다.</Notice>
+  <Notice>MP4는 브라우저에서 MP4(MediaRecorder) 인코더를 실제 지원하고, 유효한 오디오가 있고, PV가 30초 이하일 때만 출력합니다. 미지원 환경에서는 버튼을 비활성화합니다. WebM을 MP4로 이름만 바꾸지 않습니다. WAV·MIDI·자막은 해당 원본과 정렬 데이터가 있어야 활성화됩니다. 트랙별 WAV는 기존 오프라인 믹서로 개별 렌더링하며 AI 악기 분리 모델 실행과 구분됩니다.</Notice>
  </Panel>
  <Panel title="STEP99 · 통합 안정화 진단" description="실제 자료 연결·출력 준비와 실기기 미검증을 별도 판정합니다."><div className="hstack"><Button onClick={runAudit}>현재 프로젝트 검사</Button><Button onClick={()=>downloadText(JSON.stringify(auditIntegration99(data,project),null,2),`${stem}-audit99.json`,'application/json')}>검사 JSON 저장</Button></div>
  {audit&&<div>{audit.items.map(i=><p key={i.id}>{i.status==='pass'?'✓':'○'} {i.label}: {i.status==='pass'?'자동 확인':'미완료/미검증'} · {i.detail}</p>)}</div>}

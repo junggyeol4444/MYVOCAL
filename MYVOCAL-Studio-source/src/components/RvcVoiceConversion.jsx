@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Field,Notice,Panel,Status} from './UI';
-import {convertVoiceWithRVC} from '../lib/rvcVoiceConversion.js';
+import {convertLongSingingWithRVC} from '../lib/rvcLongConversion.js';
 import {readRVCPreferences,writeRVCPreferences} from '../lib/rvcPreferences.js';
 import {genId} from '../lib/schema';
 import {putFileNew,removeFile} from '../lib/assetDb';
@@ -11,7 +11,7 @@ export default function RvcVoiceConversion({project,onChange,notify,sourceSugges
  const [saved]=useState(()=>{try{return readRVCPreferences(window.localStorage)||{}}catch{return {}}});
  const [source,setSource]=useState(null),[root,setRoot]=useState(saved.root||''),[python,setPython]=useState(saved.python||''),[model,setModel]=useState(saved.model||''),[rightsConfirmed,setRightsConfirmed]=useState(false);
  const [pitch,setPitch]=useState(saved.pitch||'0'),[indexRate,setIndexRate]=useState(saved.indexRate||'0'),[f0,setF0]=useState(saved.f0||'rmvpe');
- const [busy,setBusy]=useState(false),[error,setError]=useState(''),[converted,setConverted]=useState(null),[url,setUrl]=useState('');
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[converted,setConverted]=useState(null),[url,setUrl]=useState(''),[progress,setProgress]=useState('');
  const abort=useRef(null),latest=useRef(project);latest.current=project;
  useEffect(()=>()=>abort.current?.abort(),[]);
  useEffect(()=>()=>{if(url)URL.revokeObjectURL(url);},[url]);
@@ -20,11 +20,11 @@ export default function RvcVoiceConversion({project,onChange,notify,sourceSugges
  const convert=async()=>{
   if(!source||busy)return;
   const controller=new AbortController();abort.current=controller;
-  setBusy(true);setError('');clearOutput();
+  setBusy(true);setError('');setProgress('');clearOutput();
   const base=latest.current;
   try{
    const settings={root,python,model,pitch,indexRate,f0,rightsConfirmed};
-   const result=await convertVoiceWithRVC(source,settings,{session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal});
+   const result=await convertLongSingingWithRVC(source,settings,{session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal,onProgress:(done,total)=>setProgress(`RVC 음색 변환 ${done}/${total} 구간`)});
    if(controller.signal.aborted||latest.current!==base)throw Error('RVC 처리 중 프로젝트가 변경됐거나 취소되었습니다.');
    setConverted({file:result,projectId:base.id});setUrl(URL.createObjectURL(result));
    notify('설치된 RVC 모델에서 실제 WAV를 수신했습니다. 재생한 후 프로젝트 트랙에 적용하세요.');
@@ -72,6 +72,6 @@ export default function RvcVoiceConversion({project,onChange,notify,sourceSugges
   </div>
   {url&&<audio src={url} controls preload="metadata"/>}
   {error&&<p role="alert" className="mv4-error">{error}</p>}
-  <Status>모델·Python·RVC 코드의 설치가 필요합니다. 실행하지 않았거나 변환에 실패한 경우 성공이라고 기록하지 않습니다.</Status>
+  <Status>{progress&&progress+' · '}모델·Python·RVC 코드의 설치가 필요합니다. 실행하지 않았거나 변환에 실패한 경우 성공이라고 기록하지 않습니다.</Status>
  </Panel>;
 }

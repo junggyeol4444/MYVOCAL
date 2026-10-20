@@ -3,7 +3,7 @@ import {Button,Field,Notice,Panel,Status} from './UI';
 import {alignLyricNotes,isAlignmentStale,makeImportedVocalTrack,midiVocalTracks} from '../lib/lyricAlignment';
 import {lyricVowel,VOWEL_NAMES,guessVowelModels,renderVowelSinging} from '../lib/singingRender';
 import {genId} from '../lib/schema';
-import {putFile,removeFile} from '../lib/assetDb';
+import {putFileNew,removeFile} from '../lib/assetDb';
 import {readAudioInfo} from '../lib/audioEngine';
 import {assertUsableSingingWav} from '../lib/singingOutputValidation.js';
 import {renderOfflineVocalGuide,renderOfflineVocalGuideSelection,guideSyllableSequence} from '../lib/offlineVocalGuide';
@@ -11,6 +11,8 @@ import {hangulHint,singingCapabilitiesView,engineModelCompatibility,buildSinging
 import {renderLongSinging} from '../lib/longSingingRender.js';
 import EngineManager from './EngineManager';
 import RvcVoiceConversion from './RvcVoiceConversion.jsx';
+import {readRVCPreferences} from '../lib/rvcPreferences.js';
+import {convertLongSingingWithRVC} from '../lib/rvcLongConversion.js';
 import {isPhonemePlanStale} from '../lib/phonemePlan';
 
 const guideVowelLabel=v=>({a:'ㅏ',eo:'ㅓ',o:'ㅗ',u:'ㅜ',eu:'ㅡ',i:'ㅣ'})[v]||v;
@@ -25,6 +27,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const [port,setPort]=useState(String(p.singingEngine?.port||7867)),[bridgeState,setBridgeState]=useState('연결 확인 전'),[externalModelId,setExternalModelId]=useState(p.singingEngine?.modelId||''),[status,setStatus]=useState('');
  const [capability,setCapability]=useState(null),[engineModelId,setEngineModelId]=useState(p.singingEngine?.modelId||'');
  const [cueStart,setCueStart]=useState(1),[cueEnd,setCueEnd]=useState(4);
+ const [autoRvc,setAutoRvc]=useState(false),[autoRvcRights,setAutoRvcRights]=useState(false),[sourceVocal,setSourceVocal]=useState(null);
  const latestUrl=useRef('');
  const externalAbortRef=useRef(null);
  const alignment=p.vocalAlignment&&!isAlignmentStale(p,p.vocalAlignment)?p.vocalAlignment:null;
@@ -32,10 +35,10 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const voice=usable.find(v=>v.id===voiceId)||usable[0];
  const samples=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId==='sampler'&&m.status==='sample-preview-ready');
  const externalModels=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId!=='sampler');
- useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setCapability(null);setCueStart(1);setCueEnd(4);},[p.id]);
+ useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setSourceVocal(null);},[p.id]);
  useEffect(()=>{const suggested=guessVowelModels(samples);if(!Object.values(suggested).some(Boolean)&&samples.length)suggested.a=samples[0].id;setModelMap(suggested);setExternalModelId('')},[voice?.id,data.voiceModels]);
  useEffect(()=>()=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current)},[]);
- const changeResult=(blob,kind,count,fileKind=kind,placement=null)=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current);const u=URL.createObjectURL(blob);latestUrl.current=u;setUrl(u);setResult({file:new File([blob],outputName(p.title,fileKind),{type:'audio/wav'}),kind,count,placement});};
+ const changeResult=(blob,kind,count,fileKind=kind,placement=null)=>{if(kind!=='rvc-neural')setSourceVocal(null);if(latestUrl.current)URL.revokeObjectURL(latestUrl.current);const u=URL.createObjectURL(blob);latestUrl.current=u;setUrl(u);setResult({file:new File([blob],outputName(p.title,fileKind),{type:'audio/wav'}),kind,count,placement});};
  const run=async fn=>{if(busy)return;setBusy(true);setStatus('');try{await fn()}catch(e){setStatus('오류: '+e.message);notify('가창 작업 오류: '+e.message)}finally{setBusy(false)}};
  const createSync=(longForm=false)=>{try{const synced=alignLyricNotes(p,undefined,{longForm});onChange({...p,vocalAlignment:synced});notify(longForm?'최대 300초 긴 곡 가사·MIDI 싱크를 준비했습니다. 외부 엔진으로 분할 가창 가능합니다.':'보컬 멜로디와 가사를 순서대로 연결했습니다. 음소 분석은 아닙니다.')}catch(e){notify(e.message)}};
  const guideRender=()=>run(async()=>{if(!alignment)throw Error('가사·MIDI 싱크를 먼저 준비하세요.');
@@ -62,8 +65,8 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   // Validate the time position before writing user media to IndexedDB.
   const startSec=result.kind==='offline-guide-selection'?result.placement.startSec:0;
   const track=makeImportedVocalTrack(p,file,assetId,info.duration,startSec);
-  track.name=result.kind==='engine'?'별도 로컬 엔진 보컬':result.kind==='offline-guide'?'내장 가창 가이드':result.kind==='offline-guide-selection'?'선택 구간 가창 가이드':'모음 샘플 보컬';
-  await putFile(assetId,file);
+  track.name=result.kind==='rvc-neural'?'외부 Singing + RVC 신경망 보컬':result.kind==='engine'?'별도 로컬 엔진 보컬':result.kind==='offline-guide'?'내장 가창 가이드':result.kind==='offline-guide-selection'?'선택 구간 가창 가이드':'모음 샘플 보컬';
+  await putFileNew(assetId,file);
   try{onChange({...p,tracks:[...p.tracks,track]});notify('보컬 WAV가 원곡의 위치를 유지한 새 오디오 트랙에 추가됐습니다.');setStatus(`WAV를 ${startSec.toFixed(2)}초 위치에 추가했습니다.`);}
   catch(e){await removeFile(assetId).catch(()=>{});throw e}
  });
@@ -81,6 +84,13 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   notify('엔진 접속과 모델 목록 조회를 마쳤습니다. 엔진 정보는 자체 신고이며 추론 품질을 보증하지 않습니다.');});
  const renderExternal=()=>run(async()=>{const controller=new AbortController();externalAbortRef.current=controller;try{if(!alignment)throw Error('먼저 가사·MIDI 싱크를 저장해 주세요.');if(!voice)throw Error('사용 허가가 있는 목소리를 선택해 주세요.');
   const number=safePort(port);
+  let rvcConfig=null;
+  if(autoRvc){
+   if(!autoRvcRights)throw Error('자동 RVC 변환에 사용할 목소리·모델 권한을 확인하세요.');
+   if(capability?.mode!=='neural'||capability.inferenceReady!==true)throw Error('자동 RVC 연결은 실제 신경망 Singing 엔진에서만 사용할 수 있습니다.');
+   rvcConfig=readRVCPreferences(window.localStorage);
+   if(!rvcConfig)throw Error('RVC 변환 패널에서 모델·Python 경로를 저장하세요.');
+  }
   let checkpoint=externalModels.find(m=>m.id===externalModelId)||null;
   if(capability?.supported&&capability.models.length){
    const advertised=capability.models.find(m=>m.id===engineModelId);
@@ -105,10 +115,19 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    const res=await requestBridge('/api/singing/render',req,controller.signal);blob=await res.blob();
   }
   assertUsableSingingWav(await blob.arrayBuffer(),{maxDurationSec:longForm?300:90});
-  changeResult(blob,'engine',alignment.cues.length);
-  const job={id:genId('singjob'),at:new Date().toISOString(),mode:capability?.mode==='demo'?'외부 데모':'외부 엔진',result:longForm?'긴 곡 WAV 합성 수신':'WAV 수신',notes:alignment.cues.length,engine:capability?.name||'미확인'};
+  if(autoRvc){
+   setStatus('실제 Singing WAV 수신 · 로컬 RVC 신경망 음색 변환 중');
+   const original=new File([blob],outputName(p.title,'singing-source'),{type:'audio/wav'});
+   const converted=await convertLongSingingWithRVC(original,{...rvcConfig,rightsConfirmed:true},{session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal,onProgress:(done,total)=>setStatus(`RVC 변환 ${done}/${total} 구간`)});
+   if(controller.signal.aborted)throw Error('가창·RVC 연속 생성을 취소했습니다.');
+   setSourceVocal({file:original,projectId:p.id});
+   changeResult(converted,'rvc-neural',alignment.cues.length,'singing-rvc');
+  }else{
+   setSourceVocal(null);changeResult(blob,'engine',alignment.cues.length);
+  }
+  const job={id:genId('singjob'),at:new Date().toISOString(),mode:autoRvc?'외부 Singing + RVC':'외부 엔진',result:autoRvc?'Singing/RVC WAV 두 개 수신 (품질 미검증)':longForm?'긴 곡 WAV 합성 수신':'WAV 수신',notes:alignment.cues.length,engine:capability?.name||'미확인'};
   onChange({...p,singingEngine:{port:number,modelId:checkpoint?.id||''},singingJobs:appendRenderHistory(p.singingJobs,job)});
-  setStatus(capability?.mode==='demo'?'외부 데모 엔진에서 테스트 WAV를 받았습니다. 실제 AI 가창이 아닙니다.':longForm?`외부 엔진 ${chunkCount}개 구간 WAV를 타임라인에 맞게 결합했습니다. 모델·품질을 직접 확인하세요. 긴 곡은 음소 힌트를 아직 전송하지 않습니다.`:'외부 엔진에서 WAV를 받아왔습니다. 품질과 모델 종류는 직접 검증해 주세요.');notify('외부 엔진 WAV 수신 성공.');
+  setStatus(autoRvc?'실제 Singing WAV→RVC 음색 변환 WAV를 연속 생성했습니다. 가창 품질·모델 동일성은 별도 확인하세요.':capability?.mode==='demo'?'외부 데모 엔진에서 테스트 WAV를 받았습니다. 실제 AI 가창이 아닙니다.':longForm?`외부 엔진 ${chunkCount}개 구간 WAV를 타임라인에 맞게 결합했습니다. 모델·품질을 직접 확인하세요. 유효한 발음 타임라인이 있으면 긴 곡의 각 구간에도 음소 힌트를 전달합니다.`:'외부 엔진에서 WAV를 받아왔습니다. 품질과 모델 종류는 직접 검증해 주세요.');notify('외부 엔진 WAV 수신 성공.');
  }finally{externalAbortRef.current=null;}
  });
  const validCount=alignment?.cues?.filter(c=>c.lyric&&c.lyric!=='—').length||0;
@@ -138,12 +157,14 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    {alignment&&<Notice>가사 발음 힌트: {alignment.cues.filter(c=>c.lyric?.trim()&&c.lyric.trim()!=='—').slice(0,5).map(c=>`${c.lyric.slice(0,8)} → ${guideSyllableSequence(c.lyric).map(s=>`${guideOnsetLabel(s.onset)}+${guideVowelLabel(s.vowel)}`).join('·')}`).join(' / ')||'가사가 있는 음표 없음'} · 한 음표 최대 24음절 · 자음 힌트는 실제 발음이 아닙니다.</Notice>}
    {!alignment&&<Notice>먼저 가사·MIDI 싱크를 생성하세요. 등록된 목소리가 없어도 실행할 수 있습니다.</Notice>}
   </Panel>
-  <RvcVoiceConversion project={p} onChange={onChange} notify={notify} sourceSuggestion={result?.file||null}/>
+  <RvcVoiceConversion project={p} onChange={onChange} notify={notify} sourceSuggestion={sourceVocal?.file||result?.file||null}/>
   <Panel title="C. 별도 로컬 Singing 엔진 연결" description="Windows EXE가 같은 PC의 127.0.0.1에 사용자가 실행한 별도 로컬 프로세스로 가사·음표·모델 참조를 보내고 WAV를 받아옵니다. v1.2부터 설치된 엔진의 프로세스를 직접 시작할 수 있습니다.">
    <EngineManager port={port} onPort={setPort} requestBridge={requestBridge} notify={notify}/>
    <div className="mv10-grid"><Field label="로컬 엔진 포트"><input aria-label="외부 엔진 포트" value={port} onChange={e=>{setPort(e.target.value);setBridgeState('연결 확인 전');setCapability(null)}} placeholder="7867" inputMode="numeric"/></Field>
     <Field label="외부 체크포인트 참조 (선택)"><select value={externalModelId} onChange={e=>setExternalModelId(e.target.value)}><option value="">모델 지정 없음</option>{externalModels.map(m=><option value={m.id} key={m.id}>{m.name} ({m.engineId})</option>)}</select></Field></div>
-   <div className="mv7-actions"><Button disabled={busy} onClick={checkEngine}>엔진 · 모델 조회</Button><Button icon="wave" variant="primary" disabled={!alignment||!voice||busy} onClick={renderExternal}>{capability?.mode==='demo'?'데모 테스트 WAV 생성':'외부 엔진으로 보컬 WAV 생성'}</Button>{busy&&externalAbortRef.current&&<Button onClick={()=>externalAbortRef.current?.abort()}>진행 중인 가창 취소</Button>}<Status>{bridgeState}</Status></div>
+   <label className="check-item"><input type="checkbox" checked={autoRvc} disabled={busy} onChange={e=>{setAutoRvc(e.target.checked);setAutoRvcRights(false)}}/>실제 신경망 Singing WAV 생성 후 저장된 RVC 모델로 음색 변환</label>
+   {autoRvc&&<label className="check-item"><input type="checkbox" checked={autoRvcRights} disabled={busy} onChange={e=>setAutoRvcRights(e.target.checked)}/>목소리·모델·가창 원본에 대한 사용 권한이 있습니다.</label>}
+   <div className="mv7-actions"><Button disabled={busy} onClick={checkEngine}>엔진 · 모델 조회</Button><Button icon="wave" variant="primary" disabled={!alignment||!voice||busy} onClick={renderExternal}>{autoRvc?'신경망 Singing → RVC 연속 생성':capability?.mode==='demo'?'데모 테스트 WAV 생성':'외부 엔진으로 보컬 WAV 생성'}</Button>{busy&&externalAbortRef.current&&<Button onClick={()=>externalAbortRef.current?.abort()}>진행 중인 가창 취소</Button>}<Status>{bridgeState}</Status></div>
    {capability&&<div className="mv11-engine"><div><strong>{capability.name||'외부 엔진'}</strong><span>모드: {capability.message} · 모델 수: {capability.models.length} · 준비 상태: {capability.inferenceReady?'엔진 신고상 준비':'준비 확인 안 됨'}</span></div>
      {capability.models.length>0&&<Field label="엔진에서 사용 가능한 모델"><select value={engineModelId} onChange={e=>setEngineModelId(e.target.value)}>{capability.models.map(m=><option key={m.id} value={m.id}>{m.name} · {m.engineId||'종류 미상'} ({m.id})</option>)}</select></Field>}
      <Notice>{capability.mode==='neural'?'신경망 모드는 외부 엔진의 자체 신고입니다. 프로그램이 AI 모델이나 학습 품질을 검증한 것은 아닙니다.':capability.mode==='demo'?'데모 엔진입니다. 실제 목소리나 가사를 부르지 않습니다.':capability.message}</Notice>
@@ -152,8 +173,8 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    <Notice>엔진 계약: <code>GET /health</code> → JSON, <code>POST /v1/sing</code> → WAV(PCM RIFF) 응답. 연결 검사 성공은 AI 모델 학습/추론 성공을 뜻하지 않습니다. 엔진 설치 및 체크포인트 호환성은 별도로 확인해야 합니다.</Notice>
   </Panel>
   <Panel title="렌더링 결과 · 프로젝트 적용" description="내장 가창 가이드·로컬 샘플러·별도 엔진에서 생성된 WAV를 재생, 저장하거나 음악 편집 타임라인에 오디오 트랙으로 추가할 수 있습니다.">
-   {result?<><div className="mv10-strip"><div><strong>{result.kind==='engine'?'별도 로컬 엔진 결과':result.kind==='offline-guide'?'내장 오프라인 가창 가이드':result.kind==='offline-guide-selection'?'선택 구간 오프라인 가창 미리 듣기':'모음 샘플 기반 결과'}</strong><span>{result.count}개 음표 · {(result.file.size/1024/1024).toFixed(2)}MB</span></div><Status ready>WAV 생성됨</Status></div><audio src={url} controls className="mv10-player"/></>:<Notice>아직 렌더링된 WAV가 없습니다.</Notice>}
-   <div className="mv7-actions"><Button icon="download" disabled={!result||busy} onClick={()=>download(result.file,result.file.name)}>WAV 저장</Button><Button icon="plus" variant="primary" disabled={!result||busy} onClick={addTrack}>프로젝트 오디오 트랙에 추가</Button></div>
+   {result?<><div className="mv10-strip"><div><strong>{result.kind==='rvc-neural'?'외부 Singing + RVC 실제 WAV 결과':result.kind==='engine'?'별도 로컬 엔진 결과':result.kind==='offline-guide'?'내장 오프라인 가창 가이드':result.kind==='offline-guide-selection'?'선택 구간 오프라인 가창 미리 듣기':'모음 샘플 기반 결과'}</strong><span>{result.count}개 음표 · {(result.file.size/1024/1024).toFixed(2)}MB</span></div><Status ready>WAV 생성됨</Status></div><audio src={url} controls className="mv10-player"/></>:<Notice>아직 렌더링된 WAV가 없습니다.</Notice>}
+   <div className="mv7-actions"><Button icon="download" disabled={!result||busy} onClick={()=>download(result.file,result.file.name)}>WAV 저장</Button><Button icon="plus" variant="primary" disabled={!result||busy} onClick={addTrack}>프로젝트 오디오 트랙에 추가</Button>{sourceVocal?.projectId===p.id&&<Button icon="download" disabled={busy} onClick={()=>download(sourceVocal.file,sourceVocal.file.name)}>변환 전 Singing 원본 WAV 저장</Button>}</div>
    {status&&<Notice>{status}</Notice>}
   </Panel>
   <Panel title="최근 보컬 생성 기록" description="프로젝트별 최근 20개 작업의 결과와 사용한 엔진을 저장합니다. WAV 원본은 트랙에 추가해야 유지됩니다.">

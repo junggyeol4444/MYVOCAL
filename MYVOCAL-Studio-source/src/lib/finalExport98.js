@@ -1,5 +1,7 @@
 // STEP98: local export orchestration. No silent MP4->WebM renaming.
 import {createMidiFile} from './midiFile.js';
+import {makeZip} from './zipStore.js';
+import {inspectSingingWav} from './singingOutputValidation.js';
 import {pv95Cues,pv95Duration} from './vocalSynthPv95.js';
 import {cuesToSrt,isAlignmentStale} from './lyricAlignment.js';
 import {exportMvAnimaticSrt} from './mvAnimatic.js';
@@ -18,6 +20,35 @@ export function lyricsSrt98(project){
 export function sceneGuideSrt98(project,characters=[]){return exportMvAnimaticSrt(project,characters);}
 export function midi98(project){return createMidiFile(project);}
 export async function wav98(project){const {mixdownWav}=await import('./audioEngine.js');return mixdownWav(project,{sampleRate:44100,bitDepth:16,peakProtection:true});}
+// Isolated PCM track stems aligned to the original project timeline, not AI-separated stems.
+export async function stemsZip98(project,{mix=null}={}){
+ const tracks=project?.tracks;
+ if(!Array.isArray(tracks))throw Error('프로젝트 트랙 정보가 없습니다.');
+ const available=tracks.filter(t=>t&&((t.midiNotes||[]).length||(t.clips||[]).some(c=>c.assetId)));
+ if(!available.length||available.length>16)throw Error('트랙별 WAV 출력은 소리가 있는 트랙 1~16개만 지원합니다.');
+ if(new Set(available.map(t=>t.id)).size!==available.length||available.some(t=>!t.id))throw Error('트랙 ID가 중복되거나 누락됐습니다.');
+ const render=mix||(await import('./audioEngine.js')).mixdownWav;
+ const entries=[],manifest={format:'MYVOCAL_WAV_STEMS',version:2,projectId:String(project.id||''),title:String(project.title||''),sampleRate:44100,bitDepth:16,channels:2,tracks:[]};
+ let total=0,expectedFrames=null;
+ for(let i=0;i<available.length;i++){
+  const track=available[i],isolated={...project,tracks:tracks.map(t=>({...t,mute:t.id!==track.id,solo:false}))};
+  const blob=await render(isolated,{sampleRate:44100,bitDepth:16,channels:2,normalizePeak:false,peakProtection:false,trimSilence:false});
+  if(!(blob instanceof Blob)||blob.size<44)throw Error('트랙 '+(i+1)+'의 실제 WAV 생성에 실패했습니다.');
+  if(blob.size>256*1024*1024-total)throw Error('WAV ZIP 용량 256MiB 초과');
+  const data=new Uint8Array(await blob.arrayBuffer()),report=inspectSingingWav(data);
+  if(!report.valid||report.sampleRate!==44100||report.channels!==2||report.bits!==16||report.encoding!==1)throw Error('트랙 '+(i+1)+'의 PCM WAV 형식이 올바르지 않습니다.');
+  if(expectedFrames!==null&&report.frames!==expectedFrames)throw Error('트랙별 WAV 길이가 서로 달라 시간축이 어긋납니다.');
+  expectedFrames=report.frames;total+=data.byteLength;
+  if(total>256*1024*1024)throw Error('WAV ZIP 용량 256MiB 초과');
+  const safe=String(track.name||'Track').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/\.\.+/g,'_').slice(0,60);
+  const name='stems/'+String(i+1).padStart(2,'0')+'_'+safe+'.wav';
+  entries.push({name,data});
+  manifest.tracks.push({id:track.id,name:track.name||'Track',file:name,frames:report.frames,durationSec:report.durationSec,peak:report.peak,volume:track.volume??75,originalMute:!!track.mute,originalSolo:!!track.solo});
+ }
+ entries.unshift({name:'stems/manifest.json',data:new TextEncoder().encode(JSON.stringify(manifest,null,2))});
+ return new Blob([makeZip(entries)],{type:'application/zip'});
+}
+
 export function mp4Mime98(MediaRecorderImpl=globalThis.MediaRecorder){
  if(!MediaRecorderImpl?.isTypeSupported)throw Error('MP4 녹화를 지원하는 MediaRecorder가 없습니다.');
  for(const mime of ['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4'])if(MediaRecorderImpl.isTypeSupported(mime))return mime;
