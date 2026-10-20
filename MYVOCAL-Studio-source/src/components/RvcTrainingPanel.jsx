@@ -38,7 +38,7 @@ export default function RvcTrainingPanel({voice,plans,add,notify}){
   }catch(e){if(assetId)await removeFile(assetId).catch(()=>{});setError(e.message)}finally{setBusy(false)}
  };
  return <Panel title="5. 설치된 RVC 엔진으로 실제 학습 실행" description="등록된 내 목소리 학습 데이터셋을 사용자가 설치한 로컬 신경망 학습 스크립트에 전달합니다.">
-  <Notice>Python과 외부 RVC 학습 코드·GPU가 먼저 설치되어 있어야 합니다. RVC 버전마다 학습 명령이 다르므로 그 버전에 맞는 옵션을 입력하세요. 이 프로그램은 가짜 체크포인트를 만들지 않습니다.</Notice>
+  <Notice>사용자 PC에 Python·RVC 학습 환경을 설치해야 합니다. 이 버튼은 {dataset} 입력 폴더와 {output} 모델 파일 인수를 지원하는 **별도 호환 학습 스크립트**를 실행합니다. RVC 공식 WebUI의 train/train.py는 전처리·F0·HuBERT·config/filelist 생성 없이 이 두 인수만으로 학습되지 않습니다. 사용하는 RVC 버전에 맞춘 단계별 실행 스크립트를 지정해야 합니다. GPU 모델 설치·학습 성공을 자동 보증하지 않습니다.</Notice>
   <Field label="RVC 학습 준비 작업"><select aria-label="학습할 작업" value={selected?.id||''} onChange={e=>setPlanId(e.target.value)}>{(plans||[]).filter(p=>p.engineId==='rvc').map(p=><option key={p.id} value={p.id}>{p.id} · 원본 {p.sampleIds?.length||0}개</option>)}</select></Field>
   <Field label="학습 코드 설치 폴더"><input value={root} disabled={busy} onChange={e=>setRoot(e.target.value)} placeholder="D:\\RVC"/></Field>
   <Field label="Python.exe"><input value={python} disabled={busy} onChange={e=>setPython(e.target.value)} placeholder="D:\\RVC\\runtime\\python.exe"/></Field>

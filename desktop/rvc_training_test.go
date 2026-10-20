@@ -112,7 +112,7 @@ func TestRVCTrainingRunnerProducesImportableModelWithoutChangingSource(t *testin
 			t.Errorf("training source changed: %v", e)
 		}
 		_, _ = w.Write([]byte("training loop executed"))
-		if e = os.WriteFile(output, bytes.Repeat([]byte{0x50}, 2048), 0600); e != nil {
+		if e = os.WriteFile(output, append([]byte{0x50, 0x4b, 3, 4}, bytes.Repeat([]byte{0x50}, 2044)...), 0600); e != nil {
 			return e
 		}
 		invoked <- output
@@ -197,5 +197,15 @@ func TestRVCTrainingArgumentContractAndPrivacy(t *testing.T) {
 	}
 	if strings.Contains(fmt.Sprint((&rvcTrainingManager{}).snapshot()), o.Python) {
 		t.Fatal("private Python path leaked")
+	}
+}
+
+func TestRVCTrainingRejectsPlainTextFakeModel(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "fake.pth")
+	if err := os.WriteFile(f, bytes.Repeat([]byte("not real model"), 200), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if plausibleTorchCheckpoint(f) {
+		t.Fatal("plain text was accepted as model weights")
 	}
 }

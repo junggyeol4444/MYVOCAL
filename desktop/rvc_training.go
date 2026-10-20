@@ -240,6 +240,25 @@ func unpackTrainingBundle(raw []byte, destination, voiceID string) (int, error) 
 	}
 	return count, nil
 }
+
+// This only rejects obvious non-checkpoint outputs. It cannot prove the neural
+// weights are usable; a real inference run is still required before acceptance.
+func plausibleTorchCheckpoint(path string) bool {
+	f, e := os.Open(path)
+	if e != nil {
+		return false
+	}
+	defer f.Close()
+	st, e := f.Stat()
+	if e != nil || !st.Mode().IsRegular() || st.Size() < 1024 || st.Size() > maxRVCTrainedModel {
+		return false
+	}
+	var head [4]byte
+	if _, e = io.ReadFull(f, head[:]); e != nil {
+		return false
+	}
+	return (head[0] == 'P' && head[1] == 'K' && head[2] == 3 && head[3] == 4) || (head[0] == 0x80 && head[1] >= 2 && head[1] <= 5)
+}
 func runRVCTraining(ctx context.Context, o rvcTrainingOptions, dataset, output string, log io.Writer) error {
 	args := []string{o.Script}
 	for _, x := range o.Args {
@@ -366,10 +385,8 @@ func (a *appServer) rvcTrainingStartWith(w http.ResponseWriter, r *http.Request,
 	// remain intact until the user explicitly manages them outside the app.
 	go func() {
 		e := runner(ctx, o, filepath.Join(dir, "dataset"), output, rvcTrainLog{manager: &a.training})
-		if e == nil {
-			if st, statErr := os.Stat(output); statErr != nil || !st.Mode().IsRegular() || st.Size() < 1024 || st.Size() > maxRVCTrainedModel {
-				e = errors.New("학습 엔진이 사용 가능한 .pth 파일을 생성하지 않았습니다")
-			}
+		if e == nil && !plausibleTorchCheckpoint(output) {
+			e = errors.New("학습 엔진이 PyTorch 형식의 .pth 파일을 생성하지 않았습니다")
 		}
 		a.training.mu.Lock()
 		if a.training.id == id {
@@ -446,8 +463,7 @@ func (a *appServer) rvcTrainingModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	st, e := f.Stat()
-	if e != nil || !st.Mode().IsRegular() || st.Size() < 1024 || st.Size() > maxRVCTrainedModel {
+	if !plausibleTorchCheckpoint(path) {
 		jsonError(w, 422, "체크포인트 크기 또는 유형이 올바르지 않습니다")
 		return
 	}
