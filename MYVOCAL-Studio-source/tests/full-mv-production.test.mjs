@@ -45,3 +45,12 @@ test('registered character viseme overlay uses exact saved placement on the fina
  }));
  assert.equal(overlaySeen.matchedScenes,1);
 });
+
+test('all completed MV scenes can export WebM offline with no ComfyUI models',async()=>{
+ let p=source();p.scenes[0].videoClipAssetId='vid_existing';
+ let modelCalls=0;
+ const result=await runFullLocalMv({project:p,data:{characters:[]},current:()=>p,commit:()=>{},session:'local',
+  checkpoint:'',videoModel:'',port:0},inject(p,{batch:async()=>modelCalls++}));
+ assert.equal(modelCalls,0);assert.equal(result.generatedVideos,0);
+ assert.equal(result.file.type,'video/webm');
+});

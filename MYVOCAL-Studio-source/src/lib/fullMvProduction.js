@@ -1,6 +1,6 @@
 // One user-facing path, reusing the installed local SD / SVD models, MYVOCAL
 // mixdown and real WebView2 Canvas recorder. No model/API access is faked.
-import {runMvBatch} from './mvBatchProduction.js';
+import {planMvBatch,runMvBatch} from './mvBatchProduction.js';
 import {planMvVideoRender,loadMvVideoAssets} from './mvVideoRender.js';
 import {recordMvWebm,assertMvExportEnvironment} from './mvWebmRecorder.js';
 // AudioEngine is loaded only when performing an actual mixdown, not when
@@ -33,9 +33,12 @@ export async function runFullLocalMv({
  if(safeLip&&!safeLip.matchedScenes)throw Error('배치에 연결된 립싱크 입 모양이 없습니다.');
  let generated=null,resources=null;
  try{
-  generated=await batch({project,data,checkpoint,videoModel,port,session,imageSteps,width,height,
+  const pending=planMvBatch(project,{includeReferences});
+  // A completed project can be exported again without GPU models installed.
+  // Never invoke or require an external inference engine when no scenes need it.
+  generated=pending.total>0?await batch({project,data,checkpoint,videoModel,port,session,imageSteps,width,height,
     frames,fps,videoSteps,motion,includeReferences,current,currentData,commit,signal,
-    progress:s=>onProgress('이미지/영상 생성: '+s)});
+    progress:s=>onProgress('이미지/영상 생성: '+s)}):{generatedImages:0,generatedVideos:0};
   if(signal?.aborted)throw Error('완성 MV 제작을 취소했습니다.');
   const latest=current();
   if(!latest||latest.id!==project.id)throw Error('자동 생성 중 프로젝트가 바뀌었습니다.');
