@@ -6,6 +6,8 @@ import {planMvVideoRender,loadMvVideoAssets,findMvVideoScene,drawMvVideoFrame,sy
 import {recordMvWebm,assertMvExportEnvironment} from '../lib/mvWebmRecorder.js';
 import {queryLocalMp4Status,convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {buildMvLyricCaptions} from '../lib/mvLyricCaptions.js';
+import {planMvLipSyncOverlay} from '../lib/mvLipSyncOverlay.js';
+import {readMvLipPlacement,saveMvLipPlacement} from '../lib/mvLipPlacement.js';
 
 function saveMovie(blob,project,extension='webm'){
  const name=String(project.title||'myvocal').replace(/[^가-힣A-Za-z0-9_-]/g,'_').slice(0,64);
@@ -18,6 +20,8 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  const canvas=useRef(null),abort=useRef(null),mounted=useRef(true),previewAudio=useRef(null);
  const [prepared,setPrepared]=useState(null),[loadError,setLoadError]=useState('');
  const [busy,setBusy]=useState(false),[progress,setProgress]=useState(0),[includeSound,setIncludeSound]=useState(true),[showCaptions,setShowCaptions]=useState(true);
+ const [showMouth,setShowMouth]=useState(false),[mouthX,setMouthX]=useState(50),[mouthY,setMouthY]=useState(58),[mouthSize,setMouthSize]=useState(8);
+ const projectLive=useRef(project);projectLive.current=project;
  const [mp4Status,setMp4Status]=useState({ready:false,message:'로컬 FFmpeg 확인 중…'});
  let plan=null,planError='';
  try{plan=planMvVideoRender(project,characters);}catch(e){planError=e.message;}
@@ -27,7 +31,15 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  const captionsEnabled=showCaptions&&lyricCaptions.status==='ready';
  const captionSignature=JSON.stringify(lyricCaptions.captions);
  const sceneTimeline=JSON.stringify(plan?.scenes.map(s=>[s.id,s.start,s.end,s.title])||[]);
+ const lipSignature=JSON.stringify(characters.map(c=>[c.id,c.lipSync?.cues]).filter(x=>x[1]?.length));
+ let lipSyncOverlays=null,lipError='';
+ if(showMouth)try{lipSyncOverlays=planMvLipSyncOverlay(project,characters,{xPercent:mouthX,yPercent:mouthY,sizePercent:mouthSize});}
+ catch(e){lipError=e.message;}
+ const lipReady=!showMouth||!!lipSyncOverlays;
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;abort.current?.abort();previewAudio.current?.stop();};},[]);
+ useEffect(()=>{let prefs={};try{prefs=readMvLipPlacement(window.localStorage,project?.id)}catch{}
+  setMouthX(prefs.xPercent??50);setMouthY(prefs.yPercent??58);setMouthSize(prefs.sizePercent??8);
+ },[project?.id]);
  useEffect(()=>{
   const controller=new AbortController();
   queryLocalMp4Status({session:window.__MYVOCAL_SESSION_KEY||'',signal:controller.signal})
@@ -60,14 +72,17 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  useEffect(()=>{
   if(!prepared||!plan||!canvas.current)return;
   syncMvPreviewClips(plan.scenes,prepared.assets,activeScene,playing,positionSeconds);
-  try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0,{captions:lyricCaptions.captions,showCaptions:captionsEnabled});}catch{}
- },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,captionSignature]);
+  try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0,{captions:lyricCaptions.captions,showCaptions:captionsEnabled,lipSyncOverlays});}catch{}
+ },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,captionSignature,showMouth,mouthX,mouthY,mouthSize,lipSignature]);
  const startExport=async(format='webm')=>{
   if(!plan||busy)return;
+  if(!lipReady){notify('캐릭터 입 모양 설정 오류: '+lipError);return;}
   if(format==='mp4'&&!mp4Status.ready){notify('MP4 내보내기 준비 안 됨: '+mp4Status.message);return;}
   const controller=new AbortController();abort.current=controller;
   setBusy(true);setProgress(0);
   let resources=null;
+  const originalProject=projectLive.current;
+  const exportSceneSignature=JSON.stringify(originalProject?.scenes);
   try{
    assertMvExportEnvironment();
    // Fresh playback elements keep the preview untouched throughout export.
@@ -75,13 +90,15 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
    const useAudio=!!includeSound&&musicExists;
    const result=await recordMvWebm(plan,resources,{
     includeAudio:useAudio,renderAudio:()=>mixdownWav(project,{bitDepth:16,channels:2,sampleRate:44100}),
-    showCaptions:captionsEnabled,captions:lyricCaptions.captions,
+    showCaptions:captionsEnabled,captions:lyricCaptions.captions,lipSyncOverlays,
     signal:controller.signal,onProgress:n=>{if(mounted.current)setProgress(n);}
    });
    if(controller.signal.aborted)throw Error('영상 저장을 취소했습니다.');
+   if(projectLive.current?.id!==originalProject?.id||JSON.stringify(projectLive.current?.scenes)!==exportSceneSignature)throw Error('MV 저장 중 프로젝트 또는 장면이 변경됐습니다. 다시 실행하세요.');
    if(format==='mp4'){
     const mp4=await convertRecordedWebMToMP4(result.blob,{session:window.__MYVOCAL_SESSION_KEY||'',signal:controller.signal});
     if(controller.signal.aborted)throw Error('MP4 저장을 취소했습니다.');
+    if(projectLive.current?.id!==originalProject?.id||JSON.stringify(projectLive.current?.scenes)!==exportSceneSignature)throw Error('MP4 변환 중 프로젝트 장면이 변경됐습니다.');
     saveMovie(mp4,project,'mp4');
     notify(`전체 MV MP4 저장: ${plan.durationSec.toFixed(1)}초 · 음악 ${useAudio?'포함':'제외'} · 싱크 자막 ${captionsEnabled?'포함':'제외'}.`);
    }else{
@@ -105,9 +122,20 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
   <div className="hstack" style={{gap:12,flexWrap:'wrap',alignItems:'center'}}>
    <label className="muted"><input type="checkbox" disabled={!musicExists||busy} checked={includeSound&&musicExists} onChange={e=>setIncludeSound(e.target.checked)}/> 기존 곡의 음악·보컬 믹스 포함 {musicExists?'':'(재생 가능한 음악 없음)'}</label>
    <label className="muted"><input type="checkbox" aria-label="가사 싱크 자막 영상 포함" disabled={lyricCaptions.status!=='ready'||busy} checked={captionsEnabled} onChange={e=>setShowCaptions(e.target.checked)}/> 싱크된 가사 자막 포함 {lyricCaptions.status==='ready'?(`(${lyricCaptions.captions.length}개 구간)`):'(가사 싱크 확인 필요)'}</label>
-   <Button icon="download" variant="primary" disabled={!prepared||!!loadError||busy} onClick={()=>startExport('webm')}>{busy?`WebM 기록 중 ${progress}%`:'전체 MV WebM 저장'}</Button>
-   <Button icon="download" disabled={!mp4Status.ready||!prepared||!!loadError||busy} onClick={()=>startExport('mp4')}>전체 MV MP4 저장 (설치된 FFmpeg)</Button>
+   <Button icon="download" variant="primary" disabled={!prepared||!!loadError||busy||!lipReady} onClick={()=>startExport('webm')}>{busy?`WebM 기록 중 ${progress}%`:'전체 MV WebM 저장'}</Button>
+   <Button icon="download" disabled={!mp4Status.ready||!prepared||!!loadError||busy||!lipReady} onClick={()=>startExport('mp4')}>전체 MV MP4 저장 (설치된 FFmpeg)</Button>
    {busy&&<Button onClick={()=>abort.current?.abort()}>저장 취소</Button>}
+  </div>
+  <div className="mv7-item">
+   <label className="muted"><input type="checkbox" aria-label="캐릭터 입모양 2D 오버레이 영상 포함" disabled={busy} checked={showMouth} onChange={e=>setShowMouth(e.target.checked)}/> 캐릭터 수동 배치 입 모양을 영상 프레임에 그리기 (WebM·MP4)</label>
+   {showMouth&&<div className="mv10-grid">
+    <label>입 X 위치 <input aria-label="입 X 위치(%)" type="number" min="5" max="95" value={mouthX} disabled={busy} onChange={e=>setMouthX(Number(e.target.value))}/>%</label>
+    <label>입 Y 위치 <input aria-label="입 Y 위치(%)" type="number" min="5" max="95" value={mouthY} disabled={busy} onChange={e=>setMouthY(Number(e.target.value))}/>%</label>
+    <label>입 크기 <input aria-label="입 크기(%)" type="number" min="2" max="18" value={mouthSize} disabled={busy} onChange={e=>setMouthSize(Number(e.target.value))}/>%</label>
+    <Button disabled={busy||!lipReady} onClick={()=>{try{saveMvLipPlacement(window.localStorage,project.id,{xPercent:mouthX,yPercent:mouthY,sizePercent:mouthSize});notify('캐릭터 입 위치만 이 PC에 저장했습니다. 원본 캐릭터·음성은 변경하지 않았습니다.')}catch(e){notify(e.message)}}}>현재 프로젝트 입 위치 기억</Button>
+   </div>}
+   {showMouth&&<p className="muted">{lipError?('입 모양 적용 불가: '+lipError):('립싱크 장면 '+lipSyncOverlays.matchedScenes+'개, 사용자 지정 위치의 2D 입 모양을 실제 영상 프레임에 기록합니다.')}</p>}
+   <p className="muted">얼굴 자동 인식·얼굴 표면 변형·VRM 모프가 아닌, 사용자가 지정한 화면 좌표에 저장된 캐릭터 입 모양을 2D로 그리는 기능입니다. 원본 사진과 영상은 수정하지 않습니다.</p>
   </div>
   <p className="muted">{lyricCaptions.note}</p>
   <p className="muted">전체 MV MP4: {mp4Status.message}. Windows EXE에서 설치된 FFmpeg로 기존 WebM 원본을 실제 H.264/AAC MP4로 변환합니다. 새 AI 영상 생성이나 외부 인터넷 전송은 하지 않습니다.</p>

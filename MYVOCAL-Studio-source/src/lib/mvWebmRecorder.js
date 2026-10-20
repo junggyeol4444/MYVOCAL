@@ -34,7 +34,7 @@ function awaitMvAudioPreparation(work,signal){
  });
 }
 export async function recordMvWebm(plan,prepared,{
- renderAudio=null,includeAudio=false,showCaptions=false,captions=[],signal,onProgress=()=>{},
+ renderAudio=null,includeAudio=false,showCaptions=false,captions=[],lipSyncOverlays=null,signal,onProgress=()=>{},
  canvasFactory=()=>document.createElement('canvas'),env=globalThis
 }={}){
  assertMvExportEnvironment(env);
@@ -78,7 +78,7 @@ export async function recordMvWebm(plan,prepared,{
    await awaitMvAudioPreparation(()=>audioContext.resume(),signal); // initiated by the user's click
   }
   if(signal?.aborted)throw Error('영상 저장을 취소했습니다.');
-  drawMvVideoFrame(canvas,plan,allAssets,0,{captions,showCaptions});
+  drawMvVideoFrame(canvas,plan,allAssets,0,{captions,showCaptions,lipSyncOverlays});
   if(audioEnabled){
    const wav=await awaitMvAudioPreparation(renderAudio,signal);
    if(!wav?.size)throw Error('노래 WAV를 생성하지 못했습니다.');
@@ -174,7 +174,7 @@ export async function recordMvWebm(plan,prepared,{
        }
       }else activeVideoId='';
      }
-     try{drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions});}catch(e){
+     try{drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions,lipSyncOverlays});}catch(e){
       fail(e);return;
      }
      if(settled||signal?.aborted)return;

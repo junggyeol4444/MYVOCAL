@@ -3,6 +3,7 @@
 // Not a generative video, lip-sync, or neural inference engine.
 import {auditMvStoryboard} from './mvStoryboard.js';
 import {captionAtTime} from './mvLyricCaptions.js';
+import {drawMvLipSyncOverlay} from './mvLipSyncOverlay.js';
 
 export const MV_VIDEO_WIDTH=640;
 export const MV_VIDEO_HEIGHT=360;
@@ -167,7 +168,7 @@ function cover(ctx,source,width,height){
  ctx.drawImage(source,(width-outW)/2,(height-outH)/2,outW,outH);
  return true;
 }
-export function drawMvVideoFrame(canvas,plan,assets,seconds,{captions=[],showCaptions=false}={}){
+export function drawMvVideoFrame(canvas,plan,assets,seconds,{captions=[],showCaptions=false,lipSyncOverlays=null}={}){
  const ctx=canvas?.getContext?.('2d'),width=canvas?.width,height=canvas?.height;
  if(!ctx||!(width>0&&height>0))throw Error('영상을 그릴 화면이 없습니다.');
  const scene=findMvVideoScene(plan,seconds);
@@ -185,6 +186,10 @@ export function drawMvVideoFrame(canvas,plan,assets,seconds,{captions=[],showCap
   ctx.fillText(scene?'스토리보드 장면 · 이미지 없음':'장면 공백',width/2,height/2-7);
   ctx.textAlign='left';
  }
+ // A timed mouth shape is burned into the actual image/video frame only
+ // when the character's source media is visible and manual placement is enabled.
+ if(imageReady&&scene&&lipSyncOverlays)
+  drawMvLipSyncOverlay(ctx,lipSyncOverlays,scene.id,seconds,width,height);
  if(scene){
   const overlay=ctx.createLinearGradient(0,height-88,0,height);
   overlay.addColorStop(0,'rgba(0,0,0,0)');overlay.addColorStop(1,'rgba(0,0,0,.88)');
