@@ -1,5 +1,6 @@
 import React,{useState} from 'react';
 import VocalPreview from '../components/VocalPreview';
+import RvcTrainingPanel from '../components/RvcTrainingPanel.jsx';
 import {Button,Empty,Field,Icon,Notice,Panel,SectionHead,Status} from '../components/UI';
 import {genId} from '../lib/schema';
 import {getFile,putFile,removeFile} from '../lib/assetDb';
@@ -45,8 +46,8 @@ export default function Training({data,add,remove,notify,navigate}){
   notify('체크포인트 원본을 삭제한 뒤 모델 등록 정보를 갱신했습니다.');
  });
  return <>
-  <SectionHead eyebrow="VOICE TRAINING · MODEL REGISTRY · LOCAL VOCAL PREVIEW" title="Voice Training Manager" description="목소리 학습 데이터를 준비하고 샘플 기반 보컬 미리보기를 생성합니다. 실제 AI 보컬 학습·가사 합성은 미연결입니다. 가사·MIDI 싱크는 Music Studio에서 편집할 수 있습니다." action={<Button icon="mic" onClick={()=>navigate('voices')}>녹음 스튜디오</Button>}/>
-  <div className="feature-strip"><div className="feature-symbol"><Icon name="wave" size={27}/></div><div><strong>v1.0 · 학습 준비 + 보컬 샘플 미리보기</strong><p>녹음 샘플 → 품질 사전 점검 → 학습 준비 작업 생성 → ZIP 내보내기 → 외부 모델 등록. AI 학습 엔진은 아직 없지만 로컬 보컬 샘플 소리 합성은 가능합니다.</p></div><Status>실제 엔진 미연결</Status></div>
+  <SectionHead eyebrow="VOICE TRAINING · MODEL REGISTRY · LOCAL VOCAL PREVIEW" title="Voice Training Manager" description="목소리 학습 데이터를 준비하고 샘플 기반 보컬 미리보기를 생성합니다. 사용자가 설치한 로컬 RVC 학습 스크립트를 실행할 수 있으며 한국어 신경망 가창은 별도 엔진이 필요합니다. 가사·MIDI 싱크는 Music Studio에서 편집할 수 있습니다." action={<Button icon="mic" onClick={()=>navigate('voices')}>녹음 스튜디오</Button>}/>
+  <div className="feature-strip"><div className="feature-symbol"><Icon name="wave" size={27}/></div><div><strong>v1.0 · 학습 준비 + 보컬 샘플 미리보기</strong><p>녹음 샘플 → 품질 사전 점검 → 학습 준비 작업 생성 → ZIP 내보내기 → 외부 모델 등록. 학습 실행에는 별도 설치된 로컬 학습 엔진이 필요하며 내장 보컬 샘플 미리보기도 제공합니다.</p></div><Status>실제 엔진 미연결</Status></div>
   {voices.length===0?<Empty icon="mic" title="먼저 Voice Studio에서 목소리를 등록하세요" description="권한이 있는 목소리 프로필과 하나 이상의 오디오 샘플이 필요합니다." action={<Button variant="primary" onClick={()=>navigate('voices')}>목소리 등록하기</Button>}/>:<>
    <div className="mv7-selector panel"><div><span className="eyebrow">TRAINING SOURCE</span><h3>학습할 목소리 선택</h3><p>등록한 샘플 및 분석 결과를 확인하고 학습 준비 묶음을 만듭니다.</p></div><select aria-label="학습 목소리 선택" value={selected} onChange={e=>{setVoiceId(e.target.value);setCheckpoint(null)}}>{voices.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></div>
    <div className="mv7-stats">
@@ -74,8 +75,9 @@ export default function Training({data,add,remove,notify,navigate}){
     <div className="mv7-columns mv7-model-import"><div><Field label="외부 체크포인트 파일 (.pth / .pt / .onnx / .ckpt / .safetensors)"><input id="voice-checkpoint-file" type="file" accept=".pth,.pt,.onnx,.ckpt,.safetensors" disabled={busy} onChange={e=>setCheckpoint(e.target.files?.[0]||null)}/></Field><p className="mv7-hint">파일당 200MB 이하 · 로컬 IndexedDB에 저장 · 모델 파일의 안전성/호환성은 자동 검증하지 않음</p></div><div><Field label="외부 모델 종류"><select value={checkpointEngine} onChange={e=>setCheckpointEngine(e.target.value)}>{TRAINING_ENGINES.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}</select></Field><Button variant="primary" icon="save" disabled={busy||!checkpoint||!quality.permitted} onClick={importCheckpoint}>{busy?'처리 중':'체크포인트 등록'}</Button></div></div>
     {models.length?<div className="mv7-list">{models.map(model=><div className="mv7-item" key={model.id}><div className="mv7-item-title"><div><strong>{model.name}</strong><small>{byteText(model.bytes)} · {formatDate(model.createdAt)} · {TRAINING_ENGINES.find(e=>e.id===model.engineId)?.name||model.engineId}</small></div><Status>미검증 · 합성 미연결</Status></div><p className="mv7-hash">SHA-256: {model.sha256||'미계산'}</p><div className="mv7-actions"><Button icon="download" disabled={busy} onClick={()=>downloadCheckpoint(model)}>원본 내보내기</Button><Button icon="trash" disabled={busy} onClick={()=>deleteCheckpoint(model)}>삭제</Button></div></div>)}</div>:<div className="mv7-empty">등록된 외부 체크포인트가 없습니다.</div>}
    </Panel>
+   <RvcTrainingPanel voice={voice} plans={plans} add={add} notify={notify}/>
    <VocalPreview data={data} voice={voice} add={add} remove={remove} notify={notify}/>
   </>}
-  <Notice>외부 체크포인트는 단순 저장 대상입니다. PYTorch/ONNX 모델 로드, 학습, AI 가창 합성, Voice Conversion, 음소 기반 Singing은 이 버전에서 실행할 수 없습니다. 로컬 샘플러는 단순 음높이 변경 미리보기입니다. 등록·학습 권한이 있는 본인 또는 허가된 음성만 사용하세요. 파일 원본은 별도로 백업하세요.</Notice>
+  <Notice>외부 RVC 학습 스크립트 실행과 외부 변환 엔진 연결은 지원하지만, 실제 모델 설치·추론 호환성과 음질은 검증 대상입니다. 자연스러운 한국어 신경망 가창·음소 학습 및 모델 자동 설치는 아직 지원하지 않습니다. 로컬 샘플러는 단순 음높이 변경 미리보기입니다. 등록·학습 권한이 있는 본인 또는 허가된 음성만 사용하세요. 파일 원본은 별도로 백업하세요.</Notice>
  </>;
 }

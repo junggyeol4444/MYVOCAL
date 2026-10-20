@@ -21,6 +21,8 @@ const nativeInprocessMaxResponseBytes=80 << 20
 func inprocessLimits(method,path string)(int,int){
  if method==http.MethodPost && path=="/api/video/mp4" {return int(maxMVWebMBytes),int(maxMVMP4Bytes)}
  if method==http.MethodPost && path=="/api/singing/rvc/convert" {return int(maxRVCRequestBytes),int(maxRVCResponseBytes)}
+ if method==http.MethodPost && path=="/api/training/rvc/start" {return int(maxRVCTrainingRequest),nativeInprocessMaxResponseBytes}
+ if method==http.MethodGet && path=="/api/training/rvc/model" {return nativeInprocessMaxRequestBytes,int(maxRVCTrainedModel)}
  return nativeInprocessMaxRequestBytes,nativeInprocessMaxResponseBytes
 }
 

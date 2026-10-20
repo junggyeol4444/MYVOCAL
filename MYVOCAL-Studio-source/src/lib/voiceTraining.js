@@ -8,7 +8,7 @@ import {sha256Bytes} from './voiceFileHash.js';
 
 export const TRAINING_ENGINES=Object.freeze([
  {id:'generic',name:'범용 학습 데이터셋',type:'dataset-only',description:'원본 오디오 + 메타데이터 준비. 별도의 학습 프로그램 필요',connected:false},
- {id:'rvc',name:'RVC 계열 · 외부 학습용',type:'external',description:'외부 RVC 환경이 별도로 필요하며 여기서는 학습 실행을 지원하지 않음',connected:false},
+ {id:'rvc',name:'RVC 계열 · 외부 학습용',type:'external',description:'RVC 학습 ZIP 생성 및 사용자가 설치한 로컬 학습 스크립트 실행을 지원합니다. 모델 설치와 호환성은 별도 검증 대상',connected:false},
  {id:'svc',name:'SVC 계열 · 외부 학습용',type:'external',description:'외부 SVC 환경이 별도로 필요하며 여기서는 학습 실행을 지원하지 않음',connected:false}
 ]);
 export const getTrainingEngine=id=>TRAINING_ENGINES.find(e=>e.id===id)||null;

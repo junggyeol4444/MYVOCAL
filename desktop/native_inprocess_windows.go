@@ -38,7 +38,7 @@ func nativeGetHeader(object unsafe.Pointer,name string)string{
  return nativeCOMUTF16(raw)
 }
 func nativeRequestBody(stream unsafe.Pointer, maxBytes int)([]byte,error){
- if maxBytes<0 || maxBytes>int(maxMVWebMBytes){return nil,errors.New("WebView2 본문 크기 한도 오류")}
+ if maxBytes<0 || maxBytes>int(maxRVCTrainingRequest){return nil,errors.New("WebView2 본문 크기 한도 오류")}
  if stream==nil{return nil,nil}
  defer nativeCOMCall(stream,2)
  var body []byte
