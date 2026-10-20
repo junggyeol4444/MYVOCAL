@@ -2,6 +2,7 @@
 // The received PCM WAV chunks are joined at their REAL absolute score times.
 // Nothing here trains a model or converts a demo engine into neural singing.
 import {buildSingingRequest} from './singingBridge.js';
+import {phonemeSourceKey,validatePhonemePlan} from './phonemePlan.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 
 const MAX_SECONDS=300;
@@ -84,14 +85,23 @@ export function combineSingingWavChunks(parts,durationSec){
  assertUsableSingingWav(output,{maxDurationSec:MAX_SECONDS});
  return new Blob([output],{type:'audio/wav'});
 }
-export async function renderLongSinging(alignment,{port,project,voice,model,request,signal,onProgress=()=>{}}={}){
+export async function renderLongSinging(alignment,{port,project,voice,model,request,signal,phonemePlan=null,onProgress=()=>{}}={}){
  if(typeof request!=='function')throw Error('실제 로컬 가창 엔진 호출 기능이 필요합니다.');
  const plan=planLongSingingChunks(alignment);
+ if(phonemePlan)validatePhonemePlan(phonemePlan,alignment);
  const parts=[];
  for(let i=0;i<plan.chunks.length;i++){
   if(signal?.aborted)throw Error('보컬 생성이 취소됐습니다. 기존 자료는 보존합니다.');
   const chunk=plan.chunks[i];
-  const req=buildSingingRequest(port,project,{bpm:alignment.bpm,cues:chunk.cues},voice,model,null);
+  const chunkAlignment={...alignment,longForm:false,cues:chunk.cues};
+  let chunkPhonemes=null;
+  if(phonemePlan){
+   const selected=phonemePlan.segments.filter(s=>s.cueIndex>chunk.firstCueIndex&&s.cueIndex<=chunk.firstCueIndex+chunk.cues.length)
+    .map(s=>({...s,cueIndex:s.cueIndex-chunk.firstCueIndex,startSec:Math.round((s.startSec-chunk.startSec)*10000)/10000,endSec:Math.round((s.endSec-chunk.startSec)*10000)/10000}));
+   if(selected.length>512)throw Error('분할 요청의 한국어 음소 힌트는 512개를 초과할 수 없습니다.');
+   if(selected.length)chunkPhonemes={...phonemePlan,sourceKey:phonemeSourceKey(chunkAlignment),segments:selected};
+  }
+  const req=buildSingingRequest(port,project,chunkAlignment,voice,model,chunkPhonemes);
   const blob=await request(req);
   if(!(blob instanceof Blob))throw Error('외부 엔진이 WAV 파일을 반환하지 않았습니다.');
   const bytes=new Uint8Array(await blob.arrayBuffer());

@@ -95,6 +95,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   if(longForm){
    const combined=await renderLongSinging(alignment,{port:number,project:p,voice,model:checkpoint,
     request:async body=>{const response=await requestBridge('/api/singing/render',body,controller.signal);return response.blob();},
+    phonemePlan,
     signal:controller.signal,
     onProgress:(done,total)=>{chunkCount=total;setStatus(`외부 가창 엔진 분할 처리 ${done}/${total} · 기존 프로젝트는 보존됩니다.`);}
    });

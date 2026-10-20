@@ -56,20 +56,20 @@ export function buildPhonemePlan(alignment){
   }
  }
  if(!segments.length)throw Error('발음 계획을 만들 가사가 없습니다. 가사·MIDI 싱크를 확인하세요.');
- if(segments.length>512)throw Error('발음 구간은 최대 512개까지만 지원합니다.');
+ if(segments.length>(alignment.longForm===true?2048:512))throw Error('발음 구간 제한을 초과했습니다. 짧게 나눠 생성하세요.');
  const plan={format:'MYVOCAL_PHONEME_HINTS',version:1,projectId:alignment.projectId,trackId:alignment.trackId,
   sourceKey:phonemeSourceKey(alignment),createdAt:new Date().toISOString(),method:'jamo-heuristic-not-audio-alignment',segments,warnings:warnings.slice(0,50)};
  validatePhonemePlan(plan,alignment);
  return plan;
 }
 export function validatePhonemePlan(plan,alignment){
- if(!plan||plan.format!=='MYVOCAL_PHONEME_HINTS'||plan.version!==1||!Array.isArray(plan.segments)||!plan.segments.length||plan.segments.length>512)throw Error('발음 타임라인 파일 형식이 올바르지 않습니다.');
+ if(!plan||plan.format!=='MYVOCAL_PHONEME_HINTS'||plan.version!==1||!Array.isArray(plan.segments)||!plan.segments.length||plan.segments.length>(alignment?.longForm===true?2048:512))throw Error('발음 타임라인 파일 형식이 올바르지 않습니다.');
  if(alignment){validateAlignment(alignment);if(isPhonemePlanStale(alignment,plan))throw Error('가사·MIDI가 달라져 발음 계획을 다시 생성해야 합니다.');}
  const lastEnd=new Map();
  for(const s of plan.segments){
   const cue=alignment?.cues?.[s.cueIndex-1];
-  if(!Number.isInteger(s.cueIndex)||s.cueIndex<1||s.cueIndex>128||typeof s.token!=='string'||s.token.length<1||s.token.length>40||/[\r\n\u0000-\u001f]/.test(s.token)||!['onset','nucleus','coda','text'].includes(s.kind)||
-    !Number.isFinite(s.startSec)||!Number.isFinite(s.endSec)||s.startSec<0||s.endSec<=s.startSec||s.endSec>90.001|| !Number.isFinite(s.pitch)||s.pitch<36||s.pitch>96)throw Error('발음 구간의 텍스트·시간·음높이가 잘못되었습니다.');
+  if(!Number.isInteger(s.cueIndex)||s.cueIndex<1||s.cueIndex>(alignment?.longForm===true?512:128)||typeof s.token!=='string'||s.token.length<1||s.token.length>40||/[\r\n\u0000-\u001f]/.test(s.token)||!['onset','nucleus','coda','text'].includes(s.kind)||
+    !Number.isFinite(s.startSec)||!Number.isFinite(s.endSec)||s.startSec<0||s.endSec<=s.startSec||s.endSec>(alignment?.longForm===true?300.001:90.001)|| !Number.isFinite(s.pitch)||s.pitch<36||s.pitch>96)throw Error('발음 구간의 텍스트·시간·음높이가 잘못되었습니다.');
   if(cue&&(s.startSec<cue.startSec-0.001||s.endSec>cue.endSec+0.001||s.pitch!==cue.pitch))throw Error(`${s.cueIndex}번 음표의 범위 밖으로 발음 구간을 지정했습니다.`);
   if(lastEnd.has(s.cueIndex)&&s.startSec<lastEnd.get(s.cueIndex)-0.00011)throw Error(`${s.cueIndex}번 음표의 발음 구간이 겹치거나 순서가 바뀌었습니다.`);
   lastEnd.set(s.cueIndex,s.endSec);

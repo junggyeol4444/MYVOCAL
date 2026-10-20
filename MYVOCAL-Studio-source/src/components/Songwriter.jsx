@@ -3,6 +3,7 @@ import {Button,Notice,Panel} from './UI';
 import {generateOfflineDraft,applyComposition,songMoods,songLengths,COMPOSER_PARTS} from '../lib/composer';
 import GenreMixEditor from './GenreMixEditor';
 import LocalAiComposerPanel from './LocalAiComposerPanel.jsx';
+import MusicGenPanel from './MusicGenPanel.jsx';
 import LocalAiProductionPanel from './LocalAiProductionPanel.jsx';
 import {alignLyricNotes} from '../lib/lyricAlignment';
 import {resolveGenreMix,validateGenreMix,genreMixText} from '../lib/genreMix';
@@ -44,6 +45,7 @@ export default function Songwriter({project:p,onChange,notify}){
     <Button variant="primary" className="full-width" icon="spark" onClick={draftOffline}>로컬 작곡 초안 생성 · 다른 변형 만들기</Button>
     <LocalAiComposerPanel options={opts} onDraft={d=>{setDraft(d);setError('')}} notify={notify}/>
     <LocalAiProductionPanel project={p} options={opts} onChange={onChange} notify={notify}/>
+    <MusicGenPanel project={p} onChange={onChange} notify={notify}/>
     {error&&<div className="mv4-error" role="alert">{error}</div>}
    </div>
    <div className="panel mv4-preview">

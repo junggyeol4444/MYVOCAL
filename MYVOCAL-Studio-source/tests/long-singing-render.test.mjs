@@ -48,3 +48,15 @@ test('abort between long-form model requests does not claim a finished WAV',asyn
  signal:controller.signal,request:async req=>{count++;controller.abort();return new Blob([wav(Math.max(...req.cues.map(c=>c.endSec)))],{type:'audio/wav'});}}),/취소/);
  assert.equal(count,1);
 });
+import {buildPhonemePlan} from '../src/lib/phonemePlan.js';
+test('long Korean phoneme hints are rebased per neural singing inference chunk',async()=>{
+ const s={...align,format:'MYVOCAL_LYRIC_ALIGNMENT',version:1,longForm:true,projectId:'test-long',trackId:'v',sourceKey:'original-vocal',cues:align.cues.map(c=>({...c}))};
+ const hints=buildPhonemePlan(s),received=[];
+ await renderLongSinging(s,{port:7867,project:{title:'노래'},voice:{id:'mine',name:'나',rights:'self'},model:null,phonemePlan:hints,
+ request:async body=>{received.push(body);return new Blob([wav(Math.max(...body.cues.map(c=>c.endSec)))],{type:'audio/wav'});}});
+ assert.equal(received.length,3);
+ assert.ok(received.every(x=>x.phonemes?.length>0));
+ assert.equal(received[1].phonemes[0].cueIndex,1);
+ assert.ok(received[1].phonemes[0].startSec<1);
+ assert.equal(s.cues[1].startSec,50);
+});
