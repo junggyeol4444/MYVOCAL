@@ -384,6 +384,9 @@ func (a *appServer) rvcTrainingStartWith(w http.ResponseWriter, r *http.Request,
 	// Never silently remove a previous trained model; older job directories
 	// remain intact until the user explicitly manages them outside the app.
 	go func() {
+		// Copies of private voice recordings exist only during this training run.
+		// Remove exactly our newly-created dataset directory, never the user’s originals or output weights.
+		defer os.RemoveAll(filepath.Join(dir, "dataset"))
 		e := runner(ctx, o, filepath.Join(dir, "dataset"), output, rvcTrainLog{manager: &a.training})
 		if e == nil && !plausibleTorchCheckpoint(output) {
 			e = errors.New("학습 엔진이 PyTorch 형식의 .pth 파일을 생성하지 않았습니다")

@@ -209,3 +209,43 @@ func TestRVCTrainingRejectsPlainTextFakeModel(t *testing.T) {
 		t.Fatal("plain text was accepted as model weights")
 	}
 }
+
+func TestRVCTrainingCleansPrivateDatasetCopiesAfterCompletion(t *testing.T) {
+	o := testRVCTrainer(t)
+	a := &appServer{sessionKey: "secure"}
+	w := httptest.NewRecorder()
+	var copied string
+	a.rvcTrainingStartWith(w, rvcTrainingRequest(t, o, testRVCTrainingZip(t, "self-voice", "rvc"), "secure"), func(_ context.Context, _ rvcTrainingOptions, dataset, output string, _ io.Writer) error {
+		copied = dataset
+		return os.WriteFile(output, append([]byte{'P', 'K', 3, 4}, bytes.Repeat([]byte{0x50}, 2044)...), 0600)
+	})
+	if w.Code != 200 {
+		t.Fatalf("start: %d", w.Code)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if a.training.snapshot()["state"] == "completed" {
+			break
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+	if a.training.snapshot()["state"] != "completed" {
+		t.Fatal(a.training.snapshot())
+	}
+	if copied == "" {
+		t.Fatal("runner was never called")
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, e := os.Stat(copied); os.IsNotExist(e) {
+			break
+		}
+		time.Sleep(time.Millisecond * 10)
+	}
+	if _, e := os.Stat(copied); !os.IsNotExist(e) {
+		t.Fatalf("private recording copies persisted: %v", e)
+	}
+	if !plausibleTorchCheckpoint(a.training.modelPath) {
+		t.Fatal("trained weight result also removed")
+	}
+}
