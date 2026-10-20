@@ -8,6 +8,7 @@ import {readAudioInfo} from '../lib/audioEngine';
 import {assertUsableSingingWav} from '../lib/singingOutputValidation.js';
 import {renderOfflineVocalGuide,renderOfflineVocalGuideSelection,guideSyllableSequence} from '../lib/offlineVocalGuide';
 import {hangulHint,singingCapabilitiesView,engineModelCompatibility,buildSingingRequest,appendRenderHistory} from '../lib/singingBridge';
+import {renderLongSinging} from '../lib/longSingingRender.js';
 import EngineManager from './EngineManager';
 import {isPhonemePlanStale} from '../lib/phonemePlan';
 
@@ -34,7 +35,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  useEffect(()=>()=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current)},[]);
  const changeResult=(blob,kind,count,fileKind=kind,placement=null)=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current);const u=URL.createObjectURL(blob);latestUrl.current=u;setUrl(u);setResult({file:new File([blob],outputName(p.title,fileKind),{type:'audio/wav'}),kind,count,placement});};
  const run=async fn=>{if(busy)return;setBusy(true);setStatus('');try{await fn()}catch(e){setStatus('오류: '+e.message);notify('가창 작업 오류: '+e.message)}finally{setBusy(false)}};
- const createSync=()=>{try{const synced=alignLyricNotes(p);onChange({...p,vocalAlignment:synced});notify('보컬 멜로디와 가사를 순서대로 연결했습니다. 음소 분석은 아닙니다.')}catch(e){notify(e.message)}};
+ const createSync=(longForm=false)=>{try{const synced=alignLyricNotes(p,undefined,{longForm});onChange({...p,vocalAlignment:synced});notify(longForm?'최대 300초 긴 곡 가사·MIDI 싱크를 준비했습니다. 외부 엔진으로 분할 가창 가능합니다.':'보컬 멜로디와 가사를 순서대로 연결했습니다. 음소 분석은 아닙니다.')}catch(e){notify(e.message)}};
  const guideRender=()=>run(async()=>{if(!alignment)throw Error('가사·MIDI 싱크를 먼저 준비하세요.');
   const made=renderOfflineVocalGuide(alignment,phonemePlan);changeResult(made.blob,'offline-guide',made.rendered);
   setStatus(`내장 오프라인 가창 가이드 WAV: ${made.rendered}음표, ${format(made.seconds)} · 별도 서버/음성 샘플/AI 없이 생성 (한글 음절별 모음·자음 힌트 · ${made.timedCues}개 음표에 저장된 발음 타임라인 적용)`);
@@ -87,18 +88,28 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   if(capability?.mode==='neural'&&!capability.inferenceReady)throw Error('외부 엔진이 추론 준비 상태가 아니라고 보고했습니다. 모델과 실행 환경을 확인하세요.');
   const compatibility=engineModelCompatibility(capability,checkpoint);
   if(!compatibility.ok)throw Error(compatibility.warning);
-  const req=buildSingingRequest(number,p,alignment,voice,checkpoint,phonemePlan);
-  const res=await requestBridge('/api/singing/render',req),blob=await res.blob();
-  assertUsableSingingWav(await blob.arrayBuffer());
+  const longForm=alignment.longForm===true;
+  let blob,chunkCount=1;
+  if(longForm){
+   const combined=await renderLongSinging(alignment,{port:number,project:p,voice,model:checkpoint,
+    request:async body=>{const response=await requestBridge('/api/singing/render',body);return response.blob();},
+    onProgress:(done,total)=>{chunkCount=total;setStatus(`외부 가창 엔진 분할 처리 ${done}/${total} · 기존 프로젝트는 보존됩니다.`);}
+   });
+   blob=combined.wav;
+  }else{
+   const req=buildSingingRequest(number,p,alignment,voice,checkpoint,phonemePlan);
+   const res=await requestBridge('/api/singing/render',req);blob=await res.blob();
+  }
+  assertUsableSingingWav(await blob.arrayBuffer(),{maxDurationSec:longForm?300:90});
   changeResult(blob,'engine',alignment.cues.length);
-  const job={id:genId('singjob'),at:new Date().toISOString(),mode:capability?.mode==='demo'?'외부 데모':'외부 엔진',result:'WAV 수신',notes:alignment.cues.length,engine:capability?.name||'미확인'};
+  const job={id:genId('singjob'),at:new Date().toISOString(),mode:capability?.mode==='demo'?'외부 데모':'외부 엔진',result:longForm?'긴 곡 WAV 합성 수신':'WAV 수신',notes:alignment.cues.length,engine:capability?.name||'미확인'};
   onChange({...p,singingEngine:{port:number,modelId:checkpoint?.id||''},singingJobs:appendRenderHistory(p.singingJobs,job)});
-  setStatus(capability?.mode==='demo'?'외부 데모 엔진에서 테스트 WAV를 받았습니다. 실제 AI 가창이 아닙니다.':'외부 엔진에서 WAV를 받아왔습니다. 품질과 모델 종류는 직접 검증해 주세요.');notify('외부 엔진 WAV 수신 성공.');
+  setStatus(capability?.mode==='demo'?'외부 데모 엔진에서 테스트 WAV를 받았습니다. 실제 AI 가창이 아닙니다.':longForm?`외부 엔진 ${chunkCount}개 구간 WAV를 타임라인에 맞게 결합했습니다. 모델·품질을 직접 확인하세요. 긴 곡은 음소 힌트를 아직 전송하지 않습니다.`:'외부 엔진에서 WAV를 받아왔습니다. 품질과 모델 종류는 직접 검증해 주세요.');notify('외부 엔진 WAV 수신 성공.');
  });
  const validCount=alignment?.cues?.filter(c=>c.lyric&&c.lyric!=='—').length||0;
  return <>
   <Panel title="Singing Workbench · v1.6" description="가사와 MIDI를 오프라인 가창 가이드 또는 녹음 샘플 기반 WAV로 렌더링합니다. 별도 호환 엔진은 선택 사항이며 신경망 AI 모델은 내장되지 않았습니다.">
-   <div className="mv10-strip"><div><strong>가사와 멜로디 준비</strong><span>{alignment?`싱크 완료 · ${validCount}/${alignment.cues.length}개 가사 있는 음표`:'싱크 없음 또는 원본 변경됨'}</span></div><Button icon="wave" disabled={busy||midiVocalTracks(p).length===0} onClick={createSync}>가사·MIDI 싱크 생성/갱신</Button></div>
+   <div className="mv10-strip"><div><strong>가사와 멜로디 준비</strong><span>{alignment?`싱크 완료 · ${validCount}/${alignment.cues.length}개 가사 있는 음표`:'싱크 없음 또는 원본 변경됨'}</span></div><Button icon="wave" disabled={busy||midiVocalTracks(p).length===0} onClick={()=>createSync(false)}>가사·MIDI 싱크 생성/갱신</Button><Button icon="wave" disabled={busy||midiVocalTracks(p).length===0} onClick={()=>createSync(true)}>긴 곡 300초 싱크 생성</Button></div>
    {!midiVocalTracks(p).length&&<Notice>먼저 MIDI 피아노 롤에서 보컬 음표를 작성해 주세요.</Notice>}
    {phonemePlan?<Notice>저장된 발음 타임라인 {phonemePlan.segments.length}개 구간을 내장 오프라인 WAV의 음절 길이에도 반영합니다(한글 음절). 외부 엔진 요청에도 포함되지만 엔진마다 지원이 다릅니다.</Notice>:<Notice>저장된 발음 타임라인이 없습니다. 오프라인 가이드는 음표 길이를 음절별로 균등 배분합니다. ‘발음 타임라인’에서 생성·저장하면 음절별 길이를 조절할 수 있습니다.</Notice>}
    {alignment&&<div className="mv10-cues">{alignment.cues.slice(0,24).map((c,i)=><div key={i} title={`${c.startSec}s · MIDI ${c.pitch}`}><span>{c.lyric}</span><small>{hangulHint(c.lyric)?Object.values(hangulHint(c.lyric)).filter(Boolean).join('·'):(lyricVowel(c.lyric)?VOWEL_NAMES[lyricVowel(c.lyric)]:'기본')}</small></div>)}{alignment.cues.length>24&&<span className="mv10-remaining">+{alignment.cues.length-24}음</span>}</div>}
@@ -131,6 +142,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
      {capability.models.length>0&&<Field label="엔진에서 사용 가능한 모델"><select value={engineModelId} onChange={e=>setEngineModelId(e.target.value)}>{capability.models.map(m=><option key={m.id} value={m.id}>{m.name} · {m.engineId||'종류 미상'} ({m.id})</option>)}</select></Field>}
      <Notice>{capability.mode==='neural'?'신경망 모드는 외부 엔진의 자체 신고입니다. 프로그램이 AI 모델이나 학습 품질을 검증한 것은 아닙니다.':capability.mode==='demo'?'데모 엔진입니다. 실제 목소리나 가사를 부르지 않습니다.':capability.message}</Notice>
    </div>}
+   <Notice>긴 곡은 최대 300초·512음표의 별도 싱크로 설정한 후, 각 음표 경계에서 80초 이내로 나눠 같은 외부 로컬 가창 엔진에 순서대로 보내며 WAV를 결합합니다. 실제 신경망 가창 여부는 연결된 엔진에 달려 있으며, 긴 곡 음소 힌트는 아직 지원하지 않습니다.</Notice>
    <Notice>엔진 계약: <code>GET /health</code> → JSON, <code>POST /v1/sing</code> → WAV(PCM RIFF) 응답. 연결 검사 성공은 AI 모델 학습/추론 성공을 뜻하지 않습니다. 엔진 설치 및 체크포인트 호환성은 별도로 확인해야 합니다.</Notice>
   </Panel>
   <Panel title="렌더링 결과 · 프로젝트 적용" description="내장 가창 가이드·로컬 샘플러·별도 엔진에서 생성된 WAV를 재생, 저장하거나 음악 편집 타임라인에 오디오 트랙으로 추가할 수 있습니다.">

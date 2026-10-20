@@ -31,6 +31,8 @@ async function tx(mode, callback) {
  });
 }
 export const putFile=(id,file)=>tx('readwrite',s=>s.put(file,id));
+// Generated assets require add-only storage; collisions abort without replacing originals.
+export const putFileNew=(id,file)=>tx('readwrite',s=>s.add(file,id));
 export const getFile=(id)=>tx('readonly',s=>s.get(id));
 export const removeFile=(id)=>tx('readwrite',s=>s.delete(id));
 

@@ -25,3 +25,12 @@ test('forbidden reference-only voice cannot be exported',async()=>{const p=proje
 test('foreign checkpoint rejected for model voice mismatch',async()=>{const p=project();await assert.rejects(createVocalExchangePackage(p,alignLyricNotes(p),{id:'v',rights:'self'},{id:'m',voiceId:'x'}),/서로 다릅니다/);});
 test('changed project cannot export stale alignment',async()=>{const p=project(),a=alignLyricNotes(p);p.tracks[0].midiNotes[0].pitch=70;await assert.rejects(createVocalExchangePackage(p,a),/다시 생성/);});
 test('imported WAV track starts at bar 1 with separate clip',()=>{const track=makeImportedVocalTrack(project(),{name:'sing.wav',size:44},'asset1',2.4);assert.equal(track.clips[0].startBar,1);assert.equal(track.clips[0].assetId,'asset1');assert.equal(track.type,'vocal');});
+
+test('explicit 300-second long song alignment retains MIDI ownership and legacy 90-second guard',()=>{
+ const p=project();p.tracks[0].midiNotes=[{pitch:62,startBeat:200,length:2}];
+ assert.throws(()=>alignLyricNotes(p),/90초/);
+ const long=alignLyricNotes(p,undefined,{longForm:true});
+ assert.equal(long.longForm,true);assert.equal(long.cues[0].startSec,100);
+ assert.equal(isAlignmentStale(p,long),false);
+ p.bpm=121;assert.equal(isAlignmentStale(p,long),true);
+});

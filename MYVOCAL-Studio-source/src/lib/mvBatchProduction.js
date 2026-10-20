@@ -4,7 +4,7 @@
 import {buildSceneImageRequest,applySceneImage,generateComfyImage} from './mvSceneImages.js';
 import {videoSourceKey,applySceneVideo,generateLocalVideoClip,readSourceFrame} from './mvSceneVideos.js';
 import {buildMvDirectionPlan} from './mvDirection.js';
-import {getFile,putFile} from './assetDb.js';
+import {getFile,putFileNew} from './assetDb.js';
 import {genId} from './schema.js';
 export function planMvBatch(project,{maxScenes=20}={}){
  if(!project?.id||!Array.isArray(project.scenes)||!project.scenes.length)throw Error('MV 장면이 있는 프로젝트를 선택해 주세요.');
@@ -21,7 +21,7 @@ export function planMvBatch(project,{maxScenes=20}={}){
  return {sceneIds,already,linked,total:sceneIds.length};
 }
 export async function runMvBatch({project,data,checkpoint,videoModel,port,session,imageSteps=20,width=768,height=448,frames=14,fps=6,videoSteps=20,motion=127,current,commit,progress,signal,
- generateImage=generateComfyImage,generateVideo=generateLocalVideoClip,loadFile=getFile,saveFile=putFile,sourceFrame=readSourceFrame,idFactory=genId}={}){
+ generateImage=generateComfyImage,generateVideo=generateLocalVideoClip,loadFile=getFile,saveFile=putFileNew,sourceFrame=readSourceFrame,idFactory=genId}={}){
  const plan=planMvBatch(project);
  if(!session||typeof session!=='string')throw Error('Windows EXE의 로컬 세션이 없습니다.');
  if(!checkpoint||!videoModel||!Number.isSafeInteger(port)||port<1024||port>65535||port===58319)throw Error('ComfyUI 이미지·SVD 모델 및 포트를 확인하세요.');
