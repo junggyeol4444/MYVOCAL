@@ -8,12 +8,15 @@ import CreativeDirector96 from '../components/CreativeDirector96.jsx';
 import FinalDelivery98 from '../components/FinalDelivery98.jsx';
 import AudioWorkstation from '../components/AudioWorkstation';
 import MidiEditor from '../components/MidiEditor';
+import MidiSoundFontPanel from '../components/MidiSoundFontPanel.jsx';
 import Songwriter from '../components/Songwriter';
 import SectionGenreEditor from '../components/SectionGenreEditor';
 import {setSectionGenreMix} from '../lib/sectionGenre';
 import LyricSync from '../components/LyricSync';
 import PhonemeEditor from '../components/PhonemeEditor';
 import SingingWorkbench from '../components/SingingWorkbench';
+import ScoreVocalPanel from '../components/ScoreVocalPanel.jsx';
+import Viseme2DPanel from '../components/Viseme2DPanel.jsx';
 import OpenUtauExchange from '../components/OpenUtauExchange';
 import {downloadProjectBundle} from '../lib/projectBundle';
 const palettes=['#a48dff','#62c5fe','#f58fbb','#7dddb5','#f1b97b','#9d9efb','#8dd6db','#e3aeef'];
@@ -50,10 +53,10 @@ export default function Workspace({data,project,onChange,navigate,notify,studio,
  {tab==='finish'&&<FinalDelivery98 project={p} data={data} notify={notify}/>}
  {tab==='compose'&&<Songwriter project={p} onChange={onChange} notify={notify}/>}
  {tab==='arrangement'&&<AudioWorkstation project={p} onChange={change} notify={notify}/>}
- {tab==='midi'&&<MidiEditor project={p} onChange={change} notify={notify}/>}
+ {tab==='midi'&&<><MidiEditor project={p} onChange={change} notify={notify}/><MidiSoundFontPanel project={p} onChange={onChange} notify={notify}/></>}
  {tab==='sync'&&<LyricSync project={p} data={data} onChange={onChange} notify={notify}/>}
  {tab==='phonemes'&&<PhonemeEditor project={p} onChange={onChange} notify={notify}/>}
- {tab==='singing'&&<SingingWorkbench project={p} data={data} onChange={onChange} notify={notify}/>}
+ {tab==='singing'&&<><SingingWorkbench project={p} data={data} onChange={onChange} notify={notify}/><ScoreVocalPanel project={p} onChange={onChange} notify={notify}/><Viseme2DPanel project={p} onChange={onChange} notify={notify}/></>}
  {tab==='openutau'&&<OpenUtauExchange project={p} onChange={onChange} data={data} add={add} remove={remove} notify={notify}/>}
  {tab==='lyrics'&&<Panel title="Lyrics Editor" description="가사를 직접 쓰고 수정하세요."><textarea className="lyrics-input" value={p.lyrics} onChange={e=>change({lyrics:e.target.value})} placeholder={'[Verse 1]\n가사를 작성해 보세요...\n\n[Chorus]\n후렴 가사를 작성해 보세요...'} rows={17}/><div className="editor-foot">{p.lyrics.length}자 · 자동 저장됨</div></Panel>}
  {tab==='structure'&&<><Panel title="Song Structure" description="곡의 이름·마디 수·구간별 장르를 설정하세요. 구간 설정은 기본 장르를 덮어쓰지 않습니다."><div className="structure-list">{p.sections.map((s,i)=><div className="structure-item" key={s.id}>
