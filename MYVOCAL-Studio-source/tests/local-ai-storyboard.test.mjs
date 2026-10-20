@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {planLocalAiStoryboard,applyLocalAiStoryboard} from '../src/lib/localAiStoryboard.js';
+import {planLocalAiStoryboard,applyLocalAiStoryboard,canApplyLocalAiStoryboard} from '../src/lib/localAiStoryboard.js';
+import {storyboardFromSongSections} from '../src/lib/songStoryboard.js';
 const p={id:'prjA',title:'우리의 만남',prompt:'친구와 재회하는 노래',lyrics:'다시 만난 우리',bpm:120,characterId:'',sections:[{id:'sec1',name:'Verse',bars:2},{id:'sec2',name:'Chorus',bars:2}],scenes:[{id:'orig',start:0,end:12,title:'Scene 01',description:'첫 장면을 설명해 주세요',characterId:'',location:'',outfit:'',expression:'',action:'',camera:'',lighting:''}]};
 test('a real model response maps to exact song timing without overwriting originals',async()=>{
  const next=await planLocalAiStoryboard(p,'qwen3:4b',{key:'key',fetchImpl:async(url,opt)=>{
@@ -17,4 +18,11 @@ test('existing edited storyboard cannot be overwritten',async()=>{
 });
 test('tampered model scenes are not accepted',async()=>{
  await assert.rejects(()=>planLocalAiStoryboard(p,'qwen3:4b',{key:'key',fetchImpl:async()=>({ok:true,json:async()=>({provider:'local-ollama',model:'qwen3:4b',textGenerated:true,videoGenerated:true,scenes:[]})})}),/형식/);
+});
+
+test('unmodified automatically generated Create97 storyboard can be used safely',async()=>{
+ const auto={...p,scenes:storyboardFromSongSections(p)};
+ assert.equal(canApplyLocalAiStoryboard(auto),true);
+ const edited={...auto,scenes:auto.scenes.map((s,i)=>i===0?{...s,camera:'user handcrafted angle'}:s)};
+ assert.equal(canApplyLocalAiStoryboard(edited),false);
 });
