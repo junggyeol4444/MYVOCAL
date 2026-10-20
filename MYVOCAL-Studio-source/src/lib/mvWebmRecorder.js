@@ -34,7 +34,7 @@ function awaitMvAudioPreparation(work,signal){
  });
 }
 export async function recordMvWebm(plan,prepared,{
- renderAudio=null,includeAudio=false,showCaptions=false,captions=[],lipSyncOverlays=null,signal,onProgress=()=>{},
+ renderAudio=null,includeAudio=false,showCaptions=false,captions=[],lipSyncOverlays=null,prewarmedAudioContext=null,signal,onProgress=()=>{},
  canvasFactory=()=>document.createElement('canvas'),env=globalThis
 }={}){
  assertMvExportEnvironment(env);
@@ -74,7 +74,7 @@ export async function recordMvWebm(plan,prepared,{
   if(audioEnabled){
    const C=env.AudioContext||env.webkitAudioContext;
    if(!C)throw Error('오디오가 포함된 영상 저장을 지원하지 않습니다.');
-   audioContext=new C();
+   audioContext=prewarmedAudioContext||new C();
    await awaitMvAudioPreparation(()=>audioContext.resume(),signal); // initiated by the user's click
   }
   if(signal?.aborted)throw Error('영상 저장을 취소했습니다.');
