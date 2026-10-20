@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {readMvLipPlacement,saveMvLipPlacement,MV_LIP_PLACEMENT_KEY} from '../src/lib/mvLipPlacement.js';
-test('user's project placement persists locally but never personal media',()=>{
+test("user's project placement persists locally but never personal media",()=>{
  const db=new Map(),storage={getItem:k=>db.get(k),setItem:(k,v)=>db.set(k,v)};
  saveMvLipPlacement(storage,'p1',{xPercent:30,yPercent:75,sizePercent:7});
  assert.deepEqual(readMvLipPlacement(storage,'p1'),{xPercent:30,yPercent:75,sizePercent:7});

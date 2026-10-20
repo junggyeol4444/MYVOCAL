@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {planMvLipSyncOverlay,mouthAtTime,drawMvLipSyncOverlay} from '../src/lib/mvLipSyncOverlay.js';
 const profile={id:'chr1',name:'영웅',lipSync:{version:1,cues:[{startMs:0,endMs:250,phoneme:'ㅏ',viseme:'A',lyric:'아'},{startMs:300,endMs:500,phoneme:'ㅁ',viseme:'M',lyric:'마'},{startMs:500,endMs:850,phoneme:'ㅗ',viseme:'O',lyric:'오'}]}};
 const project={id:'prj1',characterId:'chr1',scenes:[{id:'s1',start:0,end:1,title:'독창'},{id:'s2',start:1,end:2,title:'연주'}]};
-test('project's saved character sync produces exact scene-aware timed overlays without changes',()=>{
+test("project's saved character sync produces exact scene-aware timed overlays without changes",()=>{
  const original=JSON.stringify({project,profile});const overlay=planMvLipSyncOverlay(project,[profile],{xPercent:49,yPercent:57,sizePercent:8});
  assert.equal(overlay.matchedScenes,1);assert.equal(overlay.automaticFaceTracking,false);
  assert.equal(mouthAtTime(overlay,'s1',.1).viseme,'A');assert.equal(mouthAtTime(overlay,'s1',.4).viseme,'M');

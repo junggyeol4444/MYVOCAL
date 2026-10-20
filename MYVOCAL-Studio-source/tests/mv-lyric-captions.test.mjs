@@ -82,7 +82,7 @@ test('video exporter preserves a user-toggle and passes the SAME lyric cues to W
  const recorder=readFileSync(new URL('../src/lib/mvWebmRecorder.js',import.meta.url),'utf8');
  for(const token of ['buildMvLyricCaptions(project)','가사 싱크 자막 영상 포함','captions:lyricCaptions.captions','showCaptions:captionsEnabled'])
   assert.ok(ui.includes(token),token);
- for(const token of ['showCaptions=false','drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions})','includesCaptions:'])
+ for(const token of ['showCaptions=false','drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions,lipSyncOverlays})','includesCaptions:'])
   assert.ok(recorder.includes(token),token);
 });
 
