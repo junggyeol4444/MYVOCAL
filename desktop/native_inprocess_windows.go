@@ -10,6 +10,7 @@ import (
  "errors"
  "fmt"
  "net/http"
+ "net/url"
  "sort"
  "strings"
  "syscall"
@@ -36,7 +37,8 @@ func nativeGetHeader(object unsafe.Pointer,name string)string{
  if !comSucceeded(hr){return ""}
  return nativeCOMUTF16(raw)
 }
-func nativeRequestBody(stream unsafe.Pointer)([]byte,error){
+func nativeRequestBody(stream unsafe.Pointer, maxBytes int)([]byte,error){
+ if maxBytes<0 || maxBytes>int(maxMVWebMBytes){return nil,errors.New("WebView2 본문 크기 한도 오류")}
  if stream==nil{return nil,nil}
  defer nativeCOMCall(stream,2)
  var body []byte
@@ -46,7 +48,7 @@ func nativeRequestBody(stream unsafe.Pointer)([]byte,error){
   hr:=nativeCOMCall(stream,3,nativeCOMPointer(unsafe.Pointer(&buffer[0])),nativeCOMValue(uintptr(len(buffer))),nativeCOMPointer(unsafe.Pointer(&n)))
   if !comSucceeded(hr){return nil,fmt.Errorf("WebView2 request stream read failed 0x%08x",uint32(hr))}
   if n>uint32(len(buffer)){return nil,errors.New("WebView2 request returned invalid byte count")}
-  if len(body)+int(n)>nativeInprocessMaxRequestBytes{return nil,errors.New("WebView2 request exceeded 16MiB")}
+  if len(body)+int(n)>maxBytes{return nil,errors.New("WebView2 request exceeded endpoint size limit")}
   if n>0{body=append(body,buffer[:n]...)}
   if n==0||hr==1{return body,nil}
  }
@@ -177,7 +179,13 @@ func nativeWebResourceRequested(this *comHandler,sender,args unsafe.Pointer)uint
  var content unsafe.Pointer
  hr=nativeCOMCall(request,7,nativeCOMPointer(unsafe.Pointer(&content)))
  if !comSucceeded(hr){return 0x80004005}
- payload,readErr:=nativeRequestBody(content)
+ // Keep the WebView2 COM body-reader limit aligned with the in-process
+ // dispatcher. Only the MP4 route may accept large video bodies.
+ maxBytes:=nativeInprocessMaxRequestBytes
+ if parsed,e:=url.Parse(uri);e==nil && parsed.Scheme=="http" && parsed.Host=="127.0.0.1:"+appPort{
+  maxBytes,_=inprocessLimits(method,parsed.Path)
+ }
+ payload,readErr:=nativeRequestBody(content,maxBytes)
  if state.ResourceReady==nil{return 0x80004005}
  // WebView2 requires a deferral if processing outlives this STA callback.
  // Limit in-flight requests so unresponsive local engines cannot exhaust RAM.

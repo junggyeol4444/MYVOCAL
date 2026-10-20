@@ -26,3 +26,33 @@ test('missing local engines fail before touching original project',async()=>{
  await assert.rejects(()=>runMvBatch({project:base,data:{characters:[]},checkpoint:'',videoModel:'',port:8188,session:'auth',current:()=>base,commit:()=>edits++}),/모델/);
  assert.equal(edits,0);
 });
+test('duplicate MV scene IDs fail before allocating any new assets',()=>{
+ const project={...base,scenes:[{...base.scenes[0]},{...base.scenes[0]}]};
+ assert.throws(()=>planMvBatch(project),/중복/);
+});
+test('cancellation while producing an image does not publish an asset or edit the project',async()=>{
+ const controller=new AbortController();let saves=0,commits=0;
+ const current=structuredClone(base),original=JSON.stringify(current);
+ await assert.rejects(runMvBatch({project:current,data:{characters:[]},checkpoint:'sd.safetensors',videoModel:'svd.safetensors',
+  port:8188,session:'auth',signal:controller.signal,current:()=>current,commit:()=>commits++,
+  generateImage:async()=>{controller.abort();return new Blob(['fake'],{type:'image/png'})},
+  saveFile:async()=>saves++
+ }),/취소/);
+ assert.equal(saves,0);assert.equal(commits,0);assert.equal(JSON.stringify(current),original);
+});
+test('cancel while producing a clip keeps an earlier saved image and never links a partial video',async()=>{
+ const controller=new AbortController(),files=new Map();
+ let current=structuredClone(base);const writes=[];
+ await assert.rejects(runMvBatch({project:current,data:{characters:[]},checkpoint:'sd.safetensors',videoModel:'svd.safetensors',
+  port:8188,session:'auth',signal:controller.signal,current:()=>current,commit:p=>{current=p},
+  generateImage:async()=>new Blob(['image'],{type:'image/png'}),
+  generateVideo:async()=>{controller.abort();return new Blob(['video'],{type:'image/webp'})},
+  saveFile:async(id,file)=>{files.set(id,file);writes.push(id)},
+  loadFile:async(id)=>files.get(id),sourceFrame:async()=>new Uint8Array([1,2,3]),
+  idFactory:prefix=>prefix==='img'?'fresh_image':'fresh_video'
+ }),/취소/);
+ assert.equal(current.scenes[0].imageAssetId,'fresh_image');
+ assert.equal(current.scenes[0].videoClipAssetId,undefined);
+ assert.deepEqual(writes,['fresh_image']);
+ assert.equal(planMvBatch(current).total,1);
+});
