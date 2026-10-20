@@ -49,10 +49,10 @@ test('cancel while producing a clip keeps an earlier saved image and never links
   generateVideo:async()=>{controller.abort();return new Blob(['video'],{type:'image/webp'})},
   saveFile:async(id,file)=>{files.set(id,file);writes.push(id)},
   loadFile:async(id)=>files.get(id),sourceFrame:async()=>new Uint8Array([1,2,3]),
-  idFactory:prefix=>prefix==='img'?'fresh_image':'fresh_video'
+  idFactory:prefix=>prefix==='img'?'img_fresh_image':'vid_fresh_video'
  }),/취소/);
- assert.equal(current.scenes[0].imageAssetId,'fresh_image');
+ assert.equal(current.scenes[0].imageAssetId,'img_fresh_image');
  assert.equal(current.scenes[0].videoClipAssetId,undefined);
- assert.deepEqual(writes,['fresh_image']);
+ assert.deepEqual(writes,['img_fresh_image']);
  assert.equal(planMvBatch(current).total,1);
 });
