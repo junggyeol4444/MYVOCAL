@@ -3,6 +3,7 @@ import {Button,Notice,Panel} from './UI';
 import {generateOfflineDraft,applyComposition,songMoods,songLengths,COMPOSER_PARTS} from '../lib/composer';
 import GenreMixEditor from './GenreMixEditor';
 import LocalAiComposerPanel from './LocalAiComposerPanel.jsx';
+import LocalAiProductionPanel from './LocalAiProductionPanel.jsx';
 import {alignLyricNotes} from '../lib/lyricAlignment';
 import {resolveGenreMix,validateGenreMix,genreMixText} from '../lib/genreMix';
 
@@ -42,6 +43,7 @@ export default function Songwriter({project:p,onChange,notify}){
     <Notice>곡 설정과 장르 혼합·구간별 장르를 기반으로 가사 템플릿, 화성, 멜로디, 리듬을 PC에서 생성합니다. 외부 API 호출은 없습니다.</Notice>
     <Button variant="primary" className="full-width" icon="spark" onClick={draftOffline}>로컬 작곡 초안 생성 · 다른 변형 만들기</Button>
     <LocalAiComposerPanel options={opts} onDraft={d=>{setDraft(d);setError('')}} notify={notify}/>
+    <LocalAiProductionPanel project={p} options={opts} onChange={onChange} notify={notify}/>
     {error&&<div className="mv4-error" role="alert">{error}</div>}
    </div>
    <div className="panel mv4-preview">
