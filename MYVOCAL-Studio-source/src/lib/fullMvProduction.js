@@ -3,7 +3,8 @@
 import {runMvBatch} from './mvBatchProduction.js';
 import {planMvVideoRender,loadMvVideoAssets} from './mvVideoRender.js';
 import {recordMvWebm,assertMvExportEnvironment} from './mvWebmRecorder.js';
-import {mixdownWav,audioEnd} from './audioEngine.js';
+// AudioEngine is loaded only when performing an actual mixdown, not when
+// inspecting the batch plan in the Node test runner.
 import {buildMvLyricCaptions} from './mvLyricCaptions.js';
 import {planMvLipSyncOverlay} from './mvLipSyncOverlay.js';
 import {mvExportRevision,verifyMvExportRevision} from './mvExportRevision.js';
@@ -43,13 +44,16 @@ export async function runFullLocalMv({
   const mouth=lipPlacement?overlay(latest,chars,lipPlacement):null;
   const captionsState=includeCaptions?captions(latest):null;
   const useCaptions=!!includeCaptions&&captionsState?.status==='ready';
-  const useAudio=!!includeAudio&&audioDuration(latest)>0;
+  const nativeAudio=(!audioDuration||!mix)?await import('./audioEngine.js'):null;
+  const audioLength=audioDuration||nativeAudio.audioEnd;
+  const mixdown=mix||nativeAudio.mixdownWav;
+  const useAudio=!!includeAudio&&audioLength(latest)>0;
   const snapshot=revision(latest,chars,{includeLipSync:!!mouth});
   onProgress('완성 MV 오디오·장면 불러오는 중');
   resources=await load(movie,{loadFile:getAsset,signal});
   if(signal?.aborted)throw Error('완성 MV 제작을 취소했습니다.');
   const recording=await record(movie,resources,{
-    includeAudio:useAudio,renderAudio:()=>mix(latest,{bitDepth:16,channels:2,sampleRate:44100}),
+    includeAudio:useAudio,renderAudio:()=>mixdown(latest,{bitDepth:16,channels:2,sampleRate:44100}),
     showCaptions:useCaptions,captions:useCaptions?captionsState.captions:[],
     lipSyncOverlays:mouth,signal,prewarmedAudioContext,
     onProgress:n=>onProgress('WebM 실시간 녹화 '+n+'%')

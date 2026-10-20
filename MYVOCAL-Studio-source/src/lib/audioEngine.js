@@ -1,13 +1,13 @@
 // MYVOCAL Studio v0.3: local-only audio playback and deterministic WAV mixdown.
 // This is NOT an AI composition, voice conversion, or mastering engine.
-import {getFile} from './assetDb.js';
+import {getFile} from './assetDb';
 import {analyzeMixPeak} from './mixPeak.js';
 import {analyzeWavPeakNormalization} from './wavNormalize.js';
 import {findWavAudibleRange} from './wavTrim.js';
 import {analyzeWavExport} from './wavExportMeter.js';
 import {resolveWavExportRange} from './wavExportRange.js';
 import {encodeWavPcm,WAV_EXPORT_SAMPLE_RATES,WAV_EXPORT_CHANNELS,WAV_EDGE_FADE_MS} from './wavPcm.js';
-import {midiEnd,validNotes,beatSeconds,noteMidi} from './midiEngine.js';
+import {midiEnd,validNotes,beatSeconds,noteMidi} from './midiEngine';
 import {clipWindow,clipPlaybackPlan,clipsEnd,scheduleClipFade,scheduleClipLevel,clipPan,scheduleClipPan,monoPanCompensation} from './clipTiming.js';
 const cache = new Map();
 let decodingContext;
