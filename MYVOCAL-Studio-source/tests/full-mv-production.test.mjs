@@ -3,16 +3,17 @@ import assert from 'node:assert/strict';
 import {runFullLocalMv} from '../src/lib/fullMvProduction.js';
 const source=()=>({id:'song1',title:'곡',scenes:[{id:'s1',start:0,end:4,description:'공연'}],tracks:[]});
 function inject(project,cb={}){
+ const {record:recordObserver,...extensions}=cb;
  return {preflight:()=>{},plan:p=>({durationSec:4,scenes:p.scenes}),
   batch:async opts=>{const altered={...project,scenes:project.scenes.map(s=>({...s,videoClipAssetId:'vid_1'}))};cb.afterBatch?.(opts);cb.commit?.(altered);return {generatedImages:1,generatedVideos:1}},
   load:async (plan,opts)=>{cb.loaded?.(plan,opts);return {assets:new Map(),dispose:()=>cb.dispose?.()}},
-  record:async (plan,assets,opts)=>{cb.record?.(plan,opts);return {blob:new Blob([new Uint8Array(256)],{type:'video/webm'})}},
+  record:async (plan,assets,opts)=>{recordObserver?.(plan,opts);return {blob:new Blob([new Uint8Array(256)],{type:'video/webm'})}},
   mix:async()=>new Blob([new Uint8Array(128)],{type:'audio/wav'}),audioDuration:()=>12,
   captions:()=>({status:'ready',captions:[{startSec:0,endSec:1,text:'가사'}]}),
   overlay:()=>({matchedScenes:1,scenes:{}}),
   revision:p=>JSON.stringify(p.scenes),
   verify:(saved,p)=>{if(saved!==JSON.stringify(p.scenes))throw Error('revision changed');return true},
-  ...cb};
+  ...extensions};
 }
 test('one user action creates all scenes then records a real WebM file from the CURRENT scene list',async()=>{
  let p=source(),dispose=0;
