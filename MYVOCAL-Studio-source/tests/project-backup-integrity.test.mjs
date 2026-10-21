@@ -27,3 +27,11 @@ test('RVC model and FAISS index references are required for a complete portable 
  delete assets['index-faiss'];
  assert.throws(()=>assertPortableAssetReferences(ids,assets),/누락/);
 });
+
+test('previous v2 backups without the new integrity marker remain compatible',async()=>{
+ const {validateBundleEnvelope}=await import('../src/lib/bundleSafety.js');
+ const legacy={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,project:{title:'기존 프로젝트',tracks:[],sections:[]},profiles:{voices:[],characters:[]},assets:{}};
+ assert.doesNotThrow(()=>validateBundleEnvelope(legacy));
+ assert.doesNotThrow(()=>validateBundleEnvelope({...legacy,integrityVersion:1}));
+ assert.throws(()=>validateBundleEnvelope({...legacy,integrityVersion:99}),/무결성/);
+});

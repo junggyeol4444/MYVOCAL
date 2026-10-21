@@ -10,6 +10,7 @@ export function validateBundleEnvelope(input) {
  if (Object.hasOwn(input, 'format') && input.format !== 'MYVOCAL_PROJECT_BACKUP') throw new Error('알 수 없는 프로젝트 백업 형식입니다.');
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion !== 2) throw new Error('지원하지 않는 프로젝트 백업 버전입니다.');
  if (input.format === 'MYVOCAL_PROJECT_BACKUP' && input.formatVersion === 2) {
+  if(input.integrityVersion!==undefined && input.integrityVersion!==1)throw new Error('지원하지 않는 백업 무결성 형식입니다.');
   if (input.profiles != null && (typeof input.profiles !== 'object' || Array.isArray(input.profiles) || !Array.isArray(input.profiles.voices) || !Array.isArray(input.profiles.characters))) throw new Error('백업 프로필 목록이 잘못되었습니다.');
   if (input.profiles) {
    for (const group of ['voices','characters','voiceModels','trainingPlans']) {

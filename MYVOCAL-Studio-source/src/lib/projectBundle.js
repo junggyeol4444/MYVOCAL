@@ -44,7 +44,7 @@ export async function downloadProjectBundle(project,data){
   assets[id]={name:file.name||id,type:file.type||'application/octet-stream',bytes:file.size,sha256:await mediaSha256Hex(await file.arrayBuffer()),dataUrl:await fileBase64(file)};
  }
  if(missing.length)throw new Error('원본 파일 '+missing.length+'개를 찾지 못했습니다. 누락 파일을 다시 등록한 뒤 백업해 주세요.');
- const json={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,exportedAt:now(),project,profiles,assets};
+ const json={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,integrityVersion:1,exportedAt:now(),project,profiles,assets};
  downloadText(JSON.stringify(json),`${String(project.title||'MYVOCAL').replace(/[\\/:*?"<>|]/g,'_')}.myvocal.json`,MIME);
  return assetsOf(project,profiles).length;
 }
@@ -57,7 +57,7 @@ export async function importProjectBundle(file){
  if(!project||typeof project.title!=='string'||!Array.isArray(project.tracks)||!Array.isArray(project.sections))throw new Error('프로젝트의 기본 구조가 잘못되었습니다.');
  // Complete v2 backups must include every linked original, including RVC checkpoints and FAISS indexes.
  // Legacy metadata-only JSON exports deliberately remain compatible and do not claim to include media.
- if(input.format==='MYVOCAL_PROJECT_BACKUP')assertPortableAssetReferences(assetsOf(project,profiles),assets);
+ if(input.format==='MYVOCAL_PROJECT_BACKUP'&&input.integrityVersion===1)assertPortableAssetReferences(assetsOf(project,profiles),assets);
  // Use prototype-free maps even when importing legacy projects.
  const mapping=Object.create(null),assetMap=Object.create(null),pendingAssets=[];
  for(const [oldId,meta] of Object.entries(assets)){
