@@ -124,6 +124,7 @@ func (a *appServer) routes() *http.ServeMux {
 	mux.HandleFunc("/api/singing/capabilities", a.singingCapabilities)
 	mux.HandleFunc("/api/singing/render", a.singingRender)
 	mux.HandleFunc("/api/singing/rvc/convert", a.rvcConvert)
+	mux.HandleFunc("/api/singing/rvc/stored", a.rvcConvertStored)
 	mux.HandleFunc("/api/singing/score-vocal", a.scoreVocalRender)
 	mux.HandleFunc("/api/mv/lipsync2d", a.viseme2DRender)
  mux.HandleFunc("/api/training/rvc/start", a.rvcTrainingStart)

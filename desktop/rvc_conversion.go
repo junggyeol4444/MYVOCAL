@@ -11,6 +11,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"mime/multipart"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 const maxRVCInputBytes = 24 << 20
 const maxRVCResponseBytes = 48 << 20
 const maxRVCRequestBytes = maxRVCInputBytes + (1 << 20)
+const maxRegisteredRVCRequestBytes = maxRVCInputBytes + maxRVCTrainedModel + (96 << 20) + (2 << 20)
 
 var rvcSlot = make(chan struct{}, 1)
 
@@ -116,10 +118,34 @@ func (w *limitedRVCLog) Write(p []byte) (int, error) {
 	_, _ = w.buffer.Write(p)
 	return n, nil
 }
+
+ // stageRegisteredRVCUpload keeps user-owned IndexedDB files untouched.
+ // It uses a fresh isolated destination with O_EXCL, bounded streaming, and
+ // deliberately ignores untrusted multipart names and paths.
+func stageRegisteredRVCUpload(header *multipart.FileHeader,destination string,maxSize int64) error {
+ if header==nil||header.Size<1024||header.Size>maxSize{return errors.New("파일 크기가 잘못되었습니다")}
+ src,err:=header.Open();if err!=nil{return errors.New("파일을 읽을 수 없습니다")};defer src.Close()
+ dst,err:=os.OpenFile(destination,os.O_WRONLY|os.O_CREATE|os.O_EXCL,0600)
+ if err!=nil{return errors.New("격리 파일을 생성할 수 없습니다")}
+ written,copyErr:=io.Copy(dst,io.LimitReader(src,maxSize+1))
+ closeErr:=dst.Close()
+ if copyErr!=nil||closeErr!=nil||written!=header.Size||written>maxSize{return errors.New("파일 복사에 실패했습니다")}
+ return nil
+}
+
 func (a *appServer) rvcConvert(w http.ResponseWriter, r *http.Request) {
 	a.rvcConvertWith(w, r, runRVC)
 }
+func (a *appServer) rvcConvertStored(w http.ResponseWriter,r *http.Request) {
+ a.rvcConvertStoredWith(w,r,runRVC)
+}
+func (a *appServer) rvcConvertStoredWith(w http.ResponseWriter,r *http.Request,runner rvcRunner) {
+ a.rvcConvertWithMode(w,r,runner,true)
+}
 func (a *appServer) rvcConvertWith(w http.ResponseWriter, r *http.Request, runner rvcRunner) {
+ a.rvcConvertWithMode(w,r,runner,false)
+}
+func (a *appServer) rvcConvertWithMode(w http.ResponseWriter,r *http.Request,runner rvcRunner,registered bool) {
 	if r.Method != http.MethodPost {
 		jsonError(w, 405, "POST만 지원합니다")
 		return
@@ -134,7 +160,9 @@ func (a *appServer) rvcConvertWith(w http.ResponseWriter, r *http.Request, runne
 		jsonError(w, 409, "다른 RVC 변환이 실행 중입니다")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxRVCRequestBytes)
+	limit:=int64(maxRVCRequestBytes)
+ if registered {limit=int64(maxRegisteredRVCRequestBytes)}
+ r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		jsonError(w, 400, "RVC 입력 파일 또는 옵션 크기 오류")
 		return
@@ -158,10 +186,21 @@ func (a *appServer) rvcConvertWith(w http.ResponseWriter, r *http.Request, runne
 		return
 	}
 	o := rvcOptions{Root: pick("root"), Python: pick("python"), Model: pick("model"), Index: pick("index"), F0: pick("f0"), Pitch: pitch, IndexRate: rate}
-	if err := validateRVCOptions(o); err != nil {
-		jsonError(w, 400, err.Error())
-		return
-	}
+ if registered {
+  // Stage only copies of the existing IndexedDB assets. Files never overwrite
+  // originals, and the entire temporary directory is removed after conversion.
+  if pick("model")!=""||pick("index")!=""{
+   jsonError(w,400,"등록된 모델 변환에서 외부 모델 경로는 사용할 수 없습니다");return
+  }
+  modelHeaders,indexHeaders:=r.MultipartForm.File["modelUpload"],r.MultipartForm.File["indexUpload"]
+  if len(modelHeaders)!=1||len(indexHeaders)>1{
+   jsonError(w,400,"등록된 RVC 체크포인트 하나와 선택적 인덱스 하나가 필요합니다");return
+  }
+  if modelHeaders[0].Size<1024||modelHeaders[0].Size>maxRVCTrainedModel||
+      len(indexHeaders)==1&&(indexHeaders[0].Size<1024||indexHeaders[0].Size>96<<20){
+   jsonError(w,400,"등록된 모델 또는 인덱스 파일 크기가 허용 범위를 벗어났습니다");return
+  }
+ }
 	hdr := r.MultipartForm.File["audio"][0]
 	if hdr.Size < 48 || hdr.Size > maxRVCInputBytes {
 		jsonError(w, 400, "원본 WAV는 24MB 이하이어야 합니다")
@@ -184,6 +223,24 @@ func (a *appServer) rvcConvertWith(w http.ResponseWriter, r *http.Request, runne
 		return
 	}
 	defer os.RemoveAll(temp)
+ if registered {
+  modelHeader:=r.MultipartForm.File["modelUpload"][0]
+  modelPath:=filepath.Join(temp,"registered-model.pth")
+  if err:=stageRegisteredRVCUpload(modelHeader,modelPath,maxRVCTrainedModel);err!=nil{
+   jsonError(w,422,"등록된 RVC 모델 복사 실패: "+err.Error());return
+  }
+  if !plausibleTorchCheckpoint(modelPath){
+   jsonError(w,422,"등록된 RVC 체크포인트 구조가 올바르지 않습니다");return
+  }
+  o.Model=modelPath
+  if indexes:=r.MultipartForm.File["indexUpload"];len(indexes)==1 {
+   o.Index=filepath.Join(temp,"registered-index.index")
+   if err:=stageRegisteredRVCUpload(indexes[0],o.Index,96<<20);err!=nil{
+    jsonError(w,422,"등록된 FAISS 인덱스 복사 실패: "+err.Error());return
+   }
+  }
+ }
+ if err:=validateRVCOptions(o);err!=nil{jsonError(w,400,err.Error());return}
 	input := filepath.Join(temp, "source.wav")
 	output := filepath.Join(temp, "result.wav")
 	if err = os.WriteFile(input, audio, 0600); err != nil {
