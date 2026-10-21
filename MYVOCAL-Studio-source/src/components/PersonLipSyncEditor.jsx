@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Field,Notice} from './UI';
-import {getFile,putFile,removeFile} from '../lib/assetDb.js';
+import {getFile,putFile,putFileNew,removeFile} from '../lib/assetDb.js';
+import {renderNeuralPersonLip} from '../lib/neuralPersonLipClient.js';
 import {genId} from '../lib/schema.js';
 import {createPersonLipSettings,personAudioAssets,personVideoAssets,renderPersonLipFrame,savePersonLipSettings,validatePersonLipAudio,validatePersonLipSettings} from '../lib/personLipSync.js';
 import {recordPersonLipWebM,supportedPersonLipRecording} from '../lib/personLipRecording.js';
@@ -10,6 +11,8 @@ function downloadBlob(blob,name){const url=URL.createObjectURL(blob),a=document.
 export default function PersonLipSyncEditor({character,onSave,notify}){
  const [settings,setSettings]=useState(()=>character.personLipSync||createPersonLipSettings(character));
  const [audioFile,setAudioFile]=useState(null),[videoUrl,setVideoUrl]=useState(''),[audioUrl,setAudioUrl]=useState('');
+ const [neuralPython,setNeuralPython]=useState(''),[neuralRoot,setNeuralRoot]=useState(''),[neuralCheckpoint,setNeuralCheckpoint]=useState('');
+ const [neuralModelRights,setNeuralModelRights]=useState(false),[neuralResize,setNeuralResize]=useState(2);
  const [readyVersion,setReadyVersion]=useState(0);
  const [status,setStatus]=useState('등록된 로컬 원본을 확인하는 중…'),[time,setTime]=useState(0),[playing,setPlaying]=useState(false),[exporting,setExporting]=useState(false),[progress,setProgress]=useState(0),[guide,setGuide]=useState(true),[audioConsent,setAudioConsent]=useState(false);
  const canvasRef=useRef(null),videoRef=useRef(null),audioRef=useRef(null),raf=useRef(0),controller=useRef(null),mounted=useRef(true);
@@ -68,6 +71,42 @@ export default function PersonLipSyncEditor({character,onSave,notify}){
    notify('STEP86 로컬 WebM 출력 완료 · 가창 오디오 포함 (MP4는 98단계)');
   }catch(e){notify('STEP86 출력 실패: '+e.message);}finally{controller.current=null;if(mounted.current){setExporting(false);setPlaying(false);setTime(0);}}
  };
+ const exportNeuralVideo=async()=>{
+  if(!isReady||exporting||!audioConsent||!neuralModelRights){notify('사용 권한을 확인하고 실제 사람 영상·보컬을 준비하세요.');return;}
+  let newId='';
+  const abort=new AbortController();controller.current=abort;
+  setExporting(true);setStatus('로컬 Wav2Lip 신경망에서 실제 사람 얼굴과 노래를 합성하는 중…');
+  try{
+   if(!['self','owned','licensed'].includes(character.rights))throw Error('본인 또는 사용 허가된 사람만 신경망 립싱크에 사용할 수 있습니다.');
+   const source=await getFile(settings.videoAssetId);
+   const vocals=audioFile||await getFile(settings.audioAssetId);
+   if(!(source instanceof Blob)||!(vocals instanceof Blob))throw Error('등록된 영상 또는 가창 오디오 원본을 읽을 수 없습니다.');
+   const result=await renderNeuralPersonLip(source,vocals,{
+    python:neuralPython,root:neuralRoot,checkpoint:neuralCheckpoint,resize:neuralResize,
+    rightsConfirmed:audioConsent,modelRights:neuralModelRights
+   },{signal:abort.signal});
+   if(abort.signal.aborted)throw Error('사용자가 신경망 립싱크 영상을 취소했습니다.');
+   // Preserve character/video/audio originals. The new neural MP4 is a NEW
+   // persistent asset and only the new asset is removed if profile save fails.
+   newId=genId('neural-person-mp4');
+   await putFileNew(newId,result);
+   if(abort.signal.aborted)throw Error('사용자가 신경망 립싱크 영상을 취소했습니다.');
+   const updated={...character,assets:[...(character.assets||[]),{
+    id:newId,name:result.name,type:'video/mp4',size:result.size,role:'other',source:'wav2lip-local-neural'
+   }],updatedAt:new Date().toISOString()};
+   await Promise.resolve(onSave(updated));
+   newId='';
+   downloadBlob(result,result.name);
+   notify('실제 Wav2Lip 신경망 MP4를 캐릭터 영상 라이브러리에 새 자산으로 보관했습니다. 기존 영상·가창 오디오는 그대로입니다.');
+   setStatus('실제 신경망 MP4 생성·보관 완료');
+  }catch(error){
+   if(newId)try{await removeFile(newId);}catch(cleanup){notify('신규 신경망 영상 정리 오류: '+cleanup.message);}
+   notify('신경망 립싱크 실패: '+error.message);setStatus('신경망 립싱크 실패: '+error.message);
+  }finally{
+   controller.current=null;
+   if(mounted.current)setExporting(false);
+  }
+ };
  const num=(name,label,min,max,step)=> <Field label={`${label}: ${settings.mouth[name].toFixed(3)}`}><input type="range" min={min} max={max} step={step} value={settings.mouth[name]} disabled={exporting} onChange={e=>setMouth(name,Number(e.target.value))}/></Field>;
  return <div className="modal-form" style={{maxHeight:'76vh',overflowY:'auto'}}>
   <Notice>STEP86 · 허가받은 실제 사람 영상 + 가창 오디오의 Lip Sync. STEP85에서 직접 검토한 음소/발음 시간을 기준으로 원본 영상의 입 영역을 기하학적으로 변형합니다. 얼굴 자동 추적·신경망 얼굴 재합성은 제공하지 않으며, 머리 위치가 바뀌는 장면은 적합하지 않습니다. 원본은 변경하지 않습니다.</Notice>
@@ -88,6 +127,18 @@ export default function PersonLipSyncEditor({character,onSave,notify}){
   <Field label="가창 음소 시간 보정 (밀리초, -10000~+10000)"><input type="number" min="-10000" max="10000" step="10" disabled={exporting} value={settings.offsetMs} onChange={e=>patch('offsetMs',Number(e.target.value))}/></Field>
   <Field label="최대 출력 길이 (2~30초)"><input type="number" min="2" max="30" step="1" disabled={exporting} value={settings.duration} onChange={e=>patch('duration',Number(e.target.value))}/></Field>
   <div className="look-actions"><Button disabled={!canSave||exporting} variant="primary" onClick={save}>Lip Sync 설정·오디오 저장</Button><Button disabled={!isReady||!audioConsent||exporting||!supportedPersonLipRecording()} onClick={exportVideo}>{exporting?`출력 중 ${Math.round(progress*100)}%`:'가창 포함 WebM 출력'}</Button>{exporting&&<Button onClick={()=>controller.current?.abort()}>출력 취소</Button>}</div>
+  <div className="mv7-item">
+   <strong>로컬 신경망 실제 사람 립싱크 (Wav2Lip)</strong>
+   <Notice>설치된 Wav2Lip 신경망 체크포인트와 Python을 사용해 실제 MP4를 생성합니다. 기존 수동 입 모양 합성과 별도의 기능이며 영상·가창 원본은 변경하지 않습니다. 사용 권한과 모델 라이선스를 확인해 주세요.</Notice>
+   <div className="form-two">
+    <Field label="설치된 Python.exe"><input value={neuralPython} disabled={exporting} onChange={e=>setNeuralPython(e.target.value)} placeholder="D:\\AI\\python.exe"/></Field>
+    <Field label="Wav2Lip 코드 폴더"><input value={neuralRoot} disabled={exporting} onChange={e=>setNeuralRoot(e.target.value)} placeholder="D:\\AI\\Wav2Lip"/></Field>
+    <Field label="실제 신경망 체크포인트 (.pth)"><input value={neuralCheckpoint} disabled={exporting} onChange={e=>setNeuralCheckpoint(e.target.value)} placeholder="D:\\AI\\Wav2Lip\\checkpoints\\wav2lip.pth"/></Field>
+    <Field label="영상 축소 배율"><select value={neuralResize} disabled={exporting} onChange={e=>setNeuralResize(Number(e.target.value))}><option value={1}>1 (원본)</option><option value={2}>2 (권장)</option><option value={3}>3</option><option value={4}>4</option></select></Field>
+   </div>
+   <label><input type="checkbox" checked={neuralModelRights} disabled={exporting} onChange={e=>setNeuralModelRights(e.target.checked)}/>설치된 신경망 모델과 이 영상의 사용 권한·라이선스를 확인했습니다.</label>
+   <Button disabled={!isReady||exporting||!audioConsent||!neuralModelRights} onClick={exportNeuralVideo}>Wav2Lip 실제 MP4 만들고 라이브러리에 저장</Button>
+  </div>
   <Notice>원본은 그대로 보존되며 새 오디오는 캐릭터 자산으로 로컬 저장되어 프로젝트 백업에 포함됩니다. 시간표나 입 위치가 부정확하면 출력도 부정확합니다. 실제 Windows 실행·GPU 품질·인물 얼굴의 사실적인 변형은 별도 검증이 필요합니다.</Notice>
  </div>;
 }
