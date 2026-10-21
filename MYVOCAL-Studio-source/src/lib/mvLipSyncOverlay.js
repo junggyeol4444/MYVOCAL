@@ -23,7 +23,7 @@ export function planMvLipSyncOverlay(project,characters=[],{xPercent=50,yPercent
   if(!scene?.id)throw Error('장면 ID가 올바르지 않습니다.');
   const character=identities.get(scene.characterId||project.characterId);
   const manual=character?.lipSync?.cues?.length?character.lipSync:null;
-  if(!manual&&character?.id!==automatic?.characterId)continue;
+  if(!manual&&(!automatic||!character||character.id!==automatic.characterId))continue;
   if(manual)validateLipSync(manual);
   if(!Number.isFinite(scene.start)||!Number.isFinite(scene.end)||scene.start<0||scene.end>360||scene.start>=scene.end)throw Error('립싱크 영상 장면 시간이 잘못됐습니다.');
   if(scenes[scene.id])throw Error('립싱크 장면 ID가 중복됐습니다.');
