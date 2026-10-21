@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import {convertRegisteredRVC} from '../src/lib/rvcStoredConversion.js';
 
 function wav(){
- const bytes=new Uint8Array(44+200),d=new DataView(bytes.buffer);
+ const frames=2205,bytes=new Uint8Array(44+frames*2),d=new DataView(bytes.buffer);
  for(const [at,v] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']])for(let i=0;i<4;i++)bytes[at+i]=v.charCodeAt(i);
  d.setUint32(4,bytes.byteLength-8,true);d.setUint32(16,16,true);
- d.setUint16(20,1,true);d.setUint16(22,1,true);d.setUint32(24,22050,true);d.setUint32(28,44100,true);d.setUint16(32,2,true);d.setUint16(34,16,true);d.setUint32(40,200,true);
+ d.setUint16(20,1,true);d.setUint16(22,1,true);d.setUint32(24,22050,true);d.setUint32(28,44100,true);d.setUint16(32,2,true);d.setUint16(34,16,true);d.setUint32(40,frames*2,true);
+ for(let i=0;i<frames;i++)d.setInt16(44+i*2,Math.round(0.12*32767*Math.sin(2*Math.PI*220*i/22050)),true);
  return new File([bytes],'vocals.wav',{type:'audio/wav'});
 }
 function opts(){
@@ -40,7 +41,7 @@ test('stored model selector is present only for the user voice',async()=>{
  const {readFileSync}=await import('node:fs');
  const gui=readFileSync(new URL('../src/components/RvcVoiceConversion.jsx',import.meta.url),'utf8');
  const parent=readFileSync(new URL('../src/components/SingingWorkbench.jsx',import.meta.url),'utf8');
- assert.match(gui,/m\.voiceId===selectedVoiceId/);
+ assert.match(gui,/voiceId===selectedVoiceId/);
  assert.match(gui,/sha256File\(modelFile\)/);
  assert.match(gui,/sha256File\(indexFile\)/);
  assert.match(gui,/convertRegisteredRVC\(chunk/);
