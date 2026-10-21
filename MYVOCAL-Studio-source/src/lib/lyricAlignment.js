@@ -28,7 +28,7 @@ export function alignmentSource(project,trackId,{longForm=false}={}){
  const tracks=midiVocalTracks(project);
  const track=tracks.find(t=>t.id===trackId)||preferredVocalMidiTrack(project);
  if(!track)throw Error('먼저 MIDI 피아노 롤에 보컬 멜로디 음표를 입력해 주세요.');
- const notes=normalizeSingingNotes(track.midiNotes).sort((a,b)=>a.startBeat-b.startBeat||a.pitch-b.pitch);
+ const notes=normalizeSingingNotes(track.midiNotes,{longForm}).sort((a,b)=>a.startBeat-b.startBeat||a.pitch-b.pitch);
  if(!notes.length)throw Error('해당 트랙에 유효한 MIDI 음표가 없습니다.');
  const bpm=Number(project.bpm);
  if(!Number.isFinite(bpm)||bpm<40||bpm>240)throw Error('가사 싱크 BPM은 40~240만 지원합니다.');
