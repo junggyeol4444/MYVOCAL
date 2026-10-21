@@ -141,5 +141,7 @@ test('editor wires undo, redo, clip edits, split, duplication, import and remova
  for(const s of ["historyAction('undo')","historyAction('redo')","'클립 분할'","'클립 복제'","'오디오 가져오기'","'클립 제거'","'클립 속성 편집'"])
   assert.ok(ui.includes(s),`missing ${s}`);
  assert.match(ui,/if\(clipHistory\.current\.projectId!==p\.id\)clipHistory\.current=createClipHistory\(p\.id\)/);
- assert.match(ui,/if\(latest\.id!==importProjectId\)throw/);
+ assert.match(ui,/if\(projectRef\.current\.id!==sourceProjectId\)throw/);
+  assert.match(ui,/await putFilesAtomic\(assets\)/);
+  assert.match(ui,/await deleteFilesAtomic\(assets\.map/);
 });
