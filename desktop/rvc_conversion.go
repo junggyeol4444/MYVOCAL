@@ -30,6 +30,7 @@ type rvcOptions struct {
 	Python    string
 	Root      string
 	Model     string
+	Index     string
 	F0        string
 	Pitch     int
 	IndexRate float64
@@ -67,6 +68,11 @@ func validateRVCOptions(o rvcOptions) error {
 	if err := ensureRegular(o.Model); err != nil {
 		return fmt.Errorf("RVC 체크포인트: %w", err)
 	}
+	if o.Index != "" {
+		if !filepath.IsAbs(o.Index) || len(o.Index)>1024 || strings.ContainsAny(o.Index,"\x00\r\n") || !strings.EqualFold(filepath.Ext(o.Index),".index") {return errors.New("FAISS 인덱스는 .index 절대 경로여야 합니다")}
+		if !plausibleRVCIndex(o.Index) {return errors.New("FAISS 인덱스 파일이 손상됐거나 존재하지 않습니다")}
+	}
+	if o.IndexRate>0 && o.Index=="" {return errors.New("FAISS 인덱스 적용 비율을 사용하려면 인덱스 파일이 필요합니다")}
 	if o.Pitch < -24 || o.Pitch > 24 || math.IsNaN(o.IndexRate) || math.IsInf(o.IndexRate, 0) || o.IndexRate < 0 || o.IndexRate > 1 || (o.F0 != "rmvpe" && o.F0 != "pm") {
 		return errors.New("RVC 피치·인덱스 비율·F0 옵션 범위가 올바르지 않습니다")
 	}
@@ -75,6 +81,7 @@ func validateRVCOptions(o rvcOptions) error {
 func runRVC(ctx context.Context, o rvcOptions, inputPath, outputPath string) error {
 	args := []string{"infer/cli.py", "--model", o.Model, "--input", inputPath, "--output", outputPath,
 		"--pitch", strconv.Itoa(o.Pitch), "--f0-method", o.F0, "--index-rate", strconv.FormatFloat(o.IndexRate, 'f', 2, 64)}
+	if o.Index!="" {args=append(args,"--index",o.Index)}
 	cmd := exec.CommandContext(ctx, o.Python, args...)
 	cmd.Dir = o.Root
 	cmd.Stdin = nil
@@ -150,7 +157,7 @@ func (a *appServer) rvcConvertWith(w http.ResponseWriter, r *http.Request, runne
 		jsonError(w, 400, "RVC 피치 또는 인덱스 비율 형식 오류")
 		return
 	}
-	o := rvcOptions{Root: pick("root"), Python: pick("python"), Model: pick("model"), F0: pick("f0"), Pitch: pitch, IndexRate: rate}
+	o := rvcOptions{Root: pick("root"), Python: pick("python"), Model: pick("model"), Index: pick("index"), F0: pick("f0"), Pitch: pitch, IndexRate: rate}
 	if err := validateRVCOptions(o); err != nil {
 		jsonError(w, 400, err.Error())
 		return

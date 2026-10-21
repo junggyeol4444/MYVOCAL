@@ -10,6 +10,8 @@ export function validateRVCSettings(file,settings){
  if(!/\.pth$/i.test(settings.model)||!/(?:^|[/\\])python\.exe$/i.test(settings.python))throw Error('RVC Python.exe 또는 .pth 모델 경로가 올바르지 않습니다.');
  if(!Number.isInteger(Number(settings.pitch))||Number(settings.pitch)<-24||Number(settings.pitch)>24)throw Error('반음 이동은 -24~24입니다.');
  if(!Number.isFinite(Number(settings.indexRate))||Number(settings.indexRate)<0||Number(settings.indexRate)>1)throw Error('인덱스 비율은 0~1입니다.');
+ if(settings.index && (typeof settings.index!=='string'||settings.index.length>1024||!/\.index$/i.test(settings.index)))throw Error('FAISS 인덱스는 .index 경로를 지정해야 합니다.');
+ if(Number(settings.indexRate)>0&&!settings.index)throw Error('인덱스 비율을 사용하려면 실제 FAISS .index 파일이 필요합니다.');
  if(!['pm','rmvpe'].includes(settings.f0))throw Error('F0 추출 방식을 확인하세요.');
 }
 export async function convertVoiceWithRVC(file,settings,{session,request=fetch,signal}={}){
@@ -20,6 +22,7 @@ export async function convertVoiceWithRVC(file,settings,{session,request=fetch,s
  if(signal?.aborted)throw Error('RVC 음색 변환을 취소했습니다.');
  const body=new FormData();body.set('audio',file,'MYVOCAL-source.wav');
  for(const k of ['root','python','model','f0','pitch','indexRate'])body.set(k,String(settings[k]));
+ if(settings.index)body.set('index',String(settings.index));
  body.set('rights','confirmed');
  const response=await request('/api/singing/rvc/convert',{method:'POST',headers:{'X-MYVOCAL-Session':session},body,signal,cache:'no-store'});
  if(!response.ok){const problem=await response.json().catch(()=>({error:`RVC 변환 HTTP ${response.status}`}));throw Error(String(problem.error||'RVC 변환 실패'));}

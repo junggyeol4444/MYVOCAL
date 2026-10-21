@@ -9,7 +9,7 @@ import {makeImportedVocalTrack} from '../lib/lyricAlignment';
 
 export default function RvcVoiceConversion({project,onChange,notify,sourceSuggestion}){
  const [saved]=useState(()=>{try{return readRVCPreferences(window.localStorage)||{}}catch{return {}}});
- const [source,setSource]=useState(null),[root,setRoot]=useState(saved.root||''),[python,setPython]=useState(saved.python||''),[model,setModel]=useState(saved.model||''),[rightsConfirmed,setRightsConfirmed]=useState(false);
+ const [source,setSource]=useState(null),[root,setRoot]=useState(saved.root||''),[python,setPython]=useState(saved.python||''),[model,setModel]=useState(saved.model||''),[index,setIndex]=useState(saved.index||''),[rightsConfirmed,setRightsConfirmed]=useState(false);
  const [pitch,setPitch]=useState(saved.pitch||'0'),[indexRate,setIndexRate]=useState(saved.indexRate||'0'),[f0,setF0]=useState(saved.f0||'rmvpe');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[converted,setConverted]=useState(null),[url,setUrl]=useState(''),[progress,setProgress]=useState('');
  const abort=useRef(null),latest=useRef(project);latest.current=project;
@@ -23,7 +23,7 @@ export default function RvcVoiceConversion({project,onChange,notify,sourceSugges
   setBusy(true);setError('');setProgress('');clearOutput();
   const base=latest.current;
   try{
-   const settings={root,python,model,pitch,indexRate,f0,rightsConfirmed};
+   const settings={root,python,model,index,pitch,indexRate,f0,rightsConfirmed};
    const result=await convertLongSingingWithRVC(source,settings,{session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal,onProgress:(done,total)=>setProgress(`RVC 음색 변환 ${done}/${total} 구간`)});
    if(controller.signal.aborted||latest.current!==base)throw Error('RVC 처리 중 프로젝트가 변경됐거나 취소되었습니다.');
    setConverted({file:result,projectId:base.id});setUrl(URL.createObjectURL(result));
@@ -51,6 +51,7 @@ export default function RvcVoiceConversion({project,onChange,notify,sourceSugges
   finally{setBusy(false)}
  };
  return <Panel title="D. 설치된 RVC 모델로 실제 음색 변환" description="직접 설치한 RVC 신경망 음색 모델(.pth)로 이미 녹음하거나 부른 WAV를 변환합니다. 실제 RVC infer/cli.py를 호출하며 결과를 WAV로 받습니다.">
+  <Notice>인덱스를 함께 사용할 경우 실제 .index 파일의 로컬 절대 경로를 입력하고 인덱스 비율을 0보다 크게 설정합니다. 인덱스가 없으면 비율을 0으로 두세요. 등록된 모델과 인덱스는 학습 관리 화면에서 각각 내보낼 수 있습니다.</Notice>
   <Notice>RVC 음색 변환은 학습이나 한국어 가사 발성 생성 기능이 아닙니다. **이미 노래한 WAV**를 준비하고 권한을 보유한 목소리 모델을 선택해야 합니다. 외부 유료 API는 사용하지 않습니다.</Notice>
   <Field label="변환할 원본 가창 WAV"><input type="file" accept=".wav,audio/wav" disabled={busy} onChange={e=>{setSource(e.target.files?.[0]||null);clearOutput()}}/></Field>
   {sourceSuggestion&&<Button disabled={busy} onClick={()=>{setSource(sourceSuggestion);clearOutput();notify('방금 만든 보컬 WAV를 RVC 입력으로 선택했습니다.')}}>가창 작업실에서 만든 WAV를 원본으로 사용</Button>}
@@ -59,11 +60,12 @@ export default function RvcVoiceConversion({project,onChange,notify,sourceSugges
    <Field label="RVC 설치 폴더 (절대 경로)"><input value={root} onChange={e=>setRoot(e.target.value)} placeholder="D:\\RVC" disabled={busy}/></Field>
    <Field label="RVC Python.exe (절대 경로)"><input value={python} onChange={e=>setPython(e.target.value)} placeholder="D:\\RVC\\runtime\\python.exe" disabled={busy}/></Field>
    <Field label="RVC 학습 완료 모델 .pth"><input value={model} onChange={e=>setModel(e.target.value)} placeholder="D:\\RVC\\assets\\weights\\myvoice.pth" disabled={busy}/></Field>
+   <Field label="학습된 FAISS 검색 인덱스 (.index, 선택)"><input value={index} onChange={e=>setIndex(e.target.value)} placeholder="D:\\RVC\\logs\\myvoice\\added.index" disabled={busy}/></Field>
    <Field label="피치 이동 (반음)"><input value={pitch} type="number" min="-24" max="24" onChange={e=>setPitch(e.target.value)} disabled={busy}/></Field>
    <Field label="인덱스 비율 (0~1)"><input value={indexRate} type="number" min="0" max="1" step="0.05" onChange={e=>setIndexRate(e.target.value)} disabled={busy}/></Field>
    <Field label="F0 추출 방식"><select value={f0} onChange={e=>setF0(e.target.value)} disabled={busy}><option value="rmvpe">RMVPE</option><option value="pm">PM</option></select></Field>
   </div>
-  <Button disabled={busy} onClick={()=>{try{writeRVCPreferences(window.localStorage,{root,python,model,pitch,indexRate,f0});notify('RVC 실행 경로와 옵션을 이 PC에 기억했습니다. 음성·모델 원본은 저장하지 않습니다.')}catch(e){setError(e.message)}}}>RVC 경로·옵션 기억하기</Button>
+  <Button disabled={busy} onClick={()=>{try{writeRVCPreferences(window.localStorage,{root,python,model,index,pitch,indexRate,f0});notify('RVC 실행 경로와 옵션을 이 PC에 기억했습니다. 음성·모델 원본은 저장하지 않습니다.')}catch(e){setError(e.message)}}}>RVC 경로·옵션 기억하기</Button>
   <label className="check-item"><input type="checkbox" checked={rightsConfirmed} disabled={busy} onChange={e=>setRightsConfirmed(e.target.checked)}/>녹음 및 RVC 모델을 사용할 정당한 권한이 있습니다.</label>
   <div className="mv7-actions">
    <Button variant="primary" disabled={busy||!source||!rightsConfirmed} onClick={convert}>{busy?'RVC 변환 중':'설치된 RVC로 실제 WAV 변환'}</Button>
