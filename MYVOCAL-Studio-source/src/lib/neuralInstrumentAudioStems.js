@@ -27,7 +27,7 @@ export function instrumentNeuralPrompts(project,role,{segments,seconds=18,crossf
  });
 }
 export async function renderAndStoreNeuralAudioStems(project,{
- python,modelDir,seconds=18,segments=11,crossfadeSec=.5,session,signal,
+ python,modelDir,seconds=18,segments=11,crossfadeSec=.5,audible=false,session,signal,
  current,onChange,newId,readInfo,createTrack,save,remove,
  generate=generateMusicGenSequence,onProgress=()=>{}
 }={}){
@@ -35,7 +35,7 @@ export async function renderAndStoreNeuralAudioStems(project,{
  [current,onChange,newId,readInfo,createTrack,save,remove,generate].some(f=>typeof f!=='function'))
   throw Error('기존 MYVOCAL 프로젝트와 로컬 모델·편집기 연결이 필요합니다.');
  if(typeof python!=='string'||!/python\.exe$/i.test(python)||typeof modelDir!=='string'||modelDir.length<3||
- typeof session!=='string'||session.length<8||![11,20].includes(segments)||seconds!==18||
+ typeof session!=='string'||session.length<8||typeof audible!=='boolean'||![11,20].includes(segments)||seconds!==18||
  crossfadeSec!==.5)throw Error('로컬 MusicGen 실행 환경과 3~6분 설정을 확인하세요.');
  alive(project,current,signal);
  if(!latestCompleteNeuralScore(project))throw Error('실제 로컬 AI가 생성한 동일 회차의 6악기 MIDI가 필요합니다.');
@@ -70,7 +70,7 @@ export async function renderAndStoreNeuralAudioStems(project,{
    throw Error('독립 신경망 악기 WAV를 편집 트랙에 연결하지 못했습니다.');
   entries.push([assetId,file]);
   tracks.push({...track,id:trackId,name:'MusicGen 개별 신경망 악기 · '+INSTRUMENT[role][1],
-   type:'instrument',mute:true,solo:false,volume:70,generatedBy:'musicgen-independent-audio',
+   type:'instrument',mute:!audible,solo:false,volume:audible?35:70,generatedBy:'musicgen-independent-audio',
    sourceRole:role,sourceMidiTrackId:latestCompleteNeuralScore(project).get(role).id});
  }
  alive(project,current,signal);
