@@ -41,8 +41,9 @@ test('프로젝트 저장 실패 시 새 자산만 롤백하고 사용자 파일
  assert.equal(ctx.state().removed.length,6);assert.equal(JSON.stringify(p),original);
 });
 test('프로젝트 교체 후 신규 자산을 임의 삭제하지 않는다',async()=>{
- const p=project(),ctx=setup(p,{onChange:()=>{throw Error('저장 실패')}});
- const options={...ctx.options,onChange:()=>{options.current=()=>({id:'replacement'});throw Error('저장 실패')}};
+ const p=project();let active=p;
+ const ctx=setup(p,{current:()=>active,onChange:()=>{active={id:'replacement'};throw Error('저장 실패')}});
+ const options=ctx.options;
  await assert.rejects(()=>renderAndStoreNeuralMidiStems(p,options),/저장 실패/);
  assert.equal(ctx.state().removed.length,0);
 });
