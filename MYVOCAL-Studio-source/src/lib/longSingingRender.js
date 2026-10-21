@@ -7,7 +7,8 @@ import {assertUsableSingingWav} from './singingOutputValidation.js';
 
 const MAX_SECONDS=360;
 const MAX_CUES=512;
-const MAX_WAV_BYTES=64*1024*1024;
+// 48kHz 16bit stereo, 360 seconds requires 69,120,044 bytes.
+const MAX_WAV_BYTES=90*1024*1024;
 const rd=(value)=>Math.round(value*1000)/1000;
 export function planLongSingingChunks(alignment,{maxSeconds=80,maxCues=128}={}){
  const cues=alignment?.cues;
@@ -56,24 +57,26 @@ function extractPCM(input){
 export function combineSingingWavChunks(parts,durationSec){
  if(!Array.isArray(parts)||!parts.length||!Number.isFinite(durationSec)||durationSec<=0||durationSec>MAX_SECONDS)
   throw Error('가창 합치기 정보가 잘못됐습니다.');
- let format=null,output=null,frames=0;
+ let format=null,output=null,frames=0,lastLimit=0;
  for(const part of parts){
   const info=assertUsableSingingWav(part.bytes);
   const decoded=extractPCM(part.bytes);
   if(!format){format=decoded.format;
    frames=Math.ceil(durationSec*format.rate);
    const size=44+frames*format.align;
-   if(!Number.isSafeInteger(size)||size>MAX_WAV_BYTES)throw Error('완성 보컬 WAV가 64MiB를 초과했습니다.');
+   if(!Number.isSafeInteger(size)||size>MAX_WAV_BYTES)throw Error('완성 보컬 WAV가 90MiB를 초과했습니다.');
    output=new Uint8Array(size);
   }else if(Object.keys(format).some(k=>format[k]!==decoded.format[k]))throw Error('엔진이 분할 요청마다 서로 다른 WAV 포맷을 반환했습니다.');
   if(!Number.isFinite(part.startSec)||part.startSec<0||part.startSec>=durationSec)throw Error('분할 WAV의 시작 시간이 올바르지 않습니다.');
   const from=Math.round(part.startSec*format.rate);
   const next=part.limitSec==null?frames:Math.round(part.limitSec*format.rate);
+  if(from<lastLimit)throw Error('가창 분할 WAV 구간이 겹치거나 순서가 바뀌었습니다.');
   if(next<=from||next>frames)throw Error('분할 WAV의 구간이 겹치거나 잘못됐습니다.');
   const maxFrames=Math.min(info.frames,next-from,frames-from);
   const required=part.requiredDurationSec??0;
   if(info.durationSec+0.025<required)throw Error('엔진 WAV가 입력 MIDI 음표보다 짧게 생성됐습니다.');
   output.set(decoded.data.subarray(0,maxFrames*format.align),44+from*format.align);
+  lastLimit=next;
  }
  const view=new DataView(output.buffer);
  for(const [at,s] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']])for(let j=0;j<4;j++)output[at+j]=s.charCodeAt(j);
