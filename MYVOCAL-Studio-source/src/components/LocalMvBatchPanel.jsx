@@ -20,11 +20,13 @@ import {renderAndStoreNeuralMidiStems} from '../lib/autoMvSourceStems.js';
 import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
 import {getInstalledLocalModels} from '../lib/localAiComposer.js';
 import {applyNeuralFaceLipToMv} from '../lib/autoMvRealPersonLip.js';
+import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
  const cancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
  const [includeReferences,setIncludeReferences]=useState(false);
  const [saveFullMovie,setSaveFullMovie]=useState(false),[fullMouth,setFullMouth]=useState(false);
+ const [makeMp4,setMakeMp4]=useState(true);
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(false),[musicDuration,setMusicDuration]=useState(180);
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(false),[singingPort,setSingingPort]=useState('7867');
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
@@ -173,14 +175,19 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }
     const result=await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,prewarmedAudioContext:warmed,onProgress:setMessage});
     const outputName='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV';
-    const download=(blob,ext)=>{
+    const download=(blob,ext,suffix='')=>{
      const url=URL.createObjectURL(blob),a=document.createElement('a');
-     try{a.href=url;a.download=outputName+'.'+ext;document.body.append(a);a.click();a.remove();}
+     try{a.href=url;a.download=outputName+suffix+'.'+ext;document.body.append(a);a.click();a.remove();}
      finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
     };
     // Even if the optional licensed Wav2Lip model fails, preserve the real
     // already-rendered music+video WebM; never invent a converted MP4.
     download(result.file,'webm');
+    if(makeMp4){
+     setMessage('실제 로컬 FFmpeg로 원본 음악·MV MP4 변환 중');
+     const mp4=await convertRecordedWebMToMP4(result.file,{session:base.session,signal:controller.signal});
+     download(mp4,'mp4','-원본');
+    }
     if(faceNeuralSync){
      setMessage('실제 사람 Wav2Lip 얼굴/가창 신경망 립싱크 MP4 제작 중');
      const actual=current();
@@ -190,11 +197,11 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       resize:2,consent:faceRights,modelRights:faceModelRights,
       session:base.session,signal:controller.signal
      });
-     download(face.file,'mp4');
+     download(face.file,'mp4','-립싱크');
      setMessage('음악+MV WebM 및 실제 Wav2Lip 얼굴 립싱크 MP4 모두 저장 완료');
     }
     setMessage(`전체 MV ${result.seconds.toFixed(1)}초 저장: 신규 이미지 ${result.generatedImages}장, 영상 클립 ${result.generatedVideos}개. 보컬·반주 믹스 ${result.audioIncluded?'포함':'없음'}.`);
-    notify('전체 MV WebM을 저장했습니다. 실제 사람이 부르는 신경망 모델은 별도 설치가 필요합니다.');
+    notify(makeMp4?'전체 MV WebM·실제 MP4 파일을 각각 저장했습니다.':'전체 MV WebM 파일을 저장했습니다.');
    }else{
     const result=await runMvBatch({...base,progress:setMessage});
     setMessage(`${result.generatedImages}장 이미지와 ${result.generatedVideos}개 영상 클립 생성·저장 완료. 완성 MV는 별도 출력도 가능합니다.`);
@@ -206,6 +213,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   <p className="muted">생성 대상 {info.total}개 · 이미 영상이 있는 장면 {info.already}개 · 등록된 사람·캐릭터 연결 장면 {info.linked}개</p>
   <label><input type="checkbox" disabled={busy} checked={includeReferences} onChange={e=>setIncludeReferences(e.target.checked)}/> 등록된 본인·허가받은 사람 사진·2D 캐릭터 원화 장면도 일괄 이미지·영상 생성에 포함</label>
   <label><input type="checkbox" disabled={busy} checked={saveFullMovie} onChange={e=>setSaveFullMovie(e.target.checked)}/> 생성 후 음악·보컬·가사 포함 완성 MV WebM까지 한 번에 저장 (Windows WebView2 사용)</label>
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeMp4} onChange={e=>setMakeMp4(e.target.checked)}/> 완성 WebM과 함께 로컬 FFmpeg로 실제 MP4도 저장 (원본·립싱크 파일명 구분)</label>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeAutoScore} onChange={e=>{setMakeAutoScore(e.target.checked);setScoreModelError('');}}/> 로컬 AI 한국어 작사·6악기 MIDI·음소 싱크까지 자동 생성 (기존 작성 가사 보존)</label>}
   {saveFullMovie&&makeAutoScore&&<div className="mv7-item">
    <label>노래 주제와 원하는 편곡<input disabled={busy} maxLength={1200} value={scorePrompt} onChange={e=>setScorePrompt(e.target.value)} placeholder="한국어 애니메이션 록 발라드, 마지막 후렴은 웅장하게"/></label>
