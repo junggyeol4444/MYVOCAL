@@ -1,7 +1,7 @@
 // Standalone build: use local TypeScript (after npm install) and bundled MIT React UMD assets.
 // The application source itself targets React19 + Vite. The single-file version
 // is a preview wrapper with a small React hooks compatibility runtime.
-const fs=require('fs'),path=require('path');
+const fs=require('fs'),path=require('path'),vm=require('node:vm');
 const root=path.resolve(__dirname,'..');
 let ts;
 try{ts=require('typescript')}catch{try{ts=require('/opt/nvm/versions/node/v22.16.0/lib/node_modules/typescript')}catch{throw new Error('TypeScript dependency missing: run npm install first')}}
@@ -63,7 +63,11 @@ const jsxRuntime=`
  window.addEventListener('unhandledrejection',event=>bootFailure(event.reason));
  try{requireModule('src/main.jsx')}catch(error){bootFailure(error)}
 })();
-`.replace('__MODULES__',JSON.stringify(modules));
+// An HTML <script> element closes at the literal sequence "</script>" even
+// when that text appears inside an embedded JSON string. Escape ALL "<" in
+// transpiled modules before embedding them so app sources cannot truncate JS.
+const safeModuleJSON=JSON.stringify(modules).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+function raw() { [native code] }`.replace('__MODULES__',safeModuleJSON);
 const sourceHtml=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const css=fs.readFileSync(path.join(src,'style.css'),'utf8');
 let html=sourceHtml.replace(/<link[^>]+href="https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)[^>]*>\s*/g,'').replace(/<script type="module" src="\/src\/main.jsx"><\/script>/,`<style>${css}</style><script>${react}\n${reactDom}\n${jsxRuntime}</script>`);
@@ -71,6 +75,16 @@ let html=sourceHtml.replace(/<link[^>]+href="https:\/\/(?:fonts\.googleapis\.com
 // The desktop HTTP host additionally sets the same network-restrictive policy.
 const offlineCsp="default-src 'none'; connect-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; form-action 'self'; base-uri 'none'; frame-src 'none'; object-src 'none'";
 html=html.replace('</head>',`<meta http-equiv="Content-Security-Policy" content="${offlineCsp}" />\n</head>`);
+// Validate the actual HTML script elements Chromium will parse, not only
+// individual transpiled modules. Fail the Windows EXE build on malformed JS.
+let inlineScripts=0;
+for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)){
+ if(!match[1].trim())continue;
+ inlineScripts++;
+ try{new vm.Script(match[1],{filename:'myvocal-embedded-'+inlineScripts+'.js'});}
+ catch(error){throw new Error('Windows 번들 JavaScript 문법 오류 ('+inlineScripts+'): '+error.message);}
+}
+if(inlineScripts<2)throw new Error('Windows HTML 스크립트가 누락됐거나 중간에 종료됐습니다.');
 fs.writeFileSync(path.join(root,'MYVOCAL-Studio-v1.8.html'),html);
 
 console.log('Wrote standalone HTML:',html.length,'chars; modules:',Object.keys(modules).length);
