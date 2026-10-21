@@ -19,7 +19,7 @@ export async function persistNeuralVocalTake(project,files,{
   const duration=Number(info?.duration??info?.durationSec);
   if(!Number.isFinite(duration)||duration<=0||duration>360)throw Error('6분을 초과하거나 손상된 가창 WAV입니다.');
   const assetId=newId('singing-source'),trackId=newId('singing-track');
-  if(!assetId||!trackId||ids.has(assetId)||ids.has(trackId))throw Error('신규 보컬 파일/트랙 ID가 중복됐습니다.');
+  if(!assetId||!trackId||assetId===trackId||ids.has(assetId)||ids.has(trackId))throw Error('신규 보컬 파일/트랙 ID가 중복됐습니다.');
   ids.add(assetId);ids.add(trackId);
   const track=createTrack(project,file,assetId,duration);
   if(!track?.clips?.some(c=>c.assetId===assetId))throw Error('실제 보컬 파일을 편집 트랙으로 연결하지 못했습니다.');
@@ -37,7 +37,7 @@ export async function persistNeuralVocalTake(project,files,{
   saved=false;
   return {assets:entries.length,tracks:tracks.length,project:changed};
  }catch(error){
-  if(saved)try{await rollback(entries.map(([id])=>id));}catch(e){throw Error('신규 가창 자산 정리 오류: '+e.message+' / '+error.message)}
+  if(saved&&current()===project)try{await rollback(entries.map(([id])=>id));}catch(e){throw Error('신규 가창 자산 정리 오류: '+e.message+' / '+error.message)}
   throw error;
  }
 }
