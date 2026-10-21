@@ -2,6 +2,7 @@
 // It burns timed character lipSync shapes into *real WebM/MP4 frames*; it does
 // NOT discover faces, warp a face, perform phoneme recognition or drive VRM.
 import {validateLipSync} from './characterLipSync.js';
+import {automaticSingingVisemes} from './autoMvPhonemeLip.js';
 
 export const MV_MOUTH_MIN = 2;
 export const MV_MOUTH_MAX = 18;
@@ -13,6 +14,7 @@ export function planMvLipSyncOverlay(project,characters=[],{xPercent=50,yPercent
  validPlacement({xPercent,yPercent,sizePercent});
  if(!project?.id||!Array.isArray(project.scenes)||!Array.isArray(characters))throw Error('영상 프로젝트 또는 캐릭터 목록이 올바르지 않습니다.');
  const identities=new Map(),scenes={};let matched=0;
+ const automatic=automaticSingingVisemes(project,characters);
  for(const character of characters){
   if(!character?.id||identities.has(character.id))throw Error('캐릭터 ID가 없거나 중복됐습니다.');
   identities.set(character.id,character);
@@ -20,16 +22,17 @@ export function planMvLipSyncOverlay(project,characters=[],{xPercent=50,yPercent
  for(const scene of project.scenes){
   if(!scene?.id)throw Error('장면 ID가 올바르지 않습니다.');
   const character=identities.get(scene.characterId||project.characterId);
-  if(!character?.lipSync?.cues?.length)continue;
-  validateLipSync(character.lipSync);
-  if(!Number.isFinite(scene.start)||!Number.isFinite(scene.end)||scene.start<0||scene.end>300||scene.start>=scene.end)throw Error('립싱크 영상 장면 시간이 잘못됐습니다.');
+  const manual=character?.lipSync?.cues?.length?character.lipSync:null;
+  if(!manual&&character?.id!==automatic?.characterId)continue;
+  if(manual)validateLipSync(manual);
+  if(!Number.isFinite(scene.start)||!Number.isFinite(scene.end)||scene.start<0||scene.end>360||scene.start>=scene.end)throw Error('립싱크 영상 장면 시간이 잘못됐습니다.');
   if(scenes[scene.id])throw Error('립싱크 장면 ID가 중복됐습니다.');
   // Copy the validated timing; rendering cannot mutate the character object.
-  const cues=character.lipSync.cues.filter(c=>c.endMs>scene.start*1000&&c.startMs<scene.end*1000).map(c=>({startMs:c.startMs,endMs:c.endMs,viseme:c.viseme,lyric:c.lyric}));
+  const cues=(manual?.cues||automatic.cues).filter(c=>c.endMs>scene.start*1000&&c.startMs<scene.end*1000).map(c=>({startMs:c.startMs,endMs:c.endMs,viseme:c.viseme,lyric:c.lyric}));
   if(cues.length){scenes[scene.id]={characterId:character.id,cues};matched++;}
  }
  if(!matched)throw Error('영상 장면에 연결된 캐릭터의 유효한 립싱크 시간표가 없습니다. 캐릭터와 시간을 확인하세요.');
- return {version:1,source:'user-reviewed-character-lip-sync',projectId:project.id,xPercent,yPercent,sizePercent,scenes,matchedScenes:matched,
+ return {version:1,source:automatic?'user-reviewed-or-project-phoneme-lip-sync':'user-reviewed-character-lip-sync',projectId:project.id,xPercent,yPercent,sizePercent,scenes,matchedScenes:matched,
   automaticFaceTracking:false,neuralFaceAnimation:false};
 }
 export function mouthAtTime(overlay,sceneId,seconds){
