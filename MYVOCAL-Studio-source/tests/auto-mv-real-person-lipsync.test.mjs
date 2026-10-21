@@ -49,5 +49,7 @@ test('user gets original complete WebM even when optional real-person Wav2Lip fa
  const source=readFileSync(new URL('../src/components/LocalMvBatchPanel.jsx',import.meta.url),'utf8');
  assert.match(source,/download\(result\.file,'webm'\)/);
  assert.match(source,/applyNeuralFaceLipToMv\(result\.file/);
- assert.match(source,/download\(face\.file,'mp4'\)/);
+ assert.match(source,/download\(face\.file,'mp4','-립싱크'\)/);
+ assert.match(source,/convertRecordedWebMToMP4\(result\.file/);
+ assert.match(source,/download\(mp4,'mp4','-원본'\)/);
 });
