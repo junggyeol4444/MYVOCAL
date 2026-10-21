@@ -4,7 +4,7 @@ import {runFullLocalMv} from '../src/lib/fullMvProduction.js';
 import {planMvVideoRender,MV_VIDEO_MAX_SEC} from '../src/lib/mvVideoRender.js';
 
 test('actual existing MV export starts even without injected mixdown defaults',async()=>{
- const project={id:'existing',title:'프로젝트',scenes:[{id:'scene',start:0,end:4,title:'공연',description:'참고'}],tracks:[]};
+ const project={id:'existing',title:'프로젝트',scenes:[{id:'scene',start:0,end:4,title:'공연',description:'참고',videoClipAssetId:'already-generated-video'}],tracks:[]};
  const file=await runFullLocalMv({
   project,data:{characters:[]},current:()=>project,commit:()=>{},session:'local',
   includeAudio:false,includeCaptions:false,

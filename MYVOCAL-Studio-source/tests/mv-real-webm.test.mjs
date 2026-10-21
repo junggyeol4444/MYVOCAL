@@ -43,7 +43,7 @@ test('editing scene timing changes the render without mutating the original proj
 });
 test('no fake video claimed; invalid overlaps and unsupported duration are blocked',()=>{
  assert.throws(()=>planMvVideoRender({...project(),scenes:[{id:'a',start:0,end:5,title:'a'},{id:'b',start:4,end:6,title:'b'}]}),/오류/);
- assert.throws(()=>planMvVideoRender({...project(),scenes:[{id:'long',start:0,end:301,title:'long'}]}),/5분/);
+ assert.throws(()=>planMvVideoRender({...project(),scenes:[{id:'long',start:0,end:361,title:'long'}]}),/6분/);
  assert.throws(()=>planMvVideoRender({...project(),scenes:[]}),/장면/);
 });
 test('animated webp clip uses real saved asset, not an invented video',()=>{
