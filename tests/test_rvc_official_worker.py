@@ -11,6 +11,8 @@ import unittest
 from unittest.mock import patch
 
 WORKER = Path(__file__).resolve().parents[1] / 'desktop' / 'rvc_official_worker.py'
+# importlib 단독 로드 환경에서도 공식 학습 스크립트의 동반 모듈을 탐색한다.
+sys.path.insert(0, str(WORKER.parent))
 spec = importlib.util.spec_from_file_location('myvocal_rvc_official_worker', WORKER)
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
