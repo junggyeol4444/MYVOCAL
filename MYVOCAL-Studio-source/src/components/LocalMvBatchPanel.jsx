@@ -3,6 +3,7 @@ import {Button,Notice,Panel} from './UI';
 import {planMvBatch,runMvBatch} from '../lib/mvBatchProduction.js';
 import {runFullLocalMv} from '../lib/fullMvProduction.js';
 import {readMvLipPlacement} from '../lib/mvLipPlacement.js';
+import {automaticSingingVisemes,reviewedCharacterMouthPlacement} from '../lib/autoMvPhonemeLip.js';
 import {audioEnd,readAudioInfo} from '../lib/audioEngine.js';
 import {runMusicProductionPipeline} from '../lib/musicProductionPipeline.js';
 import {persistNeuralMusicTracks} from '../lib/musicProductionCommit.js';
@@ -64,8 +65,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }
     let lipPlacement=null;
     if(fullMouth){
-     lipPlacement=readMvLipPlacement(window.localStorage,project.id);
-     if(!Object.keys(lipPlacement).length)throw Error('MV 내보내기 화면에서 캐릭터 입 위치를 먼저 저장하세요.');
+     const saved=readMvLipPlacement(window.localStorage,project.id);
+     lipPlacement=Object.keys(saved).length?saved:reviewedCharacterMouthPlacement(current(),dataRef.current?.characters||[]);
+     if(!lipPlacement)throw Error('MV 입 위치 저장 또는 검토된 2D 캐릭터 입 영역이 필요합니다.');
     }
     let movieProject=base.project;
     if(makeAutoScore){
@@ -96,7 +98,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      if(!source||source.id!==project.id)throw Error('독립 신경망 악기 생성 중 프로젝트가 변경됐습니다.');
      const result=await renderAndStoreNeuralAudioStems(source,{
       python:musicPython,modelDir:musicModelDir,
-      segments:musicDuration===360?20:11,session:base.session,signal:controller.signal,
+      segments:musicDuration===360?20:11,audible:!makeNeuralMusic,session:base.session,signal:controller.signal,
       current,onChange:commit,newId:genId,
       readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
       save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setMessage
@@ -154,6 +156,20 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      if(controller.signal.aborted||current()?.id!==vocalProject.id)throw Error('신경망 가창 저장 중 취소 또는 프로젝트 변경');
      movieProject=sung.project;
      setMessage('실제 신경망 한국어 가창 '+sung.vocalAssets+'개 저장 → 노래·장면 동기화 MV 제작 중');
+    }
+    // Extend only unrendered tail scenes to the actual WAV length.
+    const finalSource=current();
+    if(!finalSource||finalSource.id!==project.id)throw Error('최종 MV 제작 중 프로젝트가 변경됐습니다.');
+    const finalDuration=audioEnd(finalSource);
+    if(finalDuration>0&&finalDuration<=360&&finalSource.scenes.length<20){
+     const filled=extendMvToFullSong(finalSource,finalDuration,{newId:genId});
+     if(filled.added)await Promise.resolve(commit(filled.project));
+    }
+    movieProject=current();
+    if(!lipPlacement){
+     const chars=dataRef.current?.characters||[];
+     const place=reviewedCharacterMouthPlacement(movieProject,chars);
+     if(place&&automaticSingingVisemes(movieProject,chars))lipPlacement=place;
     }
     const result=await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,prewarmedAudioContext:warmed,onProgress:setMessage});
     const outputName='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV';
