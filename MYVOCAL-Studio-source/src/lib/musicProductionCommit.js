@@ -30,9 +30,9 @@ export async function persistNeuralMusicTracks(project,production,{
   if(baseline&&Math.abs(duration-baseline)>.1)throw Error('악기·마스터 WAV의 시간축이 일치하지 않습니다.');
   baseline||=duration;
   const assetId=newId('musicstem'),trackId=newId('trk');
-  if(!assetId||!trackId||existing.has(trackId)||entries.some(x=>x[0]===assetId)||newTracks.some(t=>t.id===trackId))
+  if(!assetId||!trackId||assetId===trackId||existing.has(assetId)||existing.has(trackId)||entries.some(x=>x[0]===assetId)||newTracks.some(t=>t.id===trackId))
    throw Error('새 악기/트랙 ID가 충돌합니다.');
-  existing.add(trackId);
+  existing.add(assetId);existing.add(trackId);
   const track=createTrack(project,stem.file,assetId,duration);
   if(!track||!Array.isArray(track.clips)||!track.clips.some(c=>c.assetId===assetId))
    throw Error('악기 WAV를 실제 편집 트랙으로 변환하지 못했습니다.');
@@ -51,7 +51,7 @@ export async function persistNeuralMusicTracks(project,production,{
   stored=false;
   return {tracks:newTracks,assets:entries.length,masterMuted:true};
  }catch(error){
-  if(stored){try{await remove(entries.map(([id])=>id));}catch(clean){throw Error('생성된 악기 자산 정리 실패: '+clean.message+' / 원인: '+error.message);}}
+  if(stored&&current()===project){try{await remove(entries.map(([id])=>id));}catch(clean){throw Error('생성된 악기 자산 정리 실패: '+clean.message+' / 원인: '+error.message);}}
   throw error;
  }
 }
