@@ -22,3 +22,12 @@ test('project backups include RVC model and paired index assets',()=>{
  assert.ok(ids.includes('model-file'));
  assert.ok(ids.includes('index-file'));
 });
+
+test('registered RVC model export UI keeps an independent FAISS download and paired deletion',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const ui=readFileSync(new URL('../src/pages/Training.jsx',import.meta.url),'utf8');
+ assert.match(ui,/model\.indexAssetId&&<Button/);
+ assert.match(ui,/onClick=\{\(\)=>downloadIndex\(model\)\}/);
+ assert.match(ui,/\[model\.assetId,model\.indexAssetId\]/);
+ assert.match(ui,/await deleteFilesAtomic\(stored\)/);
+});

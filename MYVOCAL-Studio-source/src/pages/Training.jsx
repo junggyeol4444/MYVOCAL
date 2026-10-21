@@ -3,7 +3,7 @@ import VocalPreview from '../components/VocalPreview';
 import RvcTrainingPanel from '../components/RvcTrainingPanel.jsx';
 import {Button,Empty,Field,Icon,Notice,Panel,SectionHead,Status} from '../components/UI';
 import {genId} from '../lib/schema';
-import {getFile,putFile,removeFile} from '../lib/assetDb';
+import {getFile,putFile,removeFile,deleteFilesAtomic} from '../lib/assetDb';
 import {modelDependents} from '../lib/voiceDeletionSafety.js';
 import {TRAINING_ENGINES,TRAINING_PRESETS,assessTrainingData,createTrainingPlan,packageTrainingPlan,validateCheckpoint,buildCheckpointRecord,sha256File} from '../lib/voiceTraining';
 const byteText=n=>n>1024*1024?(n/1024/1024).toFixed(1)+' MB':Math.round(n/1024)+' KB';
@@ -37,13 +37,24 @@ export default function Training({data,add,remove,notify,navigate}){
   const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=model.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2500);
   notify('원본 체크포인트를 내려받았습니다.');
  });
+ const downloadIndex=model=>run(async()=>{
+  if(!model.indexAssetId)throw Error('등록된 FAISS 인덱스가 없습니다.');
+  const file=await getFile(model.indexAssetId);
+  if(!file)throw Error('FAISS 인덱스 원본을 찾지 못했습니다. 모델은 변경하지 않았습니다.');
+  if(model.indexSha256 && (await sha256File(file))!==model.indexSha256)throw Error('FAISS 인덱스 SHA-256이 등록 시점과 다릅니다.');
+  const head=new Uint8Array(await file.slice(0,4).arrayBuffer());
+  if(file.size<1024||head[0]!==73||head[1]!==120)throw Error('FAISS 인덱스 파일 형식이 올바르지 않습니다.');
+  const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=(String(model.name||'model').replace(/\\.pth$/i,'')||'MYVOCAL-RVC')+'.index';a.click();setTimeout(()=>URL.revokeObjectURL(url),2500);
+  notify('학습된 FAISS 인덱스를 별도 파일로 내려받았습니다. 모델과 함께 RVC 설치 폴더에서 사용하세요.');
+ });
  const deleteCheckpoint=model=>run(async()=>{
   const uses=modelDependents(data,model);
   if(uses.length)throw Error('사용 중인 모델 원본을 삭제할 수 없습니다: '+uses.join(', '));
   if(!confirm(`'${model.name}' 체크포인트를 로컬에서 삭제할까요?`))return;
-  if(model.assetId)await removeFile(model.assetId);
+  const stored=[model.assetId,model.indexAssetId].filter(Boolean);
+  if(stored.length)await deleteFilesAtomic(stored);
   remove('voiceModels',model.id);
-  notify('체크포인트 원본을 삭제한 뒤 모델 등록 정보를 갱신했습니다.');
+  notify('선택한 체크포인트와 연결된 FAISS 인덱스 신규 자산을 삭제한 뒤 등록 정보를 갱신했습니다.');
  });
  return <>
   <SectionHead eyebrow="VOICE TRAINING · MODEL REGISTRY · LOCAL VOCAL PREVIEW" title="Voice Training Manager" description="목소리 학습 데이터를 준비하고 샘플 기반 보컬 미리보기를 생성합니다. 사용자가 설치한 로컬 RVC 학습 스크립트를 실행할 수 있으며 한국어 신경망 가창은 별도 엔진이 필요합니다. 가사·MIDI 싱크는 Music Studio에서 편집할 수 있습니다." action={<Button icon="mic" onClick={()=>navigate('voices')}>녹음 스튜디오</Button>}/>
@@ -73,7 +84,7 @@ export default function Training({data,add,remove,notify,navigate}){
    </Panel>
    <Panel title="4. 외부 모델 체크포인트 보관함" description="외부에서 학습한 파일을 보관하고 SHA-256 지문을 기록합니다. 파일 검증이나 노래 합성이 아닙니다.">
     <div className="mv7-columns mv7-model-import"><div><Field label="외부 체크포인트 파일 (.pth / .pt / .onnx / .ckpt / .safetensors)"><input id="voice-checkpoint-file" type="file" accept=".pth,.pt,.onnx,.ckpt,.safetensors" disabled={busy} onChange={e=>setCheckpoint(e.target.files?.[0]||null)}/></Field><p className="mv7-hint">파일당 200MB 이하 · 로컬 IndexedDB에 저장 · 모델 파일의 안전성/호환성은 자동 검증하지 않음</p></div><div><Field label="외부 모델 종류"><select value={checkpointEngine} onChange={e=>setCheckpointEngine(e.target.value)}>{TRAINING_ENGINES.map(e=><option value={e.id} key={e.id}>{e.name}</option>)}</select></Field><Button variant="primary" icon="save" disabled={busy||!checkpoint||!quality.permitted} onClick={importCheckpoint}>{busy?'처리 중':'체크포인트 등록'}</Button></div></div>
-    {models.length?<div className="mv7-list">{models.map(model=><div className="mv7-item" key={model.id}><div className="mv7-item-title"><div><strong>{model.name}</strong><small>{byteText(model.bytes)} · {formatDate(model.createdAt)} · {TRAINING_ENGINES.find(e=>e.id===model.engineId)?.name||model.engineId}</small></div><Status>미검증 · 합성 미연결</Status></div><p className="mv7-hash">SHA-256: {model.sha256||'미계산'}</p><div className="mv7-actions"><Button icon="download" disabled={busy} onClick={()=>downloadCheckpoint(model)}>원본 내보내기</Button><Button icon="trash" disabled={busy} onClick={()=>deleteCheckpoint(model)}>삭제</Button></div></div>)}</div>:<div className="mv7-empty">등록된 외부 체크포인트가 없습니다.</div>}
+    {models.length?<div className="mv7-list">{models.map(model=><div className="mv7-item" key={model.id}><div className="mv7-item-title"><div><strong>{model.name}</strong><small>{byteText(model.bytes)} · {formatDate(model.createdAt)} · {TRAINING_ENGINES.find(e=>e.id===model.engineId)?.name||model.engineId}</small></div><Status>미검증 · 합성 미연결</Status></div><p className="mv7-hash">SHA-256: {model.sha256||'미계산'}</p><div className="mv7-actions"><Button icon="download" disabled={busy} onClick={()=>downloadCheckpoint(model)}>원본 내보내기</Button>{model.indexAssetId&&<Button icon="download" disabled={busy} onClick={()=>downloadIndex(model)}>FAISS 인덱스 내보내기</Button>}<Button icon="trash" disabled={busy} onClick={()=>deleteCheckpoint(model)}>삭제</Button></div></div>)}</div>:<div className="mv7-empty">등록된 외부 체크포인트가 없습니다.</div>}
    </Panel>
    <RvcTrainingPanel voice={voice} plans={plans} add={add} notify={notify}/>
    <VocalPreview data={data} voice={voice} add={add} remove={remove} notify={notify}/>
