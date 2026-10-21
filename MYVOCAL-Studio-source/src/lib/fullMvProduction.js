@@ -9,6 +9,7 @@ import {buildMvLyricCaptions} from './mvLyricCaptions.js';
 import {planMvLipSyncOverlay} from './mvLipSyncOverlay.js';
 import {mvExportRevision,verifyMvExportRevision} from './mvExportRevision.js';
 import {getFile} from './assetDb.js';
+import {automaticSingingVisemes,reviewedCharacterMouthPlacement} from './autoMvPhonemeLip.js';
 
 export async function runFullLocalMv({
  project,data,current,currentData,commit,session,checkpoint,videoModel,port,
@@ -28,7 +29,10 @@ export async function runFullLocalMv({
  const before=plan(project,characterList());
  preflight();
  if(before.durationSec>360)throw Error('현재 자동 MV는 최대 6분입니다.');
- const safeLip=lipPlacement?overlay(project,characterList(),lipPlacement):null;
+ // 등록된 한 명의 캐릭터·최신 한국어 음소 시간표·검토된 입 영역이 있을 때만 자동 적용.
+ const initialLip=lipPlacement||(automaticSingingVisemes(project,characterList())
+  ?reviewedCharacterMouthPlacement(project,characterList()):null);
+ const safeLip=initialLip?overlay(project,characterList(),initialLip):null;
  // Preflight the selected media and optional user-placed visemes before GPU calls.
  if(safeLip&&!safeLip.matchedScenes)throw Error('배치에 연결된 립싱크 입 모양이 없습니다.');
  let generated=null,resources=null;
@@ -48,7 +52,10 @@ export async function runFullLocalMv({
   if(movie?.cardScenes>0||movie?.scenes?.some(scene=>scene.kind==='card'))
    throw Error('실제 영상이 없는 MV 장면이 남아 있습니다. 원본을 보존하고 해당 장면의 로컬 이미지·영상 생성이 완료될 때까지 중단합니다.');
   // Use only the *current* completed assets, never stale initial scene links.
-  const mouth=lipPlacement?overlay(latest,chars,lipPlacement):null;
+  // 생성 중 캐릭터와 음소 시간표가 바뀌었을 수 있으므로 최신 프로젝트에서 다시 확인.
+  const finalLip=lipPlacement||(automaticSingingVisemes(latest,chars)
+   ?reviewedCharacterMouthPlacement(latest,chars):null);
+  const mouth=finalLip?overlay(latest,chars,finalLip):null;
   const captionsState=includeCaptions?captions(latest):null;
   const useCaptions=!!includeCaptions&&captionsState?.status==='ready';
   // Resolve the real MYVOCAL audio engine only for requested audio.
