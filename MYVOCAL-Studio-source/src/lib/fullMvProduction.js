@@ -43,6 +43,10 @@ export async function runFullLocalMv({
   const latest=current();
   if(!latest||latest.id!==project.id)throw Error('자동 생성 중 프로젝트가 바뀌었습니다.');
   const chars=characterList(),movie=plan(latest,chars);
+  // A missing real scene image/clip must never turn an advertised AI music video
+  // into a storyboard placeholder card. Existing output assets are preserved.
+  if(movie?.cardScenes>0||movie?.scenes?.some(scene=>scene.kind==='card'))
+   throw Error('실제 영상이 없는 MV 장면이 남아 있습니다. 원본을 보존하고 해당 장면의 로컬 이미지·영상 생성이 완료될 때까지 중단합니다.');
   // Use only the *current* completed assets, never stale initial scene links.
   const mouth=lipPlacement?overlay(latest,chars,lipPlacement):null;
   const captionsState=includeCaptions?captions(latest):null;
