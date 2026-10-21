@@ -63,11 +63,7 @@ const jsxRuntime=`
  window.addEventListener('unhandledrejection',event=>bootFailure(event.reason));
  try{requireModule('src/main.jsx')}catch(error){bootFailure(error)}
 })();
-// An HTML <script> element closes at the literal sequence "</script>" even
-// when that text appears inside an embedded JSON string. Escape ALL "<" in
-// transpiled modules before embedding them so app sources cannot truncate JS.
-const safeModuleJSON=JSON.stringify(modules).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
-function raw() { [native code] }`.replace('__MODULES__',safeModuleJSON);
+`.replace('__MODULES__',JSON.stringify(modules).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029'));
 const sourceHtml=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const css=fs.readFileSync(path.join(src,'style.css'),'utf8');
 let html=sourceHtml.replace(/<link[^>]+href="https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)[^>]*>\s*/g,'').replace(/<script type="module" src="\/src\/main.jsx"><\/script>/,`<style>${css}</style><script>${react}\n${reactDom}\n${jsxRuntime}</script>`);
