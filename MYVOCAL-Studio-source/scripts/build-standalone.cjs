@@ -40,7 +40,7 @@ const jsxRuntime=`
  r.useRef=function(initial){if(!rendering)throw Error('useRef must be called in component');const host=rendering,i=host.i++;if(!(i in host.hooks))host.hooks[i]={value:{current:initial}};return host.hooks[i].value;};
  r.useEffect=function(fn,deps){if(!rendering)throw Error('useEffect must be called in component');const host=rendering,i=host.i++;let h=host.hooks[i],changed=!h||!deps||!h.deps||deps.length!==h.deps.length||deps.some((v,j)=>!Object.is(v,h.deps[j]));if(!h){h={};host.hooks[i]=h;}if(changed){h.deps=deps;host.pending.push(()=>{if(typeof h.cleanup==='function')h.cleanup();h.cleanup=fn()})}};
  r.Fragment=({children})=>children;r.default=r;
- const modules=__MODULES__,cache={};
+ const modules=JSON.parse(new TextDecoder('utf-8').decode(Uint8Array.from(atob('__MYVOCAL_BASE64_MODULES__'),c=>c.charCodeAt(0)))),cache={};
  function resolve(from,spec){if(spec==='react'||spec==='react-dom/client')return spec;if(spec.endsWith('.css'))return 'style';if(!spec.startsWith('.'))return spec;let base=from.slice(0,from.lastIndexOf('/')+1);const arr=(base+spec).split('/'),parts=[];for(const seg of arr){if(seg==='.'||!seg)continue;if(seg==='..')parts.pop();else parts.push(seg)}const p=parts.join('/');for(const k of [p,p+'.jsx',p+'.js'])if(modules[k])return k;throw Error('Missing module '+spec+' from '+from);}
  function requireModule(id){if(id==='react')return r;if(id==='react-dom/client')return {createRoot:(el)=>({render:(node)=>ReactDOM.render(node,el)})};if(id==='style')return {};if(cache[id])return cache[id].exports;const code=modules[id];if(!code)throw Error('Unknown module '+id);const module={exports:{}};cache[id]=module;const req=spec=>requireModule(resolve(id,spec));new Function('module','exports','require',code)(module,module.exports,req);return module.exports;}
  // A real desktop bootstrap error must be visible, never just a blank black window.
@@ -63,7 +63,7 @@ const jsxRuntime=`
  window.addEventListener('unhandledrejection',event=>bootFailure(event.reason));
  try{requireModule('src/main.jsx')}catch(error){bootFailure(error)}
 })();
-`.replace('__MODULES__',JSON.stringify(modules).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029'));
+`.replace('__MYVOCAL_BASE64_MODULES__',Buffer.from(JSON.stringify(modules),'utf8').toString('base64'));
 const sourceHtml=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const css=fs.readFileSync(path.join(src,'style.css'),'utf8');
 let html=sourceHtml.replace(/<link[^>]+href="https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)[^>]*>\s*/g,'').replace(/<script type="module" src="\/src\/main.jsx"><\/script>/,`<style>${css}</style><script>${react}\n${reactDom}\n${jsxRuntime}</script>`);
