@@ -50,6 +50,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      if(!musicPython||!musicModelDir||!demucsRoot)throw Error('실제 MusicGen·Demucs Python, 모델 및 폴더 경로를 입력하세요.');
      const source=current();
      if(!source||source.id!==project.id)throw Error('음악 제작 중 프로젝트가 변경됐습니다.');
+     if(!includeReferences&&source.scenes.some(s=>s.personMv||s.characterMv))
+      throw Error('등록된 실제 사람·캐릭터의 사진을 사용하려면 원본 참조 이미지 생성 동의 항목을 먼저 선택하세요.');
      setMessage('실제 MusicGen 연속 작곡 → Demucs 4~6개 악기 분리 → PCM 마스터링 중');
      // One-click model pipeline uses real installed models, not a silent demo.
      const sections=musicDuration===360?20:11;

@@ -27,3 +27,14 @@ test('automatic movie production remains in original Windows Studio and uses act
  const source=readFileSync(new URL('../src/components/LocalMvBatchPanel.jsx',import.meta.url),'utf8');
  for(const token of ['runMusicProductionPipeline','persistNeuralMusicTracks','extendMvToFullSong','runFullLocalMv','readAudioInfo','putFilesAtomic'])assert.ok(source.includes(token),token);
 });
+
+test('existing permitted person reference metadata survives automatic scene extension without copying or changing original photos',()=>{
+ const project={id:'p',scenes:[{id:'a',title:'허가된 내 장면',start:0,end:20,characterId:'person1',
+   personMv:{personId:'person1',referenceAssetId:'registered-original-person',denoise:.2},imageAssetId:'original-photo'}],tracks:[]};
+ const result=extendMvToFullSong(project,140,{newId:(()=>{let n=0;return()=>''+(++n)})()});
+ const scenes=result.project.scenes.slice(1);
+ assert.ok(scenes.every(s=>s.characterId==='person1'&&s.personMv.referenceAssetId==='registered-original-person'));
+ assert.ok(scenes.every(s=>!s.imageAssetId));
+ assert.strictEqual(result.project.scenes[0],project.scenes[0]);
+ assert.notStrictEqual(scenes[0].personMv,project.scenes[0].personMv);
+});

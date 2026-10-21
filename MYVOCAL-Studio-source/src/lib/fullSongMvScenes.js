@@ -25,7 +25,9 @@ export function extendMvToFullSong(project,duration,{newId,sceneLimit=20}={}){
    description:'기존 노래의 후렴·연주 흐름을 이어가는 공연/스토리 MV 영상. 앞 장면의 인물·의상·장소 연속성을 유지하는 구성',
    ...(lastScene?.characterId?{characterId:lastScene.characterId}:{}),
    ...(lastScene?.location?{location:lastScene.location}:{}),
-   ...(lastScene?.outfit?{outfit:lastScene.outfit}:{})});
+   ...(lastScene?.outfit?{outfit:lastScene.outfit}:{}),
+   ...(lastScene?.personMv?{personMv:{...lastScene.personMv}}:{}),
+   ...(lastScene?.characterMv?{characterMv:{...lastScene.characterMv}}:{})});
  }
  return {project:{...project,scenes:[...project.scenes,...added]},added:added.length};
 }
