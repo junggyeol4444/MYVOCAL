@@ -43,7 +43,7 @@ export async function stemsZip98(project,{mix=null}={}){
   const safe=String(track.name||'Track').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/\.\.+/g,'_').slice(0,60);
   const name='stems/'+String(i+1).padStart(2,'0')+'_'+safe+'.wav';
   entries.push({name,data});
-  manifest.tracks.push({id:track.id,name:track.name||'Track',file:name,frames:report.frames,durationSec:report.durationSec,peak:report.peak,volume:track.volume??75,originalMute:!!track.mute,originalSolo:!!track.solo});
+  manifest.tracks.push({id:track.id,name:track.name||'Track',file:name,frames:report.frames,durationSec:report.durationSec,peak:report.peak,volume:track.volume??75,type:['vocal','instrument','rhythm'].includes(track.type)?track.type:'instrument',originalMute:!!track.mute,originalSolo:!!track.solo});
  }
  entries.unshift({name:'stems/manifest.json',data:new TextEncoder().encode(JSON.stringify(manifest,null,2))});
  return new Blob([makeZip(entries)],{type:'application/zip'});

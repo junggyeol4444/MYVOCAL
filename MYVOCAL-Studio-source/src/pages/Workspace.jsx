@@ -7,6 +7,7 @@ import Video from './Video';
 import CreativeDirector96 from '../components/CreativeDirector96.jsx';
 import FinalDelivery98 from '../components/FinalDelivery98.jsx';
 import AudioWorkstation from '../components/AudioWorkstation';
+import StemArchiveImportPanel from '../components/StemArchiveImportPanel.jsx';
 import MidiEditor from '../components/MidiEditor';
 import MidiSoundFontPanel from '../components/MidiSoundFontPanel.jsx';
 import Songwriter from '../components/Songwriter';
@@ -52,7 +53,7 @@ export default function Workspace({data,project,onChange,navigate,notify,studio,
  {tab==='director'&&<CreativeDirector96 project={p} onChange={onChange} notify={notify}/>}
  {tab==='finish'&&<FinalDelivery98 project={p} data={data} notify={notify}/>}
  {tab==='compose'&&<Songwriter project={p} onChange={onChange} notify={notify}/>}
- {tab==='arrangement'&&<AudioWorkstation project={p} onChange={change} notify={notify}/>}
+ {tab==='arrangement'&&<><AudioWorkstation project={p} onChange={change} notify={notify}/><StemArchiveImportPanel project={p} onChange={change} notify={notify}/></>}
  {tab==='midi'&&<><MidiEditor project={p} onChange={change} notify={notify}/><MidiSoundFontPanel project={p} onChange={onChange} notify={notify}/></>}
  {tab==='sync'&&<LyricSync project={p} data={data} onChange={onChange} notify={notify}/>}
  {tab==='phonemes'&&<PhonemeEditor project={p} onChange={onChange} notify={notify}/>}

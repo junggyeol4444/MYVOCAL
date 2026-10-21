@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Icon,Notice} from './UI';
 import {genId} from '../lib/schema';
-import {putFile} from '../lib/assetDb';
+import {putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb';
 import {AudioEngine,audioBufferFor,audioEnd,formatClock,forgetAudio,mixdownWavDetailed,readAudioInfo,secondsPerBar} from '../lib/audioEngine';
 import {downloadText} from '../lib/store';
 import {clipWindow,editClipTiming,editClipFadeCurve,clipFadeCurve,editClipLevel,editClipPan,resetClipTiming} from '../lib/clipTiming';
@@ -103,22 +103,32 @@ export default function AudioWorkstation({project:p,onChange,notify}){
  },[playing]);
  useEffect(()=>{if(!playing)return;const pos=engine.current.position();engine.current.stop(pos);playState.current=false;setPlaying(false);updatePosition(pos);notify('BPM 또는 클립 재생 설정이 변경되어 재생을 멈췄습니다.');},[p.bpm,p.tracks.map(t=>(t.clips||[]).map(c=>[c.id,c.startBar,c.sourceOffsetSec,c.playDurationSec,c.fadeInSec,c.fadeOutSec,c.fadeInCurve,c.fadeOutCurve,c.gainPercent,c.clipMuted,c.panPercent,c.assetId].join(':')).join('|')).join('~')]);
  const importAudio=async(track,files)=>{
-  if(!files?.length)return;setBusy('오디오 가져오는 중');const added=[];const importProjectId=projectRef.current.id;
+  if(!files?.length||busy)return;
+  const sourceProjectId=projectRef.current.id,added=[],assets=[];
+  let saved=false;setBusy('오디오 가져오는 중');
   try{
-   let last=Math.max(1,...(track.clips||[]).map(c=>Math.ceil((Number(c.startBar)||1)+(Number(c.durationSec)||0)/secBar)));
+   if(files.length>16)throw Error('한 번에 최대 16개 오디오 클립을 가져올 수 있습니다.');
+   let total=0,last=Math.max(1,...(track.clips||[]).map(c=>Math.ceil((Number(c.startBar)||1)+(Number(c.durationSec)||0)/secBar)));
    for(const f of files){
-    if(f.size>90*1024*1024)throw new Error(f.name+'은 90MB를 초과합니다.');
-    const decoded=await readAudioInfo(f);if(decoded.duration>8*60)throw new Error(f.name+'은 8분을 초과합니다.');
-    const assetId=genId('audio');await putFile(assetId,f);forgetAudio(assetId);
+    if(f.size>90*1024*1024)throw Error(f.name+'은 90MB를 초과합니다.');
+    total+=f.size;if(total>150*1024*1024)throw Error('한 번에 가져오는 오디오 합계는 150MB 이하이어야 합니다.');
+    const decoded=await readAudioInfo(f);if(decoded.duration>8*60)throw Error(f.name+'은 8분을 초과합니다.');
+    if(projectRef.current.id!==sourceProjectId)throw Error('가져오는 동안 프로젝트가 변경되었습니다.');
+    const assetId=genId('audio');assets.push([assetId,f]);
     added.push({id:genId('clip'),assetId,fileName:f.name,durationSec:decoded.duration,startBar:last,size:f.size});
     last=Math.ceil(last+decoded.duration/secBar);
    }
-   const latest=projectRef.current;
-   if(latest.id!==importProjectId)throw Error('가져오는 동안 프로젝트가 변경되어 클립 추가를 취소했습니다.');
-   commitClips(track.id,latest.tracks.map(t=>t.id!==track.id?t:{...t,clips:[...(t.clips||[]),...added]}),'오디오 가져오기');
+   const before=projectRef.current;
+   if(before.id!==sourceProjectId||!(before.tracks||[]).some(t=>t.id===track.id))throw Error('가져오는 동안 프로젝트 또는 트랙이 변경됐습니다.');
+   await putFilesAtomic(assets);saved=true;
+   if(projectRef.current.id!==sourceProjectId)throw Error('자산 저장 중 프로젝트가 변경됐습니다.');
+   commitClips(track.id,projectRef.current.tracks.map(t=>t.id!==track.id?t:{...t,clips:[...(t.clips||[]),...added]}),'오디오 가져오기');
+   saved=false;
    notify(added.length+'개 오디오 클립을 '+track.name+' 트랙에 추가했습니다.');
-  }catch(e){notify('오디오 가져오기 실패: '+e.message);}
-  finally{setBusy('');}
+  }catch(e){
+   if(saved){try{await deleteFilesAtomic(assets.map(([id])=>id));}catch(cleanup){notify('신규 자산 정리 실패: '+cleanup.message);}}
+   notify('오디오 가져오기 실패: '+e.message);
+  }finally{setBusy('');}
  };
  const addTrack=()=>{const current=projectRef.current;change({tracks:[...current.tracks,{id:genId('trk'),name:newTrack.trim()||`Audio Track ${current.tracks.length+1}`,type:'instrument',mute:false,solo:false,volume:80,clips:[]}]});setNewTrack('');};
  const exportMix=async()=>{setBusy('WAV 믹싱 중');try{
