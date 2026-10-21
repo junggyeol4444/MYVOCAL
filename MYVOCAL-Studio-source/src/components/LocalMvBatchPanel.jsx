@@ -16,6 +16,7 @@ import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
 import {buildNeuralMusicPrompts} from '../lib/neuralMusicPromptTimeline.js';
 import {renderAndStoreNeuralMidiStems} from '../lib/autoMvSourceStems.js';
+import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
 import {getInstalledLocalModels} from '../lib/localAiComposer.js';
 import {applyNeuralFaceLipToMv} from '../lib/autoMvRealPersonLip.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
@@ -29,6 +30,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [alsoConvertRVC,setAlsoConvertRVC]=useState(false);
  const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
  const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(''),[soundfontFile,setSoundfontFile]=useState('');
+ const [makeNeuralAudioStems,setMakeNeuralAudioStems]=useState(false);
  const [scoreModels,setScoreModels]=useState([]),[scorePrompt,setScorePrompt]=useState(project.title||'');
  const [scoreModelError,setScoreModelError]=useState('');
  const [faceNeuralSync,setFaceNeuralSync]=useState(false),[personId,setPersonId]=useState('');
@@ -55,7 +57,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    if(saveFullMovie){
     // Create/resume AudioContext immediately during this user click, BEFORE the
     // potentially long model inference. WebView2 may otherwise block autoplay.
-    if(audioEnd(current())>0||makeNeuralMusic||makeNeuralSinging||makeSourceStems){
+    if(audioEnd(current())>0||makeNeuralMusic||makeNeuralSinging||makeSourceStems||makeNeuralAudioStems){
      const C=window.AudioContext||window.webkitAudioContext;
      if(!C)throw Error('음악 포함 MV 녹화를 지원하지 않는 WebView2입니다.');
      warmed=new C();await warmed.resume();
@@ -88,6 +90,19 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      });
      movieProject=rendered.project;
      setMessage('원천 MIDI 6악기 SoundFont PCM WAV를 편집 트랙으로 저장했습니다.');
+    }
+    if(makeNeuralAudioStems){
+     const source=current();
+     if(!source||source.id!==project.id)throw Error('독립 신경망 악기 생성 중 프로젝트가 변경됐습니다.');
+     const result=await renderAndStoreNeuralAudioStems(source,{
+      python:musicPython,modelDir:musicModelDir,
+      segments:musicDuration===360?20:11,session:base.session,signal:controller.signal,
+      current,onChange:commit,newId:genId,
+      readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
+      save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setMessage
+     });
+     movieProject=result.project;
+     setMessage('MusicGen 개별 신경망 악기 WAV 6개를 신규 편집 트랙으로 저장했습니다.');
     }
     if(makeNeuralMusic){
      if(!musicPython||!musicModelDir||!demucsRoot)throw Error('실제 MusicGen·Demucs Python, 모델 및 폴더 경로를 입력하세요.');
@@ -195,6 +210,12 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <label>사용 권한이 있는 SoundFont SF2/SF3<input disabled={busy} value={soundfontFile} onChange={e=>setSoundfontFile(e.target.value)} placeholder="C:/AI/SoundFonts/instrument.sf2"/></label>
    <Notice>로컬 샘플 합성 PCM입니다. 신경망 원천 오디오 stems는 아닙니다. 원본은 그대로 두고 신규 6트랙에 음소거 상태로 저장합니다.</Notice>
   </div>}
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeNeuralAudioStems} onChange={e=>setMakeNeuralAudioStems(e.target.checked)}/> MusicGen으로 악기 6종의 신경망 오디오를 각각 독립 생성해 편집 WAV 트랙에 추가</label>}
+  {saveFullMovie&&makeNeuralAudioStems&&<div className="mv7-item">
+   <label>실제 로컬 MusicGen Python.exe<input disabled={busy} value={musicPython} onChange={e=>setMusicPython(e.target.value)} placeholder="C:/AI/Python/python.exe"/></label>
+   <label>설치된 MusicGen 모델 폴더<input disabled={busy} value={musicModelDir} onChange={e=>setMusicModelDir(e.target.value)} placeholder="C:/AI/MusicGen"/></label>
+   <Notice>각 악기용 프롬프트로 로컬 신경망 WAV를 별도로 생성합니다. 단일 모델의 악기 혼입 가능성은 있으며 완벽한 악기 분리나 개별 MIDI 음정의 정확한 재현을 보장하지 않습니다. 원본 파일을 변경하지 않습니다.</Notice>
+  </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeNeuralMusic} onChange={e=>setMakeNeuralMusic(e.target.checked)}/> 반주가 없어도 MusicGen 신경망 → Demucs 악기 분리·마스터링 → 전체 MV 영상까지 일괄 제작</label>}
   {saveFullMovie&&makeNeuralMusic&&<div className="mv7-item">
    <label>목표 노래 길이<select disabled={busy} value={musicDuration} onChange={e=>setMusicDuration(Number(e.target.value))}><option value={180}>약 3분</option><option value={360}>최대 6분</option></select></label>
@@ -227,7 +248,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <Notice>동일한 본인·허가받은 실제 사람으로 연결된 장면에만 적용합니다. 원본 MV WebM도 별도 보존하며, 실제 Wav2Lip 모델이 MP4를 생성하지 못하면 성공이라고 보고하지 않습니다.</Notice>
   </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 캐릭터 2D 립싱크 입 모양도 영상에 포함</label>}
-  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeSourceStems&&(!musicPython||!soundfontDll||!soundfontFile))||(makeNeuralSinging&&(!singingRights||!voices.length))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))||(faceNeuralSync&&(!personId||!facePython||!faceRoot||!faceCheckpoint||!faceRights||!faceModelRights))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
+  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeSourceStems&&(!musicPython||!soundfontDll||!soundfontFile))||(makeNeuralAudioStems&&(!musicPython||!musicModelDir))||(makeNeuralSinging&&(!singingRights||!voices.length))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))||(faceNeuralSync&&(!personId||!facePython||!faceRoot||!faceCheckpoint||!faceRights||!faceModelRights))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
   {busy&&<Button onClick={()=>cancelRef.current?.abort()}>이후 장면 생성 취소</Button>}
   {message&&<p role="status" className="muted">{message}</p>}
   {(error||info.error)&&<p role="alert" className="mv4-error">{error||info.error}</p>}
