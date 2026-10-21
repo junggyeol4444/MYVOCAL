@@ -18,6 +18,7 @@ import subprocess
 import sys
 import uuid
 from rvc_pitch_coverage import inspect_rvc_pitch_coverage
+from rvc_training_dataset_quality import inspect_training_dataset
 
 
 REQUIRED = (
@@ -103,6 +104,13 @@ def execute(args):
     samples = [p for p in (dataset / 'audio').iterdir() if p.is_file() and not p.is_symlink()]
     if not samples or any(p.suffix.lower() not in AUDIO_EXTENSIONS for p in samples):
         raise RuntimeError('지원되는 학습 녹음 복사본이 없습니다')
+    for result in inspect_training_dataset(samples):
+        if result['checked']:
+            print('[MYVOCAL RVC] 학습 녹음 품질: ' + result['file'] +
+                  f" / {result['duration_sec']:.1f}초 / RMS={result['rms']:.4f}" +
+                  f" / 클리핑={result['clip_ratio']:.1%}", flush=True)
+        else:
+            print('[MYVOCAL RVC] ' + result['file'] + ' / ' + result['reason'], flush=True)
     exp_name = args.experiment_name or ('myvocal_' + uuid.uuid4().hex)
     if not re.fullmatch(r'myvocal_[a-f0-9]{32}', exp_name):
         raise RuntimeError('새 RVC 실험 ID가 올바르지 않습니다')
