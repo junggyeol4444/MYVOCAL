@@ -1,0 +1,90 @@
+// MYVOCAL 원본 66항: 로컬 신경망에서 악기별 오디오를 독립 생성해
+// 기존 DAW의 신규 편집 WAV 트랙에 저장한다. Demucs 사후 분리·SoundFont 샘플과 구분.
+// MusicGen 텍스트 조건은 완벽한 악기 격리를 보장하지 않으며 모델 WAV를 검사한다.
+import {generateMusicGenSequence} from './musicGenSequence.js';
+import {buildNeuralMusicPrompts} from './neuralMusicPromptTimeline.js';
+import {latestCompleteNeuralScore,NEURAL_SCORE_ROLES} from './neuralScoreBatch.js';
+import {assertUsableSingingWav} from './singingOutputValidation.js';
+
+const INSTRUMENT={
+ melody:['lead melody','멜로디'],chords:['piano chord progression','코드'],
+ bass:['electric bass guitar','베이스'],drums:['acoustic and electronic drums','드럼'],
+ guitar:['electric guitar','기타'],pad:['sustained orchestral string pads','패드']
+};
+const alive=(project,current,signal)=>{
+ if(signal?.aborted||current()!==project)throw Error('신경망 악기 제작을 취소하거나 프로젝트를 변경했습니다. 원본을 보존합니다.');
+};
+export function instrumentNeuralPrompts(project,role,{segments,seconds=18,crossfadeSec=.5}={}){
+ if(!Object.hasOwn(INSTRUMENT,role))throw Error('지원하지 않는 신경망 악기입니다.');
+ const base=buildNeuralMusicPrompts(project,{segments,seconds,crossfadeSec});
+ if(base.length!==segments)throw Error('같은 작곡 회차의 원본 6악기 MIDI가 필요합니다.');
+ const musicalRole=INSTRUMENT[role][0];
+ return base.map(text=>{
+  const trimmed=text.replace(/continuous original arrangement with drums, bass, guitar, keys and pads; /,
+   'original instrumental '+musicalRole+' performance only; no voice or sung lyrics; ');
+  const compact=trimmed.replace(/; preserve the same song theme and transition smoothly from the previous audio\.$/,'');
+  return [...(compact+'; '+musicalRole+' in focus; consistent tempo and musical motif.')].slice(0,600).join('');
+ });
+}
+export async function renderAndStoreNeuralAudioStems(project,{
+ python,modelDir,seconds=18,segments=11,crossfadeSec=.5,session,signal,
+ current,onChange,newId,readInfo,createTrack,save,remove,
+ generate=generateMusicGenSequence,onProgress=()=>{}
+}={}){
+ if(!project?.id||!Array.isArray(project.tracks)||!project.neuralAutoScore||
+ [current,onChange,newId,readInfo,createTrack,save,remove,generate].some(f=>typeof f!=='function'))
+  throw Error('기존 MYVOCAL 프로젝트와 로컬 모델·편집기 연결이 필요합니다.');
+ if(typeof python!=='string'||!/python\.exe$/i.test(python)||typeof modelDir!=='string'||modelDir.length<3||
+ typeof session!=='string'||session.length<8||![11,20].includes(segments)||seconds!==18||
+ crossfadeSec!==.5)throw Error('로컬 MusicGen 실행 환경과 3~6분 설정을 확인하세요.');
+ alive(project,current,signal);
+ if(!latestCompleteNeuralScore(project))throw Error('실제 로컬 AI가 생성한 동일 회차의 6악기 MIDI가 필요합니다.');
+ const entries=[],tracks=[],allocated=new Set(project.tracks.map(t=>t.id));
+ let baseline=0;
+ const allocate=prefix=>{
+  const id=newId(prefix);
+  if(typeof id!=='string'||!id||allocated.has(id))throw Error('새 신경망 악기 자산 또는 트랙 ID가 중복됐습니다.');
+  allocated.add(id);return id;
+ };
+ for(const [index,role] of NEURAL_SCORE_ROLES.entries()){
+  alive(project,current,signal);
+  const prompts=instrumentNeuralPrompts(project,role,{segments,seconds,crossfadeSec});
+  onProgress('로컬 신경망 독립 악기 오디오 '+INSTRUMENT[role][1]+' '+(index+1)+'/6 생성 중');
+  const rendered=await generate({
+   python,modelDir,prompt:prompts[0],seconds,seed:4200+index*100
+  },{segments,crossfadeSec,prompts,continuation:true,session,signal,
+    onProgress:(done,total)=>onProgress(INSTRUMENT[role][1]+' '+done+'/'+total+'구간')});
+  alive(project,current,signal);
+  if(!(rendered instanceof Blob)||rendered.size<44||rendered.size>90*1024*1024)
+   throw Error('로컬 신경망이 실제 PCM WAV를 반환하지 않았습니다: '+INSTRUMENT[role][1]);
+  assertUsableSingingWav(await rendered.arrayBuffer(),{maxDurationSec:360});
+  const info=await readInfo(rendered);alive(project,current,signal);
+  const duration=Number(info?.duration??info?.durationSec);
+  if(!Number.isFinite(duration)||duration<160||duration>360||
+     (baseline&&Math.abs(duration-baseline)>.1))throw Error('신경망 악기 오디오가 3~6분 길이/동기화 조건을 충족하지 않습니다.');
+  baseline||=duration;
+  const assetId=allocate('neural-audio-asset'),trackId=allocate('neural-audio-track');
+  const file=new File([rendered],'MYVOCAL-독립신경망-'+role+'.wav',{type:'audio/wav'});
+  const track=createTrack(project,file,assetId,duration);
+  if(!track||!Array.isArray(track.clips)||!track.clips.some(c=>c.assetId===assetId))
+   throw Error('독립 신경망 악기 WAV를 편집 트랙에 연결하지 못했습니다.');
+  entries.push([assetId,file]);
+  tracks.push({...track,id:trackId,name:'MusicGen 개별 신경망 악기 · '+INSTRUMENT[role][1],
+   type:'instrument',mute:true,solo:false,volume:70,generatedBy:'musicgen-independent-audio',
+   sourceRole:role,sourceMidiTrackId:latestCompleteNeuralScore(project).get(role).id});
+ }
+ alive(project,current,signal);
+ let stored=false;
+ try{
+  await save(entries);stored=true;alive(project,current,signal);
+  const changed={...project,tracks:[...project.tracks,...tracks]};
+  await Promise.resolve(onChange(changed));stored=false;
+  return {project:changed,assets:6,tracks:6,durationSec:baseline,source:'real-musicgen-independent'};
+ }catch(e){
+  if(stored&&current()===project){
+   try{await remove(entries.map(([id])=>id));}
+   catch(clean){throw Error('신규 신경망 오디오 정리 실패: '+clean.message+' / '+e.message);}
+  }
+  throw e;
+ }
+}
