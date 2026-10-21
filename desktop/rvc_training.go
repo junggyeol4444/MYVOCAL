@@ -53,6 +53,7 @@ type rvcTrainingManager struct {
 	message   string
 	log       string
 	modelPath string
+	indexPath string
 	workDir   string
 	started   time.Time
 	cancel    context.CancelFunc
@@ -74,6 +75,7 @@ func (m *rvcTrainingManager) snapshot() map[string]any {
 	defer m.mu.Unlock()
 	return map[string]any{"id": m.id, "state": m.state, "voiceId": m.voiceID, "message": m.message,
 		"log": m.log, "modelAvailable": m.state == "completed" && m.modelPath != "",
+        "indexAvailable": m.state == "completed" && m.indexPath != "",
 		"startedAt": m.started.Format(time.RFC3339)}
 }
 func (m *rvcTrainingManager) stop() {
@@ -422,6 +424,7 @@ func (a *appServer) rvcTrainingStartWith(w http.ResponseWriter, r *http.Request,
 	a.training.started = time.Now()
 	a.training.log = ""
 	a.training.modelPath = ""
+	a.training.indexPath = ""
 	a.training.workDir = dir
 	a.training.cancel = cancel
 	a.training.mu.Unlock()
@@ -436,21 +439,27 @@ func (a *appServer) rvcTrainingStartWith(w http.ResponseWriter, r *http.Request,
 		if e == nil && !plausibleTorchCheckpoint(output) {
 			e = errors.New("학습 엔진이 PyTorch 형식의 .pth 파일을 생성하지 않았습니다")
 		}
+		idx := strings.TrimSuffix(output,filepath.Ext(output)) + ".index"
+		indexFound := e == nil && plausibleRVCIndex(idx)
+		if e == nil && o.Mode == "official" && !indexFound { e=errors.New("공식 RVC FAISS 검색 인덱스가 생성되지 않았습니다") }
 		a.training.mu.Lock()
 		if a.training.id == id {
 			if e != nil {
 				a.training.state = "failed"
 				a.training.message = e.Error()
 				a.training.modelPath = ""
+				a.training.indexPath = ""
 			} else {
 				a.training.state = "completed"
 				a.training.message = "실제 학습 명령 종료. 새 체크포인트 생성됨 (추론 호환성·음질은 별도 검증 필요)"
 				a.training.modelPath = output
+                if indexFound { a.training.indexPath = idx } else { a.training.indexPath = "" }
 			}
 			if ctx.Err() != nil {
 				a.training.state = "cancelled"
 				a.training.message = "학습이 취소되었거나 최대 실행 시간을 넘었습니다"
 				a.training.modelPath = ""
+				a.training.indexPath = ""
 			}
 			a.training.cancel = nil
 		}
@@ -519,4 +528,23 @@ func (a *appServer) rvcTrainingModel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=MYVOCAL-RVC-trained.pth")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = io.Copy(w, f)
+}
+func plausibleRVCIndex(path string) bool {
+ f,err:=os.Open(path);if err!=nil{return false};defer f.Close()
+ st,err:=f.Stat();if err!=nil||!st.Mode().IsRegular()||st.Size()<1024||st.Size()>maxRVCTrainedModel{return false}
+ l,err:=os.Lstat(path);if err!=nil||!l.Mode().IsRegular(){return false}
+ var head [4]byte;if _,err=io.ReadFull(f,head[:]);err!=nil{return false}
+ return head[0]=='I'&&head[1]=='x'
+}
+func (a *appServer) rvcTrainingIndex(w http.ResponseWriter,r *http.Request) {
+ if r.Method!=http.MethodGet{jsonError(w,405,"GET만 지원합니다");return}
+ if !a.authorizeSinging(w,r){return}
+ a.training.mu.Lock();id,state,path:=a.training.id,a.training.state,a.training.indexPath;a.training.mu.Unlock()
+ if state!="completed"||path==""||id==""||r.URL.Query().Get("id")!=id{jsonError(w,409,"완료된 FAISS 인덱스가 없습니다");return}
+ if !plausibleRVCIndex(path){jsonError(w,422,"FAISS 인덱스 파일이 올바르지 않습니다");return}
+ f,e:=os.Open(path);if e!=nil{jsonError(w,404,"FAISS 인덱스 파일을 읽을 수 없습니다");return};defer f.Close()
+ w.Header().Set("Content-Type","application/octet-stream")
+ w.Header().Set("Content-Disposition","attachment; filename=MYVOCAL-RVC-trained.index")
+ w.Header().Set("Cache-Control","no-store")
+ _,_=io.Copy(w,f)
 }

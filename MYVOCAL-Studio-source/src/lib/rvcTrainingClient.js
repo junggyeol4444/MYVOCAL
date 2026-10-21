@@ -52,3 +52,14 @@ export async function getLocalRVCTrainedModel(jobId,{session,request=fetch}={}){
  const blob=await res.blob();if(blob.size<1024||blob.size>200*1024*1024)throw Error('학습 모델 크기가 올바르지 않습니다.');
  return new File([blob],'MYVOCAL-RVC-trained.pth',{type:'application/octet-stream'});
 }
+export async function getLocalRVCTrainedIndex(jobId,{session,request=fetch}={}){
+ if(typeof jobId!=='string'||!/^[a-f0-9]{24}$/.test(jobId))throw Error('학습 작업 ID가 잘못되었습니다.');
+ const res=await request('/api/training/rvc/index?id='+jobId,{method:'GET',headers:headers(session),cache:'no-store'});
+ if(!res.ok){const body=await res.json().catch(()=>({error:'HTTP '+res.status}));throw Error(body.error||'FAISS 인덱스 수신 실패');}
+ if(res.headers?.get('Content-Type')?.split(';')[0]!=='application/octet-stream')throw Error('FAISS 인덱스 응답 유형이 올바르지 않습니다.');
+ const blob=await res.blob();
+ if(blob.size<1024||blob.size>200*1024*1024)throw Error('FAISS 인덱스 크기가 올바르지 않습니다.');
+ const header=new Uint8Array(await blob.slice(0,4).arrayBuffer());
+ if(header[0]!==73||header[1]!==120)throw Error('FAISS 인덱스 내용이 올바르지 않습니다.');
+ return new File([blob],'MYVOCAL-RVC-trained.index',{type:'application/octet-stream'});
+}

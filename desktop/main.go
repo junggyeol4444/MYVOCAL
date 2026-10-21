@@ -122,6 +122,7 @@ func (a *appServer) routes() *http.ServeMux {
  mux.HandleFunc("/api/training/rvc/status", a.rvcTrainingStatus)
  mux.HandleFunc("/api/training/rvc/cancel", a.rvcTrainingCancel)
  mux.HandleFunc("/api/training/rvc/model", a.rvcTrainingModel)
+ mux.HandleFunc("/api/training/rvc/index", a.rvcTrainingIndex)
 	mux.HandleFunc("/api/singing/engine/status", a.engineManagerStatus)
 	mux.HandleFunc("/api/singing/engine/start", a.engineManagerStart)
 	mux.HandleFunc("/api/singing/engine/stop", a.engineManagerStop)
