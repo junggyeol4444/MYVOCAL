@@ -6,13 +6,13 @@ import {phonemeSourceKey,validatePhonemePlan} from './phonemePlan.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 
 const MAX_SECONDS=360;
-const MAX_CUES=512;
+const MAX_CUES=2048;
 // 48kHz 16bit stereo, 360 seconds requires 69,120,044 bytes.
 const MAX_WAV_BYTES=90*1024*1024;
 const rd=(value)=>Math.round(value*1000)/1000;
 export function planLongSingingChunks(alignment,{maxSeconds=80,maxCues=128}={}){
  const cues=alignment?.cues;
- if(!Array.isArray(cues)||!cues.length||cues.length>MAX_CUES)throw Error('가창 음표는 최대 512개입니다.');
+ if(!Array.isArray(cues)||!cues.length||cues.length>MAX_CUES)throw Error('긴 곡 가창 음표는 최대 2048개입니다.');
  if(!Number.isFinite(alignment.bpm)||alignment.bpm<40||alignment.bpm>240||
  !Number.isFinite(maxSeconds)||maxSeconds<1||maxSeconds>85||!Number.isInteger(maxCues)||maxCues<1||maxCues>128)
    throw Error('가창 분할 설정이 올바르지 않습니다.');
