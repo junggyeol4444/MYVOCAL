@@ -35,7 +35,7 @@ export async function composeNeuralMidiArrangement({model,prompt,genre='Pop',key
   throw Error('신경망 곡의 BPM이나 길이가 잘못됐습니다.');
  if(typeof session!=='string'||!session)throw Error('Windows EXE 로컬 세션에서 실행해 주세요.');
  // 8 bars per request; keep each final section within the same 360-sec song.
- const sections=Math.min(22,Math.floor(targetSeconds*bpm/1920));
+ const sections=Math.min(45,Math.floor(targetSeconds*bpm/1920));
  if(sections<1)throw Error('이 BPM에서는 8마디 이상을 생성할 수 없습니다.');
  const durationSec=sections*32*60/bpm;
  const byRole=Object.fromEntries(ROLES.map(role=>[role,[]]));
