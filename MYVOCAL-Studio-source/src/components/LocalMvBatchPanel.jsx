@@ -11,12 +11,18 @@ import {makeImportedVocalTrack} from '../lib/lyricAlignment.js';
 import {genId} from '../lib/schema.js';
 import {putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb.js';
 import {extendMvToFullSong} from '../lib/fullSongMvScenes.js';
+import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
+import {readRVCPreferences} from '../lib/rvcPreferences.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
  const cancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
  const [includeReferences,setIncludeReferences]=useState(false);
  const [saveFullMovie,setSaveFullMovie]=useState(false),[fullMouth,setFullMouth]=useState(false);
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(false),[musicDuration,setMusicDuration]=useState(180);
+ const [makeNeuralSinging,setMakeNeuralSinging]=useState(false),[singingPort,setSingingPort]=useState('7867');
+ const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
+ const [alsoConvertRVC,setAlsoConvertRVC]=useState(false);
+ const voices=(data.voices||[]).filter(v=>['self','owned','licensed'].includes(v.rights));
  const [musicPaths]=useState(()=>{try{return readMusicGenPreferences(window.localStorage)}catch{return {}}});
  const [musicPython,setMusicPython]=useState(musicPaths.python||'');
  const [musicModelDir,setMusicModelDir]=useState(musicPaths.modelDir||'');
@@ -35,7 +41,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    if(saveFullMovie){
     // Create/resume AudioContext immediately during this user click, BEFORE the
     // potentially long model inference. WebView2 may otherwise block autoplay.
-    if(audioEnd(current())>0||makeNeuralMusic){
+    if(audioEnd(current())>0||makeNeuralMusic||makeNeuralSinging){
      const C=window.AudioContext||window.webkitAudioContext;
      if(!C)throw Error('음악 포함 MV 녹화를 지원하지 않는 WebView2입니다.');
      warmed=new C();await warmed.resume();
@@ -77,6 +83,24 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      movieProject=current();
      setMessage('신경망 음악 + '+saved.assets+'개 PCM 악기 저장 완료. 실제 SD/SVD 영상·최종 WebM 렌더링 중');
     }
+    if(makeNeuralSinging){
+     let vocalProject=current();
+     if(!vocalProject||vocalProject.id!==project.id)throw Error('가창 생성 중 프로젝트가 변경됐습니다.');
+     const singer=(dataRef.current?.voices||[]).find(v=>v.id===(singingVoiceId||vocalProject.voiceId))
+      ||(dataRef.current?.voices||[]).find(v=>['self','owned','licensed'].includes(v.rights));
+     if(!singer)throw Error('등록된 본인 또는 사용 허가 목소리가 필요합니다.');
+     const rvcOptions=alsoConvertRVC?readRVCPreferences(window.localStorage):null;
+     const sung=await generateAndStoreMvSinging(vocalProject,{
+      voice:singer,port:Number(singingPort),modelId:vocalProject.singingEngine?.modelId||'',
+      session:base.session,convertRVC:alsoConvertRVC,rvcOptions,confirmed:singingRights,
+      signal:controller.signal,onProgress:setMessage,
+      saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
+       createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
+     });
+     if(controller.signal.aborted||current()?.id!==vocalProject.id)throw Error('신경망 가창 저장 중 취소 또는 프로젝트 변경');
+     movieProject=sung.project;
+     setMessage('실제 신경망 한국어 가창 '+sung.vocalAssets+'개 저장 → 노래·장면 동기화 MV 제작 중');
+    }
     const result=await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,prewarmedAudioContext:warmed,onProgress:setMessage});
     const blob=result.file,url=URL.createObjectURL(blob),a=document.createElement('a');
     try{a.href=url;a.download='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV.webm';document.body.append(a);a.click();a.remove();}
@@ -102,8 +126,19 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <label>설치된 Demucs 폴더<input disabled={busy} value={demucsRoot} onChange={e=>setDemucsRoot(e.target.value)} placeholder="D:\\AI\\Demucs"/></label>
    <Notice>실제 로컬 모델과 기존 프로젝트 장면을 사용합니다. WAV 원본·등록 모델은 변경하지 않습니다. MV 실패 시 이미 정상 생성된 음악과 추가 장면은 프로젝트에 남아 복구할 수 있습니다.</Notice>
   </div>}
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeNeuralSinging} onChange={e=>{setMakeNeuralSinging(e.target.checked);setSingingRights(false);}}/> 실제 한국어 신경망 Singing 가창 → 본인 음색 RVC → 음악·MV 전체 연속 제작</label>}
+  {saveFullMovie&&makeNeuralSinging&&<div className="mv7-item">
+   <label>설치된 로컬 Singing 엔진 포트<input value={singingPort} disabled={busy} onChange={e=>setSingingPort(e.target.value)} inputMode="numeric" placeholder="7867"/></label>
+   <label>가창에 사용할 등록 목소리<select value={singingVoiceId} disabled={busy} onChange={e=>{setSingingVoiceId(e.target.value);setSingingRights(false);}}>
+     <option value="">프로젝트 목소리 / 첫 번째 사용 허가 목소리</option>
+     {voices.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+   </select></label>
+   <label><input type="checkbox" checked={alsoConvertRVC} disabled={busy} onChange={e=>setAlsoConvertRVC(e.target.checked)}/> 등록한 RVC 모델로 본인 음색까지 변환</label>
+   <label><input type="checkbox" checked={singingRights} disabled={busy} onChange={e=>setSingingRights(e.target.checked)}/> 해당 목소리·가창·RVC 모델 사용 권한과 실제 학습 모델 사용을 확인합니다.</label>
+   <Notice>기존 가사·MIDI 싱크와 실행 가능한 실제 신경망 Singing 엔진이 있어야 합니다. RVC 선택 시 사용자가 미리 저장한 모델·FAISS 설정을 사용합니다. 실제 WAV가 생성되어야 후속 MV 단계에 진입하며, 실패 시 원본은 변경되지 않습니다.</Notice>
+  </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 캐릭터 2D 립싱크 입 모양도 영상에 포함</label>}
-  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
+  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeNeuralSinging&&(!singingRights||!voices.length))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
   {busy&&<Button onClick={()=>cancelRef.current?.abort()}>이후 장면 생성 취소</Button>}
   {message&&<p role="status" className="muted">{message}</p>}
   {(error||info.error)&&<p role="alert" className="mv4-error">{error||info.error}</p>}
