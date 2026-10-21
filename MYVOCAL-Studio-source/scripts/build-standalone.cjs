@@ -49,7 +49,8 @@ const jsxRuntime=`
   const message=String(error&&error.message||error||'원인 미상').slice(0,700);
   console.error('MYVOCAL desktop bootstrap error:',error);
   window.__MYVOCAL_BOOT_ERROR__=message;
-  if(root&&!root.hasChildNodes()){
+  if(root && (!root.hasChildNodes() || root.querySelector('[data-boot-placeholder]'))){
+   root.textContent='';
    root.setAttribute('role','alert');
    root.style.cssText='display:block;min-height:100vh;box-sizing:border-box;background:#131722;color:#fff;padding:32px;font-family:sans-serif';
    const heading=document.createElement('h1');heading.textContent='MYVOCAL Studio 화면 시작 오류';
