@@ -9,9 +9,9 @@ export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,r
  if(!Number.isInteger(resize)||resize<1||resize>4)throw Error('영상 축소 비율은 1~4입니다.');
  for(const x of [python,root,checkpoint])if(typeof x!=='string'||x.length>1024||!x.trim())throw Error('설치된 Wav2Lip 엔진·Python·체크포인트 경로를 입력하세요.');
  if(!/(?:^|[\\/])python\.exe$/i.test(python)||!/\.pth$/i.test(checkpoint))throw Error('Python.exe 및 Wav2Lip .pth 모델 경로를 확인하세요.');
- checkFile(face,100*1024*1024,'실제 사람 영상');
+ checkFile(face,200*1024*1024,'실제 사람 영상');
  if(!['video/mp4','video/webm'].includes(face.type))throw Error('실제 사람 영상은 MP4 또는 WebM이어야 합니다.');
- checkFile(audio,24*1024*1024,'가창 WAV');
+ checkFile(audio,80*1024*1024,'가창 WAV');
  if(audio.type!=='audio/wav'&&audio.type!=='audio/x-wav')throw Error('신경망 립싱크는 실제 WAV 파일이 필요합니다.');
  assertUsableSingingWav(await audio.arrayBuffer(),{maxDurationSec:360});
  if(signal?.aborted)throw Error('립싱크 영상을 취소했습니다.');
@@ -24,7 +24,7 @@ export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,r
  if(!result.ok){const details=await result.json().catch(()=>({error:'신경망 립싱크 HTTP '+result.status}));throw Error(String(details.error||'Wav2Lip 실행 오류'));}
  if(result.headers?.get('Content-Type')?.split(';')[0]!=='video/mp4')throw Error('신경망 엔진이 실제 MP4 영상 파일을 반환하지 않았습니다.');
  const movie=await result.blob();
- if(movie.size<128||movie.size>160*1024*1024)throw Error('신경망 MP4 출력 용량이 올바르지 않습니다.');
+ if(movie.size<128||movie.size>220*1024*1024)throw Error('신경망 MP4 출력 용량이 올바르지 않습니다.');
  const prefix=new Uint8Array(await movie.slice(0,8).arrayBuffer());
  if(String.fromCharCode(...prefix.slice(4,8))!=='ftyp')throw Error('실제 MP4 컨테이너가 아닌 출력입니다.');
  if(signal?.aborted)throw Error('립싱크 영상 생성이 취소됐습니다.');

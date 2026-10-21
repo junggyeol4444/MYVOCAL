@@ -15,6 +15,7 @@ import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
 import {getInstalledLocalModels} from '../lib/localAiComposer.js';
+import {applyNeuralFaceLipToMv} from '../lib/autoMvRealPersonLip.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
  const cancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
@@ -27,6 +28,11 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
  const [scoreModels,setScoreModels]=useState([]),[scorePrompt,setScorePrompt]=useState(project.title||'');
  const [scoreModelError,setScoreModelError]=useState('');
+ const [faceNeuralSync,setFaceNeuralSync]=useState(false),[personId,setPersonId]=useState('');
+ const [faceRights,setFaceRights]=useState(false),[faceModelRights,setFaceModelRights]=useState(false);
+ const [facePython,setFacePython]=useState(''),[faceRoot,setFaceRoot]=useState(''),[faceCheckpoint,setFaceCheckpoint]=useState('');
+ const permittedPeople=(data.characters||[]).filter(c=>['self','owned','licensed'].includes(c.rights));
+
  const voices=(data.voices||[]).filter(v=>['self','owned','licensed'].includes(v.rights));
  const [musicPaths]=useState(()=>{try{return readMusicGenPreferences(window.localStorage)}catch{return {}}});
  const [musicPython,setMusicPython]=useState(musicPaths.python||'');
@@ -118,9 +124,27 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      setMessage('실제 신경망 한국어 가창 '+sung.vocalAssets+'개 저장 → 노래·장면 동기화 MV 제작 중');
     }
     const result=await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,prewarmedAudioContext:warmed,onProgress:setMessage});
-    const blob=result.file,url=URL.createObjectURL(blob),a=document.createElement('a');
-    try{a.href=url;a.download='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV.webm';document.body.append(a);a.click();a.remove();}
-    finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
+    const outputName='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV';
+    const download=(blob,ext)=>{
+     const url=URL.createObjectURL(blob),a=document.createElement('a');
+     try{a.href=url;a.download=outputName+'.'+ext;document.body.append(a);a.click();a.remove();}
+     finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
+    };
+    // Even if the optional licensed Wav2Lip model fails, preserve the real
+    // already-rendered music+video WebM; never invent a converted MP4.
+    download(result.file,'webm');
+    if(faceNeuralSync){
+     setMessage('실제 사람 Wav2Lip 얼굴/가창 신경망 립싱크 MP4 제작 중');
+     const actual=current();
+     if(!actual||actual.id!==project.id)throw Error('실제 사람 립싱크 전 프로젝트가 변경됐습니다.');
+     const face=await applyNeuralFaceLipToMv(result.file,actual,dataRef.current?.characters||[],{
+      personId,python:facePython,root:faceRoot,checkpoint:faceCheckpoint,
+      resize:2,consent:faceRights,modelRights:faceModelRights,
+      session:base.session,signal:controller.signal
+     });
+     download(face.file,'mp4');
+     setMessage('음악+MV WebM 및 실제 Wav2Lip 얼굴 립싱크 MP4 모두 저장 완료');
+    }
     setMessage(`전체 MV ${result.seconds.toFixed(1)}초 저장: 신규 이미지 ${result.generatedImages}장, 영상 클립 ${result.generatedVideos}개. 보컬·반주 믹스 ${result.audioIncluded?'포함':'없음'}.`);
     notify('전체 MV WebM을 저장했습니다. 실제 사람이 부르는 신경망 모델은 별도 설치가 필요합니다.');
    }else{
@@ -166,8 +190,20 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <label><input type="checkbox" checked={singingRights} disabled={busy} onChange={e=>setSingingRights(e.target.checked)}/> 해당 목소리·가창·RVC 모델 사용 권한과 실제 학습 모델 사용을 확인합니다.</label>
    <Notice>기존 가사·MIDI 싱크와 실행 가능한 실제 신경망 Singing 엔진이 있어야 합니다. RVC 선택 시 사용자가 미리 저장한 모델·FAISS 설정을 사용합니다. 실제 WAV가 생성되어야 후속 MV 단계에 진입하며, 실패 시 원본은 변경되지 않습니다.</Notice>
   </div>}
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={faceNeuralSync} onChange={e=>{setFaceNeuralSync(e.target.checked);setFaceRights(false);setFaceModelRights(false);}}/> 동일한 등록 실제 사람이 등장하는 MV 전체를 Wav2Lip 신경망으로 추가 립싱크 MP4 제작</label>}
+  {saveFullMovie&&faceNeuralSync&&<div className="mv7-item">
+   <label>사용 허가된 실제 사람<select disabled={busy} value={personId} onChange={e=>{setPersonId(e.target.value);setFaceRights(false);}}>
+    <option value="">실제 사람 선택</option>{permittedPeople.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+   </select></label>
+   <label>Wav2Lip Python.exe<input disabled={busy} value={facePython} onChange={e=>setFacePython(e.target.value)} placeholder="D:\\AI\\python.exe"/></label>
+   <label>Wav2Lip 설치 폴더<input disabled={busy} value={faceRoot} onChange={e=>setFaceRoot(e.target.value)} placeholder="D:\\AI\\Wav2Lip"/></label>
+   <label>설치된 Wav2Lip .pth 체크포인트<input disabled={busy} value={faceCheckpoint} onChange={e=>setFaceCheckpoint(e.target.value)} placeholder="D:\\AI\\Wav2Lip\\checkpoints\\wav2lip.pth"/></label>
+   <label><input type="checkbox" disabled={busy} checked={faceRights} onChange={e=>setFaceRights(e.target.checked)}/> 등장하는 실제 사람·녹음·영상의 사용 권한이 있습니다.</label>
+   <label><input type="checkbox" disabled={busy} checked={faceModelRights} onChange={e=>setFaceModelRights(e.target.checked)}/> Wav2Lip 학습 모델의 사용 라이선스를 확인했습니다.</label>
+   <Notice>동일한 본인·허가받은 실제 사람으로 연결된 장면에만 적용합니다. 원본 MV WebM도 별도 보존하며, 실제 Wav2Lip 모델이 MP4를 생성하지 못하면 성공이라고 보고하지 않습니다.</Notice>
+  </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 캐릭터 2D 립싱크 입 모양도 영상에 포함</label>}
-  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeNeuralSinging&&(!singingRights||!voices.length))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
+  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeNeuralSinging&&(!singingRights||!voices.length))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))||(faceNeuralSync&&(!personId||!facePython||!faceRoot||!faceCheckpoint||!faceRights||!faceModelRights))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
   {busy&&<Button onClick={()=>cancelRef.current?.abort()}>이후 장면 생성 취소</Button>}
   {message&&<p role="status" className="muted">{message}</p>}
   {(error||info.error)&&<p role="alert" className="mv4-error">{error||info.error}</p>}

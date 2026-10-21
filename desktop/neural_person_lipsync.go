@@ -18,9 +18,9 @@ import(
  "strings"
  "time"
 )
-const maxNeuralFaceVideo=int64(100<<20)
-const maxNeuralLipAudio=int64(24<<20)
-const maxNeuralLipVideo=int64(160<<20)
+const maxNeuralFaceVideo=int64(200<<20)
+const maxNeuralLipAudio=int64(80<<20)
+const maxNeuralLipVideo=int64(220<<20)
 const maxNeuralLipUpload=maxNeuralFaceVideo+maxNeuralLipAudio+int64(2<<20)
 var neuralLipSlot=make(chan struct{},1)
 type neuralLipOptions struct{Python,Root,Checkpoint string;Resize int}
@@ -100,7 +100,7 @@ func (a *appServer) neuralPersonLipWith(w http.ResponseWriter,r *http.Request,ru
  if err=stageNeuralLipInput(video[0],facePath,maxNeuralFaceVideo);err!=nil{jsonError(w,422,err.Error());return}
  if err=stageNeuralLipInput(audio[0],audioPath,maxNeuralLipAudio);err!=nil{jsonError(w,422,err.Error());return}
  f,err:=os.ReadFile(audioPath);if err!=nil||!validSingingWAV(f){jsonError(w,422,"실제 가창 파일은 완전한 PCM/float WAV여야 합니다");return}
- ctx,cancel:=context.WithTimeout(r.Context(),12*time.Minute);defer cancel()
+ ctx,cancel:=context.WithTimeout(r.Context(),60*time.Minute);defer cancel()
  if err=runner(ctx,o,facePath,audioPath,out);err!=nil{jsonError(w,502,err.Error());return}
  result,err:=os.Open(out);if err!=nil{jsonError(w,502,"Wav2Lip가 MP4 영상을 생성하지 않았습니다");return}
  defer result.Close()
