@@ -13,6 +13,8 @@ import {putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb.js';
 import {extendMvToFullSong} from '../lib/fullSongMvScenes.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
+import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
+import {getInstalledLocalModels} from '../lib/localAiComposer.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
  const cancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
@@ -22,6 +24,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(false),[singingPort,setSingingPort]=useState('7867');
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
  const [alsoConvertRVC,setAlsoConvertRVC]=useState(false);
+ const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
+ const [scoreModels,setScoreModels]=useState([]),[scorePrompt,setScorePrompt]=useState(project.title||'');
+ const [scoreModelError,setScoreModelError]=useState('');
  const voices=(data.voices||[]).filter(v=>['self','owned','licensed'].includes(v.rights));
  const [musicPaths]=useState(()=>{try{return readMusicGenPreferences(window.localStorage)}catch{return {}}});
  const [musicPython,setMusicPython]=useState(musicPaths.python||'');
@@ -52,6 +57,17 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      if(!Object.keys(lipPlacement).length)throw Error('MV 내보내기 화면에서 캐릭터 입 위치를 먼저 저장하세요.');
     }
     let movieProject=base.project;
+    if(makeAutoScore){
+     const source=current();
+     if(!source||source.id!==project.id)throw Error('신경망 작사·작곡 중 프로젝트 변경');
+     const scored=await generateNeuralScoreForMv(source,{
+      model:scoreModel,prompt:scorePrompt||source.title||source.prompt||'한국어 오리지널 노래',
+      genre:source.genre||'K-pop',key:source.key||'C Major',targetSeconds:musicDuration,
+      session:base.session,current,onChange:commit,newId:genId,signal:controller.signal,onProgress:setMessage
+     });
+     movieProject=scored.project;
+     setMessage('한국어 AI 가사 + '+scored.tracks+'악기 MIDI + '+scored.cues+'개 음표·음소 싱크 작성 완료');
+    }
     if(makeNeuralMusic){
      if(!musicPython||!musicModelDir||!demucsRoot)throw Error('실제 MusicGen·Demucs Python, 모델 및 폴더 경로를 입력하세요.');
      const source=current();
@@ -118,6 +134,19 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   <p className="muted">생성 대상 {info.total}개 · 이미 영상이 있는 장면 {info.already}개 · 등록된 사람·캐릭터 연결 장면 {info.linked}개</p>
   <label><input type="checkbox" disabled={busy} checked={includeReferences} onChange={e=>setIncludeReferences(e.target.checked)}/> 등록된 본인·허가받은 사람 사진·2D 캐릭터 원화 장면도 일괄 이미지·영상 생성에 포함</label>
   <label><input type="checkbox" disabled={busy} checked={saveFullMovie} onChange={e=>setSaveFullMovie(e.target.checked)}/> 생성 후 음악·보컬·가사 포함 완성 MV WebM까지 한 번에 저장 (Windows WebView2 사용)</label>
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeAutoScore} onChange={e=>{setMakeAutoScore(e.target.checked);setScoreModelError('');}}/> 로컬 AI 한국어 작사·6악기 MIDI·음소 싱크까지 자동 생성 (기존 작성 가사 보존)</label>}
+  {saveFullMovie&&makeAutoScore&&<div className="mv7-item">
+   <label>노래 주제와 원하는 편곡<input disabled={busy} maxLength={1200} value={scorePrompt} onChange={e=>setScorePrompt(e.target.value)} placeholder="한국어 애니메이션 록 발라드, 마지막 후렴은 웅장하게"/></label>
+   <div className="mv7-actions"><Button disabled={busy} onClick={async()=>{try{
+    const names=await getInstalledLocalModels();setScoreModels(names);setScoreModel(prev=>names.includes(prev)?prev:(names[0]||''));
+    if(!names.length)setScoreModelError('설치된 로컬 Ollama 모델이 없습니다.');
+   }catch(e){setScoreModelError(e.message)}}}>실제 로컬 AI 모델 조회</Button>
+   <select value={scoreModel} disabled={busy||!scoreModels.length} onChange={e=>setScoreModel(e.target.value)}>
+    <option value="">Ollama 모델 선택</option>{scoreModels.map(name=><option key={name} value={name}>{name}</option>)}
+   </select></div>
+   {scoreModelError&&<p role="alert">{scoreModelError}</p>}
+   <Notice>작사와 악기별 MIDI는 사용자가 설치한 로컬 신경망 모델이 생성합니다. 프로젝트에 이미 작성된 가사는 덮어쓰지 않습니다. 생성된 선율의 한국어 음소 타임라인으로 실제 Singing 엔진과 연결합니다.</Notice>
+  </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeNeuralMusic} onChange={e=>setMakeNeuralMusic(e.target.checked)}/> 반주가 없어도 MusicGen 신경망 → Demucs 악기 분리·마스터링 → 전체 MV 영상까지 일괄 제작</label>}
   {saveFullMovie&&makeNeuralMusic&&<div className="mv7-item">
    <label>목표 노래 길이<select disabled={busy} value={musicDuration} onChange={e=>setMusicDuration(Number(e.target.value))}><option value={180}>약 3분</option><option value={360}>최대 6분</option></select></label>
@@ -138,7 +167,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <Notice>기존 가사·MIDI 싱크와 실행 가능한 실제 신경망 Singing 엔진이 있어야 합니다. RVC 선택 시 사용자가 미리 저장한 모델·FAISS 설정을 사용합니다. 실제 WAV가 생성되어야 후속 MV 단계에 진입하며, 실패 시 원본은 변경되지 않습니다.</Notice>
   </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 캐릭터 2D 립싱크 입 모양도 영상에 포함</label>}
-  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeNeuralSinging&&(!singingRights||!voices.length))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
+  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeNeuralSinging&&(!singingRights||!voices.length))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
   {busy&&<Button onClick={()=>cancelRef.current?.abort()}>이후 장면 생성 취소</Button>}
   {message&&<p role="status" className="muted">{message}</p>}
   {(error||info.error)&&<p role="alert" className="mv4-error">{error||info.error}</p>}
