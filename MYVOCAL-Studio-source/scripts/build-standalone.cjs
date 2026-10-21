@@ -78,7 +78,7 @@ for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)){
  if(!match[1].trim())continue;
  inlineScripts++;
  try{new vm.Script(match[1],{filename:'myvocal-embedded-'+inlineScripts+'.js'});}
- catch(error){throw new Error('Windows 번들 JavaScript 문법 오류 ('+inlineScripts+'): '+error.message);}
+ catch(error){console.error('Windows embedded script parser location:',String(error?.stack||error).slice(0,6000));throw new Error('Windows 번들 JavaScript 문법 오류 ('+inlineScripts+'): '+error.message);}
 }
 if(inlineScripts<2)throw new Error('Windows HTML 스크립트가 누락됐거나 중간에 종료됐습니다.');
 fs.writeFileSync(path.join(root,'MYVOCAL-Studio-v1.8.html'),html);
