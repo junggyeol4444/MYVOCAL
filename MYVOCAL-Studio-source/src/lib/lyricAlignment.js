@@ -33,7 +33,7 @@ export function alignmentSource(project,trackId,{longForm=false}={}){
  const bpm=Number(project.bpm);
  if(!Number.isFinite(bpm)||bpm<40||bpm>240)throw Error('가사 싱크 BPM은 40~240만 지원합니다.');
  const end=Math.max(...notes.map(n=>(n.startBeat+n.length)*60/bpm));
- if(end>(longForm?300:90))throw Error(longForm?'긴 곡 가창 MIDI는 최대 300초입니다.':'최대 90초의 보컬 MIDI만 내보낼 수 있습니다.');
+ if(end>(longForm?360:90))throw Error(longForm?'긴 곡 가창 MIDI는 최대 360초입니다.':'최대 90초의 보컬 MIDI만 내보낼 수 있습니다.');
  if(longForm&&notes.length>512)throw Error('긴 곡 보컬 음표는 최대 512개입니다.');
  // Snapshot token for stale detection; no personal recordings included.
  const sourceKey=JSON.stringify({projectId:project.id,trackId:track.id,bpm,lyrics:project.lyrics||'',notes,...(longForm?{longForm:true}:{})});
@@ -52,7 +52,7 @@ export function isAlignmentStale(project,alignment){
 export function validateAlignment(alignment){
  if(alignment?.format!=='MYVOCAL_LYRIC_ALIGNMENT'||alignment?.version!==1||!Array.isArray(alignment.cues)||!alignment.cues.length||alignment.cues.length>(alignment.longForm===true?512:128))throw Error('올바른 가사·MIDI 싱크 데이터가 아닙니다.');
  for(const cue of alignment.cues){
-  if(typeof cue.lyric!=='string'||cue.lyric.length>80||!Number.isFinite(cue.startSec)||!Number.isFinite(cue.endSec)||cue.startSec<0||cue.endSec<=cue.startSec||cue.endSec>(alignment.longForm===true?300.01:90.01))throw Error('가사 싱크의 시간 또는 텍스트가 잘못되었습니다.');
+  if(typeof cue.lyric!=='string'||cue.lyric.length>80||!Number.isFinite(cue.startSec)||!Number.isFinite(cue.endSec)||cue.startSec<0||cue.endSec<=cue.startSec||cue.endSec>(alignment.longForm===true?360.01:90.01))throw Error('가사 싱크의 시간 또는 텍스트가 잘못되었습니다.');
   if(!Number.isFinite(cue.pitch)||cue.pitch<36||cue.pitch>96)throw Error('MIDI 음높이가 잘못되었습니다.');
  }
  return true;

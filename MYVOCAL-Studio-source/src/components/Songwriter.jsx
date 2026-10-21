@@ -43,7 +43,7 @@ export default function Songwriter({project:p,onChange,notify}){
     <div className="mv4-form-row"><label className="mv4-label">조성<select value={key} onChange={e=>setKey(e.target.value)}>{['C Major','G Major','D Major','A Major','E Major','F Major','Bb Major','A Minor','E Minor','B Minor','D Minor','G Minor','F# Minor'].map(k=><option key={k}>{k}</option>)}</select></label><label className="mv4-label">BPM<input value={bpm} type="number" min="40" max="240" onChange={e=>setBpm(e.target.value)}/></label><label className="mv4-label">마디<select value={bars} onChange={e=>setBars(+e.target.value)}>{songLengths.map(n=><option value={n} key={n}>{n} 마디</option>)}</select></label></div>
     <Notice>곡 설정과 장르 혼합·구간별 장르를 기반으로 가사 템플릿, 화성, 멜로디, 리듬을 PC에서 생성합니다. 외부 API 호출은 없습니다.</Notice>
     <Button variant="primary" className="full-width" icon="spark" onClick={draftOffline}>로컬 작곡 초안 생성 · 다른 변형 만들기</Button>
-    <LocalAiComposerPanel options={opts} onDraft={d=>{setDraft(d);setError('')}} notify={notify}/>
+    <LocalAiComposerPanel options={opts} onDraft={d=>{setDraft(d);setError('')}} notify={notify} project={p} onChange={onChange}/>
     <LocalAiProductionPanel project={p} options={opts} onChange={onChange} notify={notify}/>
     <MusicGenPanel project={p} onChange={onChange} notify={notify}/>
     {error&&<div className="mv4-error" role="alert">{error}</div>}

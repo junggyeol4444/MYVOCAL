@@ -60,3 +60,18 @@ test('long Korean phoneme hints are rebased per neural singing inference chunk',
  assert.ok(received[1].phonemes[0].startSec<1);
  assert.equal(s.cues[1].startSec,50);
 });
+
+test('full 360-second neural Korean vocal chunking retains first cue phonemes on every chunk',async()=>{
+ const notes=Array.from({length:6},(_,i)=>({lyric:['나','는','노','래','한','다'][i],pitch:60+i,startSec:i*60,endSec:(i+1)*60,velocity:90}));
+ const structure={...align,format:'MYVOCAL_LYRIC_ALIGNMENT',version:1,longForm:true,projectId:'six-min-vocal',trackId:'lead',sourceKey:'vocal-score',cues:notes};
+ const {buildPhonemePlan}=await import('../src/lib/phonemePlan.js');
+ const phonemes=buildPhonemePlan(structure),sent=[];
+ const data=await renderLongSinging(structure,{port:7867,project:{title:'6분 원본'},voice:{id:'self',rights:'self'},model:null,phonemePlan:phonemes,
+ request:async r=>{sent.push(r);return new Blob([wav(Math.max(...r.cues.map(c=>c.endSec)))],{type:'audio/wav'});}});
+ assert.equal(data.parts,6);
+ assert.equal(sent.length,6);
+ assert.ok(sent.every(x=>x.phonemes?.length>0));
+ assert.ok(sent.every(x=>x.phonemes[0].cueIndex===1));
+ const result=inspectSingingWav(await data.wav.arrayBuffer());
+ assert.equal(result.durationSec,360);
+});

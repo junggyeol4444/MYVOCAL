@@ -40,7 +40,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  useEffect(()=>()=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current)},[]);
  const changeResult=(blob,kind,count,fileKind=kind,placement=null)=>{if(kind!=='rvc-neural')setSourceVocal(null);if(latestUrl.current)URL.revokeObjectURL(latestUrl.current);const u=URL.createObjectURL(blob);latestUrl.current=u;setUrl(u);setResult({file:new File([blob],outputName(p.title,fileKind),{type:'audio/wav'}),kind,count,placement});};
  const run=async fn=>{if(busy)return;setBusy(true);setStatus('');try{await fn()}catch(e){setStatus('오류: '+e.message);notify('가창 작업 오류: '+e.message)}finally{setBusy(false)}};
- const createSync=(longForm=false)=>{try{const synced=alignLyricNotes(p,undefined,{longForm});onChange({...p,vocalAlignment:synced});notify(longForm?'최대 300초 긴 곡 가사·MIDI 싱크를 준비했습니다. 외부 엔진으로 분할 가창 가능합니다.':'보컬 멜로디와 가사를 순서대로 연결했습니다. 음소 분석은 아닙니다.')}catch(e){notify(e.message)}};
+ const createSync=(longForm=false)=>{try{const synced=alignLyricNotes(p,undefined,{longForm});onChange({...p,vocalAlignment:synced});notify(longForm?'최대 360초 긴 곡 가사·MIDI 싱크를 준비했습니다. 외부 엔진으로 분할 가창 가능합니다.':'보컬 멜로디와 가사를 순서대로 연결했습니다. 음소 분석은 아닙니다.')}catch(e){notify(e.message)}};
  const guideRender=()=>run(async()=>{if(!alignment)throw Error('가사·MIDI 싱크를 먼저 준비하세요.');
   const made=renderOfflineVocalGuide(alignment,phonemePlan);changeResult(made.blob,'offline-guide',made.rendered);
   setStatus(`내장 오프라인 가창 가이드 WAV: ${made.rendered}음표, ${format(made.seconds)} · 별도 서버/음성 샘플/AI 없이 생성 (한글 음절별 모음·자음 힌트 · ${made.timedCues}개 음표에 저장된 발음 타임라인 적용)`);

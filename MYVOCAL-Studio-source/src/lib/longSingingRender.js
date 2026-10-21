@@ -5,7 +5,7 @@ import {buildSingingRequest} from './singingBridge.js';
 import {phonemeSourceKey,validatePhonemePlan} from './phonemePlan.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 
-const MAX_SECONDS=300;
+const MAX_SECONDS=360;
 const MAX_CUES=512;
 const MAX_WAV_BYTES=64*1024*1024;
 const rd=(value)=>Math.round(value*1000)/1000;
@@ -96,7 +96,7 @@ export async function renderLongSinging(alignment,{port,project,voice,model,requ
   const chunkAlignment={...alignment,longForm:false,cues:chunk.cues};
   let chunkPhonemes=null;
   if(phonemePlan){
-   const selected=phonemePlan.segments.filter(s=>s.cueIndex>chunk.firstCueIndex&&s.cueIndex<=chunk.firstCueIndex+chunk.cues.length)
+   const selected=phonemePlan.segments.filter(s=>s.cueIndex>=chunk.firstCueIndex+1&&s.cueIndex<=chunk.firstCueIndex+chunk.cues.length)
     .map(s=>({...s,cueIndex:s.cueIndex-chunk.firstCueIndex,startSec:Math.round((s.startSec-chunk.startSec)*10000)/10000,endSec:Math.round((s.endSec-chunk.startSec)*10000)/10000}));
    if(selected.length>512)throw Error('분할 요청의 한국어 음소 힌트는 512개를 초과할 수 없습니다.');
    if(selected.length)chunkPhonemes={...phonemePlan,sourceKey:phonemeSourceKey(chunkAlignment),segments:selected};

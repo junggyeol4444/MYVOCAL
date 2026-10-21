@@ -106,6 +106,7 @@ func (a *appServer) routes() *http.ServeMux {
 	mux.HandleFunc("/api/system/migration/complete", a.finishNativeMigration)
 	mux.HandleFunc("/api/local-ai/models", a.localAIModels)
 	mux.HandleFunc("/api/local-ai/compose", a.localAICompose)
+	mux.HandleFunc("/api/local-ai/midi-section", a.neuralMidiSection)
  mux.HandleFunc("/api/music/generate", a.musicGenGenerate)
  mux.HandleFunc("/api/music/stems/split", a.musicStemsSplit)
  mux.HandleFunc("/api/music/stems/midi", a.musicStemMidi)
