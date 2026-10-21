@@ -37,7 +37,7 @@ export default function RvcVoiceConversion({project,onChange,notify,sourceSugges
    if(latest.current.id!==converted.projectId)throw Error('프로젝트가 변경되어 변환 WAV를 다시 확인해야 합니다.');
    const current=latest.current;
    const info=await readAudioInfo(converted.file);
-   if(!Number.isFinite(info.duration)||info.duration<=0||info.duration>300)throw Error('변환한 보컬 WAV의 길이가 올바르지 않습니다.');
+   if(!Number.isFinite(info.duration)||info.duration<=0||info.duration>360)throw Error('변환한 보컬 WAV의 길이가 올바르지 않습니다.');
    assetId=genId('vocal_wav');
    const track=makeImportedVocalTrack(current,converted.file,assetId,info.duration);
    track.name='RVC 로컬 음색 변환 보컬';

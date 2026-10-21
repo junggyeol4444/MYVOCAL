@@ -47,7 +47,7 @@ export function planRVCWavChunks(input,{maxBytes=RVC_SOURCE_LIMIT,overlapSeconds
  const layout=audioChunkLayout(bytes);
  if(!Number.isInteger(maxBytes)||maxBytes<4096||maxBytes>RVC_SOURCE_LIMIT)
   throw Error('RVC 변환 분할 크기가 올바르지 않습니다.');
- if(layout.info.durationSec>MAX_SECONDS)throw Error('RVC 긴 곡 변환은 최대 300초입니다.');
+ if(layout.info.durationSec>MAX_SECONDS)throw Error('RVC 긴 곡 변환은 최대 360초입니다.');
  if(!Number.isFinite(overlapSeconds)||overlapSeconds<0||overlapSeconds>.25)
   throw Error('RVC 구간 겹침 길이는 0~0.25초만 지원합니다.');
  const maxFrames=Math.min(Math.floor((maxBytes-44)/layout.align),Math.floor(layout.info.sampleRate*75));

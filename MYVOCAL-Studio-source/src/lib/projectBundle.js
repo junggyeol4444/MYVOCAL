@@ -6,6 +6,7 @@ import {isPhonemePlanStale,phonemeSourceKey} from './phonemePlan.js';
 import {downloadText} from './store.js';
 import {MAX_BUNDLE_BYTES,validateBundleEnvelope} from './bundleSafety.js';
 import {validateMediaDataUrl,validateMediaMetadata} from './base64Safety.js';
+import {mediaSha256Hex,assertPortableAssetReferences,verifyBackupMedia} from './projectBackupIntegrity.js';
 const MIME='application/json';
 const fileBase64=file=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error||new Error('파일 읽기 실패'));reader.readAsDataURL(file);});
 function blobFromDataUrl(data){
@@ -40,7 +41,7 @@ export async function downloadProjectBundle(project,data){
  for(const id of assetsOf(project,profiles)){
   const file=await getFile(id);if(!file){missing.push(id);continue;}
   size+=file.size;if(size>150*1024*1024)throw new Error('오디오 등 원본 파일 합계가 150MB를 초과하여 통합 백업을 만들 수 없습니다.');
-  assets[id]={name:file.name||id,type:file.type||'application/octet-stream',dataUrl:await fileBase64(file)};
+  assets[id]={name:file.name||id,type:file.type||'application/octet-stream',bytes:file.size,sha256:await mediaSha256Hex(await file.arrayBuffer()),dataUrl:await fileBase64(file)};
  }
  if(missing.length)throw new Error('원본 파일 '+missing.length+'개를 찾지 못했습니다. 누락 파일을 다시 등록한 뒤 백업해 주세요.');
  const json={format:'MYVOCAL_PROJECT_BACKUP',formatVersion:2,exportedAt:now(),project,profiles,assets};
@@ -54,11 +55,16 @@ export async function importProjectBundle(file){
  else if(input?.title&&Array.isArray(input.tracks)){project=input;}
  else throw new Error('MYVOCAL 프로젝트 형식이 아닙니다.');
  if(!project||typeof project.title!=='string'||!Array.isArray(project.tracks)||!Array.isArray(project.sections))throw new Error('프로젝트의 기본 구조가 잘못되었습니다.');
+ // Complete v2 backups must include every linked original, including RVC checkpoints and FAISS indexes.
+ // Legacy metadata-only JSON exports deliberately remain compatible and do not claim to include media.
+ if(input.format==='MYVOCAL_PROJECT_BACKUP')assertPortableAssetReferences(assetsOf(project,profiles),assets);
  // Use prototype-free maps even when importing legacy projects.
  const mapping=Object.create(null),assetMap=Object.create(null),pendingAssets=[];
  for(const [oldId,meta] of Object.entries(assets)){
   const id=genId('asset');if(!meta?.dataUrl)throw new Error('백업 원본 파일이 누락되었습니다.');
-  validateMediaMetadata(meta,validateMediaDataUrl(meta.dataUrl).mime);const blob=blobFromDataUrl(meta.dataUrl);pendingAssets.push([id,new File([blob],meta.name||id,{type:meta.type||blob.type})]);assetMap[oldId]=id;
+  validateMediaMetadata(meta,validateMediaDataUrl(meta.dataUrl).mime);const blob=blobFromDataUrl(meta.dataUrl);
+  await verifyBackupMedia(meta,new Uint8Array(await blob.arrayBuffer()));
+  pendingAssets.push([id,new File([blob],meta.name||id,{type:meta.type||blob.type})]);assetMap[oldId]=id;
  }
  const patchAssets=x=>{
   const result={...x};if(result.assets)result.assets=result.assets.map(a=>({...a,id:assetMap[a.id]||a.id}));if(result.looks)result.looks=result.looks.map(look=>({...look,referenceAssetId:assetMap[look.referenceAssetId]||look.referenceAssetId}));if(result.layerPlan)result.layerPlan={...result.layerPlan,sourceAssetId:assetMap[result.layerPlan.sourceAssetId]||result.layerPlan.sourceAssetId};if(result.animation2d)result.animation2d={...result.animation2d,sourceAssetId:assetMap[result.animation2d.sourceAssetId]||result.animation2d.sourceAssetId};if(result.rig3d)result.rig3d={...result.rig3d,assetId:assetMap[result.rig3d.assetId]||result.rig3d.assetId};if(result.stage3d)result.stage3d={...result.stage3d,assetId:assetMap[result.stage3d.assetId]||result.stage3d.assetId};if(result.personLipSync)result.personLipSync={...result.personLipSync,videoAssetId:assetMap[result.personLipSync.videoAssetId]||result.personLipSync.videoAssetId,audioAssetId:assetMap[result.personLipSync.audioAssetId]||result.personLipSync.audioAssetId};if(result.dance88)result.dance88={...result.dance88,referenceAssetId:assetMap[result.dance88.referenceAssetId]||result.dance88.referenceAssetId};if(result.performance89)result.performance89={...result.performance89,referenceAssetId:assetMap[result.performance89.referenceAssetId]||result.performance89.referenceAssetId};for(const name of ['assetId','indexAssetId','referenceId','videoAssetId','sourceSampleId'])if(result[name])result[name]=assetMap[result[name]]||result[name];return result;

@@ -121,3 +121,12 @@ test('six-minute long RVC chunk plan retains complete source and does not exceed
  assert.ok(result.chunks.every(c=>c.wav.length<=2*1024*1024));
  assert.equal(result.chunks.at(-1).coreEndSec,360);
 });
+
+test('six-minute RVC output is permitted to become a separate project vocal track',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const panel=readFileSync(new URL('../src/components/RvcVoiceConversion.jsx',import.meta.url),'utf8');
+ const long=readFileSync(new URL('../src/lib/rvcLongConversion.js',import.meta.url),'utf8');
+ assert.match(panel,/info\.duration>360/);
+ assert.doesNotMatch(panel,/info\.duration>300/);
+ assert.match(long,/최대 360초/);
+});
