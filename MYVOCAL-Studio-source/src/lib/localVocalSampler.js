@@ -60,10 +60,10 @@ export async function createSamplerModel(voice,sampleId,{loadFile=getFile,decode
  const record={id:genId('model'),voiceId:voice.id,name:`${voice.name} · 로컬 샘플 ${new Date().toLocaleDateString('ko-KR')}.wav`,engineId:'sampler',assetId,bytes:wav.size,sourceSampleId:sampleId,sourcePromptId:item.capturePromptId||'',sourceHz:hz,segmentSec:+fragment.duration.toFixed(2),createdAt:now(),status:'sample-preview-ready',singingCompatible:false,notice:'로컬 녹음 조각으로 음높이를 변경하는 샘플 기반 합성입니다. AI 보컬 학습이나 가사 발음 합성이 아닙니다.'};
  return {record,file:wav};
 }
-export function normalizeSingingNotes(notes){
+export function normalizeSingingNotes(notes,{longForm=false}={}){
  if(!Array.isArray(notes))throw Error('음표 배열이 없습니다.');
  return notes.filter(n=>n&&Number.isFinite(+n.pitch)&&Number.isFinite(+n.startBeat)&&Number.isFinite(+n.length)&&+n.length>0)
-  .slice(0,128).map(n=>({pitch:clamp(Math.round(+n.pitch),36,96),startBeat:clamp(+n.startBeat,0,256),length:clamp(+n.length,.12,8),velocity:clamp(+n.velocity||92,1,127)}));
+  .slice(0,longForm?2048:128).map(n=>({pitch:clamp(Math.round(+n.pitch),36,96),startBeat:clamp(+n.startBeat,0,longForm?1440:256),length:clamp(+n.length,.12,8),velocity:clamp(+n.velocity||92,1,127)}));
 }
 export function projectPreviewNotes(project){
  if(!project)return [];
