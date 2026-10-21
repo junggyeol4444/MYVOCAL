@@ -73,6 +73,14 @@ func sessionScript(key string) string {
       var url='/__myvocal_ping?key=` + key + `';
       function ping(){fetch(url,{cache:'no-store'}).catch(function(){});}
       ping();setInterval(ping,5000);
+      function report(phase){fetch(url+'&phase='+encodeURIComponent(phase),{cache:'no-store'}).catch(function(){});}
+      report('session-script');
+      window.addEventListener('error',function(){report('script-error');});
+      window.addEventListener('unhandledrejection',function(){report('promise-error');});
+      setTimeout(function(){
+       var root=document.getElementById('root');
+       report(!root?'root-missing':root.querySelector('[data-boot-placeholder]')?'placeholder-visible':root.querySelector('button')?'buttons-present':'buttons-missing');
+      },4000);
     })();</script>`
 }
 func (a *appServer) routes() *http.ServeMux {
@@ -132,6 +140,11 @@ func (a *appServer) routes() *http.ServeMux {
 			return
 		}
 		a.ping()
+        // Only bounded, predefined startup phases: no user audio, names or file paths.
+        switch phase:=r.URL.Query().Get("phase");phase {
+        case "session-script","script-error","promise-error","root-missing","placeholder-visible","buttons-present","buttons-missing":
+            log.Printf("MYVOCAL WebView2 startup phase: %s",phase)
+        }
 		w.WriteHeader(http.StatusNoContent)
 	})
 	return mux
