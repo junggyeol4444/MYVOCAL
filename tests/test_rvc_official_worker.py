@@ -90,7 +90,8 @@ class OfficialRVCWorkerTest(unittest.TestCase):
                     'recommendations': []}
         with patch.dict(sys.modules, {'torch': self.torch}), \
              patch.object(worker.subprocess, 'run', side_effect=runner or self.fake_stage), \
-             patch.object(worker, 'inspect_rvc_pitch_coverage', side_effect=fake_pitch):
+             patch.object(worker, 'inspect_rvc_pitch_coverage', side_effect=fake_pitch), \
+             patch.object(worker, 'inspect_training_dataset', return_value=[{'file': 'sample-001.wav', 'checked': False, 'reason': '격리 테스트 입력'}]):
             worker.execute(self.args)
 
     def test_five_real_stage_commands_and_originals_untouched(self):
