@@ -3,12 +3,11 @@
  // with its REAL mono PCM music mix, not fake lips or synthetic demo audio.
  // Mixed cast/story scenes are deliberately rejected to avoid face swapping.
 import {renderNeuralPersonLip} from './neuralPersonLipClient.js';
-import {mixdownWav} from './audioEngine.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 
 export async function applyNeuralFaceLipToMv(movie,project,characters,{
  personId,python,root,checkpoint,resize=2,consent=false,modelRights=false,
- session,signal,run=renderNeuralPersonLip,mix=mixdownWav
+ session,signal,run=renderNeuralPersonLip,mix=null
 }={}){
  if(!project?.id||!Array.isArray(project.scenes)||!project.scenes.length||
  !Array.isArray(project.tracks)||!Array.isArray(characters)||!(movie instanceof Blob)||
@@ -24,7 +23,8 @@ export async function applyNeuralFaceLipToMv(movie,project,characters,{
  if(!project.tracks.some(t=>t.type==='vocal'&&!t.mute&&Array.isArray(t.clips)&&t.clips.length))
   throw Error('가창 WAV 보컬 트랙을 먼저 생성하거나 가져오세요.');
  if(signal?.aborted)throw Error('실제 사람 립싱크를 취소했습니다.');
- const audio=await mix(project,{bitDepth:16,sampleRate:44100,channels:1});
+ const renderAudio=mix||(await import('./audioEngine.js')).mixdownWav;
+ const audio=await renderAudio(project,{bitDepth:16,sampleRate:44100,channels:1});
  if(!(audio instanceof Blob))throw Error('영상 전체에 사용할 실제 음악 믹스 WAV가 없습니다.');
  assertUsableSingingWav(await audio.arrayBuffer(),{maxDurationSec:360});
  if(signal?.aborted)throw Error('실제 사람 립싱크를 취소했습니다.');
