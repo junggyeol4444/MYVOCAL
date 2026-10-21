@@ -2,6 +2,7 @@
 // Real phonetic pronunciation depends on context (liaison, assimilation, etc.) and a
 // compatible external neural singing engine must interpret these hints explicitly.
 import {validateAlignment} from './lyricAlignment.js';
+import {contextualKoreanSingingHints} from './koreanSingingPronunciation.js';
 
 const ONSETS=['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
 const NUCLEI=['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
@@ -24,6 +25,26 @@ export function isPhonemePlanStale(alignment,plan){
 export function buildPhonemePlan(alignment){
  validateAlignment(alignment);
  const segments=[],warnings=[];
+ // 연속 한국어 가창 음절을 발음 힌트로 변환한다. 가사와 MIDI는 변경하지 않는다.
+ const grouped=alignment.cues.map(cue=>{
+  const text=cue.lyric.trim();
+  if(!text||text==='—')return [];
+  const raw=[...text],units=raw.filter(ch=>!(/\s/u).test(ch));
+  const duration=cue.endSec-cue.startSec,list=[];
+  let j=0,seen=false,space=false;
+  for(const ch of raw){
+   if(/\s/u.test(ch)){space=true;continue;}
+   list.push({hint:syllableHint(ch),
+    startSec:cue.startSec+duration*j/Math.max(1,units.length),
+    endSec:cue.startSec+duration*(j+1)/Math.max(1,units.length),
+    breakBefore:seen&&space});
+   seen=true;space=false;j++;
+  }
+  return list;
+ });
+ const flat=grouped.flat();
+ const contextual=contextualKoreanSingingHints(flat);
+ let unitIndex=0;
  for(let n=0;n<alignment.cues.length;n++){
   const cue=alignment.cues[n],text=cue.lyric.trim();
   if(!text||text==='—')continue;
@@ -33,7 +54,7 @@ export function buildPhonemePlan(alignment){
   if(units.length>24)throw Error('음표 하나의 가사는 최대 24글자까지만 발음 힌트로 분리할 수 있습니다.');
   const duration=cue.endSec-cue.startSec;
   for(let j=0;j<units.length;j++){
-   const ch=units[j],hint=syllableHint(ch),left=cue.startSec+duration*j/units.length,right=cue.startSec+duration*(j+1)/units.length;
+   const ch=units[j],hint=contextual[unitIndex++],left=cue.startSec+duration*j/units.length,right=cue.startSec+duration*(j+1)/units.length;
    const parts=[];
    if(!hint){parts.push(['text',ch,1]);warnings.push(`${n+1}번 음표의 '${ch}'는 발음 변환하지 않았습니다.`);}
    else{
