@@ -15,7 +15,7 @@ export default function CharacterLipSyncEditor({character,onSave,notify,projects
  const selectedStoredId=storedVocal.some(s=>s.assetId===assetId)?assetId:(storedVocal[0]?.assetId||'');
  const audioProposal=async()=>{if(!audio)return;setProcessing(true);setAudioError('');try{
   const project=eligible.find(p=>p.id===projectId)||eligible[0];if(!project)throw Error('노래 프로젝트의 가사·MIDI 싱크가 필요합니다.');
-  if(audio.size>40*1024*1024||!audio.name?.toLowerCase().endsWith('.wav'))throw Error('40MB 이하의 실제 보컬 WAV를 선택하세요.');
+  if(audio.size>96*1024*1024||!audio.name?.toLowerCase().endsWith('.wav'))throw Error('96MB 이하의 실제 보컬 WAV를 선택하세요.');
   const decoded=await readAudioInfo(audio);
   const proposal=lipSyncFromSingingAudio(project.vocalAlignment,decoded);
   setSource(lipSyncLines(proposal));notify('실제 오디오의 발성 에너지와 MIDI 가사 타이밍으로 편집 가능한 입 모양 시간표를 만들었습니다. 검토 후 저장하세요.');
@@ -24,7 +24,7 @@ export default function CharacterLipSyncEditor({character,onSave,notify,projects
   const selected=storedVocal.find(x=>x.assetId===selectedStoredId);
   if(!activeProject||!selected)throw Error('기존 프로젝트의 보컬 WAV 파일을 선택하세요.');
   const file=await getFile(selected.assetId);
-  if(!file||!file.size||file.size>40*1024*1024||(!String(file.type).includes('wav')&&!String(file.name||selected.name).toLowerCase().endsWith('.wav')))
+  if(!file||!file.size||file.size>96*1024*1024||(!String(file.type).includes('wav')&&!String(file.name||selected.name).toLowerCase().endsWith('.wav')))
    throw Error('보컬 원본 파일이 없거나 WAV 형식이 아닙니다. 백업을 확인하세요.');
   const decoded=await readAudioInfo(file);
   const proposal=lipSyncFromSingingAudio(activeProject.vocalAlignment,decoded);

@@ -4,7 +4,7 @@ import {syllableHint} from './phonemePlan.js';
 import {phonemeViseme,validateLipSync} from './characterLipSync.js';
 export function lipSyncFromSingingAudio(alignment,buffer,{threshold=0.012}={}){
  if(!Array.isArray(alignment?.cues)||!alignment.cues.length||!buffer||typeof buffer.getChannelData!=='function')throw Error('가사·MIDI 싱크와 디코딩된 보컬 WAV가 필요합니다.');
- if(!Number.isFinite(buffer.sampleRate)||buffer.sampleRate<8000||buffer.sampleRate>96000||!Number.isInteger(buffer.numberOfChannels)||buffer.numberOfChannels<1||buffer.numberOfChannels>2||!Number.isFinite(buffer.duration)||buffer.duration<=0||buffer.duration>300)throw Error('보컬 오디오 형식/길이를 확인하세요.');
+ if(!Number.isFinite(buffer.sampleRate)||buffer.sampleRate<8000||buffer.sampleRate>96000||!Number.isInteger(buffer.numberOfChannels)||buffer.numberOfChannels<1||buffer.numberOfChannels>2||!Number.isFinite(buffer.duration)||buffer.duration<=0||buffer.duration>360)throw Error('보컬 오디오 형식/길이를 확인하세요.');
  if(!Number.isFinite(threshold)||threshold<0.001||threshold>0.3)throw Error('입 움직임 감지 임곗값이 올바르지 않습니다.');
  const channels=Array.from({length:buffer.numberOfChannels},(_,n)=>buffer.getChannelData(n));
  const cues=[];let last=0;

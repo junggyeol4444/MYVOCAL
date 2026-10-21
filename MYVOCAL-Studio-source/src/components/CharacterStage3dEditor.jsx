@@ -21,7 +21,7 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
  const dancePlan=usableDancePlan(character);
  const performancePlan=usablePerformance89(character);
  const initial=()=>{try{if(character.stage3d){validateStageSettings(character,character.stage3d);return {...character.stage3d};}}catch{}return createStageSettings(character);};
- const [settings,setSettings]=useState(initial),[model,setModel]=useState(null),[status,setStatus]=useState('3D 모델 분석 중…'),[playing,setPlaying]=useState(true),[time,setTime]=useState(0),[exporting,setExporting]=useState(false),[progress,setProgress]=useState(0);
+ const [settings,setSettings]=useState(initial),[model,setModel]=useState(null),[status,setStatus]=useState('3D 모델 분석 중…'),[playing,setPlaying]=useState(true),[time,setTime]=useState(0),[exporting,setExporting]=useState(false),[progress,setProgress]=useState(0),[singingWav,setSingingWav]=useState(null);
  const canvas=useRef(null),engine=useRef(null),raf=useRef(0),start=useRef(0),clock=useRef(0),config=useRef(settings),abort=useRef(null),busy=useRef(false);
  config.current=settings;
  useEffect(()=>{let dead=false;setModel(null);setStatus('로컬 3D 모델 불러오는 중…');
@@ -51,8 +51,8 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
  const record=async()=>{try{if(!model)throw Error('3D 모델을 먼저 불러오세요.');validateStageSettings(character,settings);if(!supportedStageWebM())throw Error('사용 중인 브라우저에서 WebM 영상 인코딩을 사용할 수 없습니다.');
    busy.current=true;setPlaying(false);setExporting(true);setProgress(0);
    const controller=new AbortController();abort.current=controller;
-   const clip=await recordStageWebM({canvas:canvas.current,duration:settings.duration,fps:settings.fps,draw,onProgress:setProgress,signal:controller.signal});
-   downloadBlob(clip,`MYVOCAL-Step84-${safeFilename(character.id)}-stage.webm`);notify(`STEP84 3D 공연 영상 WebM (${(clip.size/1048576).toFixed(2)}MiB) 출력 완료 · 무음 영상`);
+   const clip=await recordStageWebM({canvas:canvas.current,duration:settings.duration,fps:settings.fps,draw,onProgress:setProgress,signal:controller.signal,audioBlob:singingWav});
+   downloadBlob(clip,`MYVOCAL-Step84-${safeFilename(character.id)}-stage.webm`);notify(`STEP84 3D 공연 영상 WebM (${(clip.size/1048576).toFixed(2)}MiB) 출력 완료 · ${singingWav?'가창 WAV 포함':'무음 영상'}`);
   }catch(e){notify('3D 공연 영상 출력 실패: '+e.message);}finally{busy.current=false;abort.current=null;setExporting(false);start.current=0;}}
  const stageFields=(label,key,min,max,step)=> <Field label={`${label}: ${settings[key]}`}><input type="range" style={{width:'100%'}} min={min} max={max} step={step} value={settings[key]} disabled={exporting} onChange={e=>patch(key,Number(e.target.value))}/></Field>;
  return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}>
@@ -75,7 +75,9 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
   {stageFields('카메라 동작 강도','cameraMotion',0,2,.1)}{stageFields('조명 밝기','lightIntensity',.2,2,.1)}{stageFields('조명 움직임','lightMotion',0,2,.1)}
   {stageFields('캐릭터 표정 강도','expressionWeight',0,1,.05)}
   <div className="look-actions"><Button disabled={!model||exporting} onClick={snapshot}>현재 프레임 PNG</Button><Button disabled={exporting} onClick={json}>무대 설정 JSON</Button><Button disabled={!model||exporting} onClick={save} variant="primary">무대 설정 저장</Button></div>
+  <Field label="3D 공연 영상에 실제 가창 WAV 음성 추가 (선택)"><input type="file" accept=".wav,audio/wav" disabled={exporting} onChange={e=>setSingingWav(e.target.files?.[0]||null)}/></Field>
+  <Notice>선택한 WAV는 실제 미디어 오디오 트랙으로 녹화됩니다. 저장된 STEP85 입 모양 시간표는 동일한 공연 시간에 VRM 표정 모프로 렌더링됩니다. 원본 모델과 WAV는 수정하지 않습니다.</Notice>
   <div className="look-actions"><Button variant="primary" disabled={!model||exporting||!supportedStageWebM()} onClick={record}>{exporting?`WebM 녹화 중 ${Math.round(progress*100)}%`:'공연 영상 WebM 내보내기'}</Button>{exporting&&<Button onClick={()=>abort.current?.abort()}>녹화 취소</Button>}</div>
-  <Notice>출력은 **무음 WebM**입니다. 영상 인코딩은 사용 중인 브라우저의 MediaRecorder·WebGL 지원에 따라 달라집니다. 실제 음악 믹스 삽입·Lip Sync는 이 단계에서 지원하지 않습니다. MToon/PBR·물리효과가 없는 Step83 로컬 렌더러와 동일한 3D 모델 제약이 적용됩니다. 원본 파일은 변경하지 않습니다.</Notice>
+  <Notice>출력은 **무음 WebM**입니다. 영상 인코딩은 사용 중인 브라우저의 MediaRecorder·WebGL 지원에 따라 달라집니다. 오디오 파일을 선택하면 실제 WAV 음성이 함께 녹화되며, 저장된 Lip Sync 타임라인이 3D 입 모양에 적용됩니다. MToon/PBR·물리효과가 없는 Step83 로컬 렌더러와 동일한 3D 모델 제약이 적용됩니다. 원본 파일은 변경하지 않습니다.</Notice>
  </div>;
 }
