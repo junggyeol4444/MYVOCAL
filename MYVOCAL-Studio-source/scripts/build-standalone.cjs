@@ -43,7 +43,24 @@ const jsxRuntime=`
  const modules=__MODULES__,cache={};
  function resolve(from,spec){if(spec==='react'||spec==='react-dom/client')return spec;if(spec.endsWith('.css'))return 'style';if(!spec.startsWith('.'))return spec;let base=from.slice(0,from.lastIndexOf('/')+1);const arr=(base+spec).split('/'),parts=[];for(const seg of arr){if(seg==='.'||!seg)continue;if(seg==='..')parts.pop();else parts.push(seg)}const p=parts.join('/');for(const k of [p,p+'.jsx',p+'.js'])if(modules[k])return k;throw Error('Missing module '+spec+' from '+from);}
  function requireModule(id){if(id==='react')return r;if(id==='react-dom/client')return {createRoot:(el)=>({render:(node)=>ReactDOM.render(node,el)})};if(id==='style')return {};if(cache[id])return cache[id].exports;const code=modules[id];if(!code)throw Error('Unknown module '+id);const module={exports:{}};cache[id]=module;const req=spec=>requireModule(resolve(id,spec));new Function('module','exports','require',code)(module,module.exports,req);return module.exports;}
- requireModule('src/main.jsx');
+ // A real desktop bootstrap error must be visible, never just a blank black window.
+ function bootFailure(error){
+  const root=document.getElementById('root');
+  const message=String(error&&error.message||error||'원인 미상').slice(0,700);
+  console.error('MYVOCAL desktop bootstrap error:',error);
+  window.__MYVOCAL_BOOT_ERROR__=message;
+  if(root&&!root.hasChildNodes()){
+   root.setAttribute('role','alert');
+   root.style.cssText='display:block;min-height:100vh;box-sizing:border-box;background:#131722;color:#fff;padding:32px;font-family:sans-serif';
+   const heading=document.createElement('h1');heading.textContent='MYVOCAL Studio 화면 시작 오류';
+   const detail=document.createElement('pre');detail.style.cssText='white-space:pre-wrap;color:#ffb8b8';
+   detail.textContent=message;
+   root.append(heading,detail);
+  }
+ }
+ window.addEventListener('error',event=>bootFailure(event.error||event.message));
+ window.addEventListener('unhandledrejection',event=>bootFailure(event.reason));
+ try{requireModule('src/main.jsx')}catch(error){bootFailure(error)}
 })();
 `.replace('__MODULES__',JSON.stringify(modules));
 const sourceHtml=fs.readFileSync(path.join(root,'index.html'),'utf8');
