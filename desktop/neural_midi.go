@@ -43,7 +43,7 @@ func (a *appServer) neuralMidiSectionWith(w http.ResponseWriter,r *http.Request,
  if err:=decoder.Decode(&input);err!=nil{jsonError(w,400,"신경망 MIDI 입력이 올바르지 않습니다");return}
  if !modelNamePattern.MatchString(input.Model)||len(input.Prompt)<3||len(input.Prompt)>1200||
  len(input.Genre)>60||len(input.Key)>40||input.BPM<40||input.BPM>240||
- input.Bars!=8||input.BarStart<1||input.BarStart>180||
+ input.Bars!=8||input.BarStart<1||input.BarStart>360||
  len(input.Section)>60||len(input.PreviousMelody)>16{
   jsonError(w,400,"신경망 MIDI 마디·BPM·모델 설정이 잘못됐습니다");return
  }
