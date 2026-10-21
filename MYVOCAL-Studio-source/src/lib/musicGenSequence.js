@@ -2,6 +2,7 @@
 // WAV; this is PCM overlap/crossfade, NOT neural continuation or full-song AI.
 import {generateMusicGenAudio,musicGenSettingsValid} from './musicGenClient.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
+import {smoothMusicGenCrossfade} from './musicGenTransitionEnvelope.js';
 export const MAX_SEQUENCE_SEGMENTS=20;
 export function musicGenContinuationPrompt(previous,{seconds=6}={}){
  const bytes=previous instanceof Uint8Array?previous:new Uint8Array(previous);
@@ -62,7 +63,7 @@ export function joinMusicGenWaves(waves,{crossfadeSec=.5}={}){
   const base=44+(used-fade)*channels*2;
   const p=new DataView(part.pcm.buffer,part.pcm.byteOffset,part.pcm.byteLength);
   for(let i=0;i<fade;i++){
-   const ratio=(i+1)/(fade+1);
+   const ratio=smoothMusicGenCrossfade((i+1)/(fade+1));
    for(let ch=0;ch<channels;ch++){
     const dst=base+(i*channels+ch)*2,src=(i*channels+ch)*2;
     const before=v.getInt16(dst,true),after=p.getInt16(src,true);
