@@ -114,7 +114,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    const req=buildSingingRequest(number,p,alignment,voice,checkpoint,phonemePlan);
    const res=await requestBridge('/api/singing/render',req,controller.signal);blob=await res.blob();
   }
-  assertUsableSingingWav(await blob.arrayBuffer(),{maxDurationSec:longForm?300:90});
+  assertUsableSingingWav(await blob.arrayBuffer(),{maxDurationSec:longForm?360:90});
   if(autoRvc){
    setStatus('실제 Singing WAV 수신 · 로컬 RVC 신경망 음색 변환 중');
    const original=new File([blob],outputName(p.title,'singing-source'),{type:'audio/wav'});
@@ -133,7 +133,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const validCount=alignment?.cues?.filter(c=>c.lyric&&c.lyric!=='—').length||0;
  return <>
   <Panel title="Singing Workbench · v1.6" description="가사와 MIDI를 오프라인 가창 가이드 또는 녹음 샘플 기반 WAV로 렌더링합니다. 별도 호환 엔진은 선택 사항이며 신경망 AI 모델은 내장되지 않았습니다.">
-   <div className="mv10-strip"><div><strong>가사와 멜로디 준비</strong><span>{alignment?`싱크 완료 · ${validCount}/${alignment.cues.length}개 가사 있는 음표`:'싱크 없음 또는 원본 변경됨'}</span></div><Button icon="wave" disabled={busy||midiVocalTracks(p).length===0} onClick={()=>createSync(false)}>가사·MIDI 싱크 생성/갱신</Button><Button icon="wave" disabled={busy||midiVocalTracks(p).length===0} onClick={()=>createSync(true)}>긴 곡 300초 싱크 생성</Button></div>
+   <div className="mv10-strip"><div><strong>가사와 멜로디 준비</strong><span>{alignment?`싱크 완료 · ${validCount}/${alignment.cues.length}개 가사 있는 음표`:'싱크 없음 또는 원본 변경됨'}</span></div><Button icon="wave" disabled={busy||midiVocalTracks(p).length===0} onClick={()=>createSync(false)}>가사·MIDI 싱크 생성/갱신</Button><Button icon="wave" disabled={busy||midiVocalTracks(p).length===0} onClick={()=>createSync(true)}>긴 곡 360초 싱크 생성</Button></div>
    {!midiVocalTracks(p).length&&<Notice>먼저 MIDI 피아노 롤에서 보컬 음표를 작성해 주세요.</Notice>}
    {phonemePlan?<Notice>저장된 발음 타임라인 {phonemePlan.segments.length}개 구간을 내장 오프라인 WAV의 음절 길이에도 반영합니다(한글 음절). 외부 엔진 요청에도 포함되지만 엔진마다 지원이 다릅니다.</Notice>:<Notice>저장된 발음 타임라인이 없습니다. 오프라인 가이드는 음표 길이를 음절별로 균등 배분합니다. ‘발음 타임라인’에서 생성·저장하면 음절별 길이를 조절할 수 있습니다.</Notice>}
    {alignment&&<div className="mv10-cues">{alignment.cues.slice(0,24).map((c,i)=><div key={i} title={`${c.startSec}s · MIDI ${c.pitch}`}><span>{c.lyric}</span><small>{hangulHint(c.lyric)?Object.values(hangulHint(c.lyric)).filter(Boolean).join('·'):(lyricVowel(c.lyric)?VOWEL_NAMES[lyricVowel(c.lyric)]:'기본')}</small></div>)}{alignment.cues.length>24&&<span className="mv10-remaining">+{alignment.cues.length-24}음</span>}</div>}

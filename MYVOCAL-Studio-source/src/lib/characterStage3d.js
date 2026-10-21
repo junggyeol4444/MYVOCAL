@@ -5,6 +5,7 @@ export const STAGE_BACKDROPS=['concert','neon','theater'];
 export const STAGE_CAMERAS=['fixed','orbit','track','dolly','cuts'];
 export const STAGE_LIGHTS=['concert','warm','cool','pulse'];
 export const STAGE_FPS=[24,30];
+export const STAGE_MAX_SECONDS=360;
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const validString=(value,max)=>typeof value==='string'&&value.length<=max;
 const ensure=(ok,msg)=>{if(!ok)throw Error(msg);};
@@ -29,7 +30,7 @@ export function validateStageSettings(character,stage){
  ensure(modelAssets(character).some(a=>a.id===stage.assetId),'캐릭터 원본 3D 모델을 찾을 수 없습니다.');
  ensure(STAGE_BACKDROPS.includes(stage.backdrop)&&STAGE_CAMERAS.includes(stage.camera)&&STAGE_LIGHTS.includes(stage.lights),'무대·카메라·조명 설정 오류');
  for(const key of ['duration','fps','yaw','pitch','zoom','lightIntensity','cameraMotion','lightMotion','expressionWeight','speed'])ensure(finite(stage[key]),`${key} 설정 오류`);
- ensure(stage.duration>=2&&stage.duration<=30&&STAGE_FPS.includes(stage.fps),'영상 길이 또는 FPS 범위 오류');
+ ensure(stage.duration>=2&&stage.duration<=STAGE_MAX_SECONDS&&STAGE_FPS.includes(stage.fps),'영상 길이 또는 FPS 범위 오류');
  ensure(Math.abs(stage.yaw)<=180&&Math.abs(stage.pitch)<=60&&stage.zoom>=.7&&stage.zoom<=1.5,'카메라 설정 범위 오류');
  ensure(stage.lightIntensity>=.2&&stage.lightIntensity<=2&&stage.cameraMotion>=0&&stage.cameraMotion<=2&&stage.lightMotion>=0&&stage.lightMotion<=2,'연출 강도 범위 오류');
  ensure(validString(stage.animation,100)&&validString(stage.motion,20)&&validString(stage.expression,30),'모션·표정 설정 오류');

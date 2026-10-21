@@ -56,7 +56,7 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
   }catch(e){notify('3D 공연 영상 출력 실패: '+e.message);}finally{busy.current=false;abort.current=null;setExporting(false);start.current=0;}}
  const stageFields=(label,key,min,max,step)=> <Field label={`${label}: ${settings[key]}`}><input type="range" style={{width:'100%'}} min={min} max={max} step={step} value={settings[key]} disabled={exporting} onChange={e=>patch(key,Number(e.target.value))}/></Field>;
  return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}>
-  <Notice>**STEP84 · 3D 무대 연출** — 기존 VRM/GLB 캐릭터를 무대에 배치하고 카메라·조명·배경·본/모션을 실제 WebGL에서 재생합니다. 최대 30초 **무음 WebM 공연 영상**을 로컬에서 녹화합니다. 저장된 STEP85 음소 Lip Sync와 STEP87 표정 계획은 미리보기와 녹화에 반영하며, 98단계 최종 MP4 합성은 포함하지 않습니다.</Notice>
+  <Notice>**STEP84 · 3D 무대 연출** — 기존 VRM/GLB 캐릭터를 무대에 배치하고 카메라·조명·배경·본/모션을 실제 WebGL에서 재생합니다. 최대 360초 **WebM 공연 영상(가창 WAV 오디오 선택 가능)**을 로컬에서 녹화합니다. 저장된 STEP85 음소 Lip Sync와 STEP87 표정 계획은 미리보기와 녹화에 반영하며, 98단계 최종 MP4 합성은 포함하지 않습니다.</Notice>
   <Field label="등록된 3D 원본"><select value={settings.assetId} disabled={exporting} onChange={e=>selectAsset(e.target.value)}>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
   <p role="status" className="muted">{status}</p>
   <canvas ref={canvas} width="640" height="360" aria-label={`${character.name} 3D 무대 공연 화면`} style={{display:'block',width:'min(100%,640px)',height:'auto',background:'#0b1020',borderRadius:8}}/>
@@ -69,7 +69,7 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
   <Field label="표정"><select disabled={exporting} value={settings.expression} onChange={e=>patch('expression',e.target.value)}>{EXPRESSIONS.map(e=><option key={e} value={e}>{e}</option>)}</select></Field>
   <Field label="모션 재생 배속"><input disabled={exporting} type="number" min="0.1" max="3" step="0.1" value={settings.speed} onChange={e=>{if(e.target.value!=='')patch('speed',Number(e.target.value));}}/></Field>
   <Field label="모델 내장 애니메이션"><select disabled={!model||exporting} value={settings.animation} onChange={e=>patch('animation',e.target.value)}><option value="">기본 모션 사용</option>{model?.animations.map((a,i)=><option key={i} value={a.name}>{a.name}</option>)}</select></Field>
-  <Field label="영상 길이 (2~30초)"><input type="number" min="2" max="30" step="1" disabled={exporting} value={settings.duration} onChange={e=>{if(e.target.value!=='')patch('duration',Number(e.target.value));}}/></Field>
+  <Field label="영상 길이 (2~360초)"><input type="number" min="2" max="360" step="1" disabled={exporting} value={settings.duration} onChange={e=>{if(e.target.value!=='')patch('duration',Number(e.target.value));}}/></Field>
   <Field label="출력 프레임률"><select disabled={exporting} value={settings.fps} onChange={e=>patch('fps',Number(e.target.value))}>{STAGE_FPS.map(n=><option key={n} value={n}>{n} FPS</option>)}</select></Field></div>
   {stageFields('기본 카메라 회전(°)','yaw',-180,180,5)}{stageFields('카메라 높이(°)','pitch',-60,60,5)}{stageFields('기본 줌','zoom',.7,1.5,.05)}
   {stageFields('카메라 동작 강도','cameraMotion',0,2,.1)}{stageFields('조명 밝기','lightIntensity',.2,2,.1)}{stageFields('조명 움직임','lightMotion',0,2,.1)}
@@ -78,6 +78,6 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
   <Field label="3D 공연 영상에 실제 가창 WAV 음성 추가 (선택)"><input type="file" accept=".wav,audio/wav" disabled={exporting} onChange={e=>setSingingWav(e.target.files?.[0]||null)}/></Field>
   <Notice>선택한 WAV는 실제 미디어 오디오 트랙으로 녹화됩니다. 저장된 STEP85 입 모양 시간표는 동일한 공연 시간에 VRM 표정 모프로 렌더링됩니다. 원본 모델과 WAV는 수정하지 않습니다.</Notice>
   <div className="look-actions"><Button variant="primary" disabled={!model||exporting||!supportedStageWebM()} onClick={record}>{exporting?`WebM 녹화 중 ${Math.round(progress*100)}%`:'공연 영상 WebM 내보내기'}</Button>{exporting&&<Button onClick={()=>abort.current?.abort()}>녹화 취소</Button>}</div>
-  <Notice>출력은 **무음 WebM**입니다. 영상 인코딩은 사용 중인 브라우저의 MediaRecorder·WebGL 지원에 따라 달라집니다. 오디오 파일을 선택하면 실제 WAV 음성이 함께 녹화되며, 저장된 Lip Sync 타임라인이 3D 입 모양에 적용됩니다. MToon/PBR·물리효과가 없는 Step83 로컬 렌더러와 동일한 3D 모델 제약이 적용됩니다. 원본 파일은 변경하지 않습니다.</Notice>
+  <Notice>WAV를 선택하면 음성이 포함된 **WebM**을 출력하고, 선택하지 않으면 무음입니다. 영상 인코딩은 사용 중인 브라우저의 MediaRecorder·WebGL 지원에 따라 달라집니다. 오디오 파일을 선택하면 실제 WAV 음성이 함께 녹화되며, 저장된 Lip Sync 타임라인이 3D 입 모양에 적용됩니다. MToon/PBR·물리효과가 없는 Step83 로컬 렌더러와 동일한 3D 모델 제약이 적용됩니다. 원본 파일은 변경하지 않습니다.</Notice>
  </div>;
 }
