@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import uuid
+from rvc_pitch_coverage import inspect_rvc_pitch_coverage
 
 
 REQUIRED = (
@@ -122,6 +123,13 @@ def execute(args):
             raise RuntimeError('RVC 전처리가 유효한 음성 구간을 생성하지 못했습니다')
         run_stage(root, '2/6 F0 추출', ['train/dataset/extract_f0.py', 'cuda',
                   '1', '0', str(args.gpu), expdir, 'false'])
+        pitch = inspect_rvc_pitch_coverage(expdir / '2b-f0nsf')
+        print('[MYVOCAL RVC] 실제 F0 음역: ' +
+              f"유성 {pitch['voiced_ratio']:.1%}, " +
+              f"10~90백분위 {pitch['pitch_hz_p10']:.1f}~{pitch['pitch_hz_p90']:.1f}Hz, " +
+              f"음정 {pitch['distinct_semitones']}종", flush=True)
+        for recommendation in pitch['recommendations']:
+            print('[MYVOCAL RVC] 녹음 권장: ' + recommendation, flush=True)
         run_stage(root, '3/6 HuBERT 특징 추출', ['train/dataset/extract_hubert_feature.py',
                   'cuda:' + str(args.gpu), '1', '0', str(args.gpu), expdir, 'v2', 'false'])
         collect_filelist(expdir)
