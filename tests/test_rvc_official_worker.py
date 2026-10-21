@@ -80,7 +80,17 @@ class OfficialRVCWorkerTest(unittest.TestCase):
             self.fail('unexpected stage ' + stage)
 
     def execute(self, runner=None):
-        with patch.dict(sys.modules, {'torch': self.torch}), patch.object(worker.subprocess, 'run', side_effect=runner or self.fake_stage):
+        # 오케스트레이션 단위 테스트에서는 실제 RVC F0 분석만 격리한다.
+        # 실제 Hz 음역 분석은 별도 실제 .npy 기반 단위 테스트에서 검사한다.
+        def fake_pitch(folder):
+            if not Path(folder).is_dir():
+                raise RuntimeError('RVC 실제 F0 결과 폴더가 없습니다')
+            return {'voiced_ratio': 0.8, 'pitch_hz_p10': 150.0,
+                    'pitch_hz_p90': 450.0, 'distinct_semitones': 12,
+                    'recommendations': []}
+        with patch.dict(sys.modules, {'torch': self.torch}), \
+             patch.object(worker.subprocess, 'run', side_effect=runner or self.fake_stage), \
+             patch.object(worker, 'inspect_rvc_pitch_coverage', side_effect=fake_pitch):
             worker.execute(self.args)
 
     def test_five_real_stage_commands_and_originals_untouched(self):
