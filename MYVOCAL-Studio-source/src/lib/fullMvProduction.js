@@ -17,7 +17,7 @@ export async function runFullLocalMv({
  signal,onProgress=()=>{}
 },{
  batch=runMvBatch,plan=planMvVideoRender,load=loadMvVideoAssets,record=recordMvWebm,
- mix=mixdownWav,audioDuration=audioEnd,captions=buildMvLyricCaptions,
+ mix=null,audioDuration=null,captions=buildMvLyricCaptions,
  overlay=planMvLipSyncOverlay,revision=mvExportRevision,verify=verifyMvExportRevision,
  getAsset=getFile,preflight=assertMvExportEnvironment
 }={}){
@@ -27,7 +27,7 @@ export async function runFullLocalMv({
  const characterList=()=>currentData?.()?.characters||data?.characters||[];
  const before=plan(project,characterList());
  preflight();
- if(before.durationSec>300)throw Error('현재 자동 MV는 최대 5분입니다.');
+ if(before.durationSec>360)throw Error('현재 자동 MV는 최대 6분입니다.');
  const safeLip=lipPlacement?overlay(project,characterList(),lipPlacement):null;
  // Preflight the selected media and optional user-placed visemes before GPU calls.
  if(safeLip&&!safeLip.matchedScenes)throw Error('배치에 연결된 립싱크 입 모양이 없습니다.');
@@ -47,9 +47,12 @@ export async function runFullLocalMv({
   const mouth=lipPlacement?overlay(latest,chars,lipPlacement):null;
   const captionsState=includeCaptions?captions(latest):null;
   const useCaptions=!!includeCaptions&&captionsState?.status==='ready';
-  const nativeAudio=(!audioDuration||!mix)?await import('./audioEngine.js'):null;
-  const audioLength=audioDuration||nativeAudio.audioEnd;
-  const mixdown=mix||nativeAudio.mixdownWav;
+  // Resolve the real MYVOCAL audio engine only for requested audio.
+  // The original defaults referenced undeclared names and threw ReferenceError
+  // before any model inference or video frames could be recorded.
+  const nativeAudio=includeAudio&&(!audioDuration||!mix)?await import('./audioEngine.js'):null;
+  const audioLength=audioDuration||nativeAudio?.audioEnd;
+  const mixdown=mix||nativeAudio?.mixdownWav;
   const useAudio=!!includeAudio&&audioLength(latest)>0;
   const snapshot=revision(latest,chars,{includeLipSync:!!mouth});
   onProgress('완성 MV 오디오·장면 불러오는 중');

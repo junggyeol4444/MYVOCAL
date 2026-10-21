@@ -8,6 +8,16 @@ import {getFile,putFileNew} from './assetDb.js';
 import {genId} from './schema.js';
 import {validatePersonSource,generatePersonMvImage} from './imageToMv.js';
 import {validateCharacterArtwork,generateCharacterMvImage} from './characterToMv.js';
+// A registered character reuses the SAME sampling seed in each scene.
+// img2img still uses the original authorized reference; seed consistency
+// reduces variation but does not guarantee neural identity equivalence.
+export function stableMvCharacterSeed(projectId,characterId){
+ const key=String(projectId||'')+'|'+String(characterId||'');
+ if(!projectId||!characterId||key.length>600)throw Error('고정할 캐릭터·프로젝트 ID가 올바르지 않습니다.');
+ let value=2166136261;
+ for(const point of key){value=Math.imul(value^point.codePointAt(0),16777619);}
+ return (value>>>0)%2000000000;
+}
 const sceneReference=(scene,character)=>{
  if(!scene?.personMv&&!scene?.characterMv)return null;
  if(scene.personMv&&scene.characterMv)throw Error('같은 장면에 사람과 캐릭터 원본을 동시에 연결할 수 없습니다.');
@@ -54,7 +64,7 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   let request=buildSceneImageRequest(live,scene,character,direction);
   if(!scene.imageAssetId){
    progress?.(`${index+1}/${plan.total}장면: ComfyUI 이미지 생성 중`);
-   const seed=Math.floor(Math.random()*2000000000);
+   const seed=character?.id?stableMvCharacterSeed(initialId,character.id):Math.floor(Math.random()*2000000000);
    let referenceImage=null;
    if(reference){
     const original=await loadFile(reference.assetId);

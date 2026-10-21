@@ -29,7 +29,7 @@ export function buildMvLyricCaptions(project){
  const entries=[];
  for(const cue of alignment.cues){
   if(!cue||typeof cue.lyric!=='string'||!Number.isFinite(cue.startSec)||
-    !Number.isFinite(cue.endSec)||cue.startSec<0||cue.endSec<=cue.startSec||cue.endSec>300)
+    !Number.isFinite(cue.endSec)||cue.startSec<0||cue.endSec<=cue.startSec||cue.endSec>360)
    return {status:'invalid',captions:[],note:'가사 싱크의 시간 또는 텍스트가 잘못되었습니다.'};
   const text=cleanText(cue.lyric);
   if(!text||text==='—')continue;

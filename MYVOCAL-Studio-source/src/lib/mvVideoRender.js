@@ -8,14 +8,14 @@ import {drawMvLipSyncOverlay} from './mvLipSyncOverlay.js';
 export const MV_VIDEO_WIDTH=640;
 export const MV_VIDEO_HEIGHT=360;
 export const MV_VIDEO_FPS=12;
-export const MV_VIDEO_MAX_SEC=300;
+export const MV_VIDEO_MAX_SEC=360;
 const roundMs=n=>Math.round(n*1000)/1000;
 
 export function planMvVideoRender(project,characters=[]){
  const audit=auditMvStoryboard(project,characters);
  if(audit.errors)throw Error(`장면 시간/형식 오류 ${audit.errors}개를 수정해야 영상을 만들 수 있습니다.`);
  if(!audit.rows.length)throw Error('내보낼 영상 장면이 없습니다.');
- if(audit.durationSec>MV_VIDEO_MAX_SEC)throw Error('현재 영상 저장은 최대 5분까지 지원합니다.');
+ if(audit.durationSec>MV_VIDEO_MAX_SEC)throw Error('현재 영상 저장은 최대 6분까지 지원합니다.');
  const scenes=audit.rows.map(row=>{
   const original=project.scenes[row.index];
   const clip=original.videoClipAssetId;

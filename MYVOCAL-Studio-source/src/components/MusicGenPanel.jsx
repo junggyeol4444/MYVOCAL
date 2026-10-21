@@ -10,6 +10,7 @@ import {renderStemRemixMaster} from '../lib/stemRemixMaster.js';
 import {parseStemMixPreset,serializeStemMixPreset} from '../lib/stemMixPreset.js';
 import {renderEditedStemTracks} from '../lib/stemTimelineExport.js';
 import {runMusicProductionPipeline} from '../lib/musicProductionPipeline.js';
+import {persistNeuralMusicTracks} from '../lib/musicProductionCommit.js';
 import {transcribeStemToMidi} from '../lib/stemMidiClient.js';
 import {genId} from '../lib/schema';
 import {putFileNew,removeFile,putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb';
@@ -41,8 +42,7 @@ export default function MusicGenPanel({project,onChange,notify}){
  const oneClickProduction=async()=>{
   if(busy||!python||!modelDir||!demucsRepo)return;
   const initial=latest.current,controller=new AbortController();active.current=controller;
-  setBusy(true);setError('');setProgress('실제 AI 반주 원클릭 제작 준비 중');
-  let newAsset='';
+  setBusy(true);setError('');setProgress('MusicGen 신경망 → Demucs 악기 분리 → PCM 마스터 생성 중');
   try{
    const result=await runMusicProductionPipeline({
     settings:{python,modelDir,prompt,seconds:Number(seconds),seed:Number(seed)},
@@ -51,21 +51,18 @@ export default function MusicGenPanel({project,onChange,notify}){
     stemMix,signal:controller.signal,onProgress:setProgress
    });
    if(controller.signal.aborted||latest.current!==initial)throw Error('프로젝트 변경 또는 제작 취소');
-   const info=await readAudioInfo(result.master);
-   if(controller.signal.aborted||latest.current!==initial)throw Error('프로젝트 변경 또는 제작 취소');
-   newAsset=genId('musicmaster');
-   const track=makeImportedVocalTrack(initial,result.master,newAsset,info.duration);
-   track.id=genId('trk');track.name='AI 반주·악기 분리 PCM 마스터';track.type='instrument';track.volume=75;
-   await putFileNew(newAsset,result.master);
-   if(controller.signal.aborted||latest.current!==initial)throw Error('프로젝트 변경 또는 제작 취소');
-   await Promise.resolve(onChange({...initial,tracks:[...(initial.tracks||[]),track]}));
-   newAsset='';
+   // All neural model outputs become real editable audio assets in ONE project commit.
+   // Demucs stems play independently; the master remains muted as a preview
+   // because playing both would double the audio level.
+   const saved=await persistNeuralMusicTracks(initial,result,{current:()=>latest.current,onChange,signal:controller.signal,
+      info:readAudioInfo,createTrack:makeImportedVocalTrack,newId:genId,
+      save:putFilesAtomic,remove:deleteFilesAtomic});
    setWav({file:result.wav,projectId:initial.id});
    setStems({...result.stems,projectId:initial.id});
    setRemix({file:result.master,projectId:initial.id});
    setUrl(URL.createObjectURL(result.wav));
-   notify('실제 MusicGen 생성→Demucs 악기 분리→PCM 마스터링을 완료하고 새 편집 트랙에 저장했습니다. 기존 자산은 유지됩니다.');
-  }catch(e){if(newAsset)await removeFile(newAsset).catch(()=>{});setError(e.message)}
+   notify('실제 MusicGen·Demucs 결과 '+saved.assets+'개를 독립 WAV 트랙으로 저장했습니다. 마스터 참고 트랙은 중복 재생을 막기 위해 음소거했습니다.');
+  }catch(e){setError(e.message)}
   finally{active.current=null;setBusy(false);setProgress('')}
  };
  const separate=async()=>{

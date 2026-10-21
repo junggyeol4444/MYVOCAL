@@ -1,7 +1,7 @@
 // Real-time browser/WebView2 WebM recording of the existing MV storyboard.
 // Frames come from user-saved local stills/clips. Optional sound comes from
 // MYVOCAL's existing WAV mixdown. AI video generation is NOT performed here.
-import {drawMvVideoFrame,findMvVideoScene,MV_VIDEO_FPS,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT} from './mvVideoRender.js';
+import {drawMvVideoFrame,findMvVideoScene,MV_VIDEO_FPS,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT,MV_VIDEO_MAX_SEC} from './mvVideoRender.js';
 
 export function selectMvWebmType(withAudio,supports){
  const choices=withAudio?
@@ -38,7 +38,7 @@ export async function recordMvWebm(plan,prepared,{
  canvasFactory=()=>document.createElement('canvas'),env=globalThis
 }={}){
  assertMvExportEnvironment(env);
- if(!plan?.scenes?.length||!Number.isFinite(plan.durationSec)||plan.durationSec<=0||plan.durationSec>300)
+ if(!plan?.scenes?.length||!Number.isFinite(plan.durationSec)||plan.durationSec<=0||plan.durationSec>MV_VIDEO_MAX_SEC)
   throw Error('영상 길이나 장면 정보가 올바르지 않습니다.');
  if(includeAudio&&typeof renderAudio!=='function')
   throw Error('음악 오디오를 제공할 수 없습니다.');
