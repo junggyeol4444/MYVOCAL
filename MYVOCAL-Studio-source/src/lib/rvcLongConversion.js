@@ -42,7 +42,7 @@ function pcmWavSlice(layout,startFrame,endFrame){
 // Neural conversion at a hard chunk edge can click or change timbre. Send
 // a short shared region to both inferences and crossfade their PCM results.
 // Every chunk is still a real WAV passed to the existing installed RVC CLI.
-export function planRVCWavChunks(input,{maxBytes=RVC_SOURCE_LIMIT,overlapSeconds=OVERLAP_SECONDS}={}){
+export function planRVCWavChunks(input,{maxBytes=RVC_SOURCE_LIMIT,overlapSeconds=OVERLAP_SECONDS,preferredSplitSeconds=[]}={}){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input);
  const layout=audioChunkLayout(bytes);
  if(!Number.isInteger(maxBytes)||maxBytes<4096||maxBytes>RVC_SOURCE_LIMIT)
@@ -58,9 +58,27 @@ export function planRVCWavChunks(input,{maxBytes=RVC_SOURCE_LIMIT,overlapSeconds
  const coreCapacity=maxFrames-2*overlapFrames;
  const count=Math.ceil(layout.frames/coreCapacity);
  if(count>MAX_PARTS)throw Error('긴 RVC 가창은 최대 16개 구간으로 처리합니다.');
- const chunks=[],balancedFrames=Math.ceil(layout.frames/count);
+ if(!Array.isArray(preferredSplitSeconds)||preferredSplitSeconds.length>2048||
+    preferredSplitSeconds.some(x=>!Number.isFinite(x)||x<=0||x>=layout.info.durationSec))
+  throw Error('MIDI 휴지 구간 분할 시간표가 올바르지 않습니다.');
+ const candidates=[...new Set(preferredSplitSeconds.map(s=>Math.round(s*layout.info.sampleRate)))];
+ const boundaries=[0];
+ for(let i=1;i<count;i++){
+  const previous=boundaries[i-1],remaining=count-i;
+  const minimum=Math.max(previous+1,layout.frames-remaining*coreCapacity);
+  const maximum=Math.min(previous+coreCapacity,layout.frames-remaining);
+  if(minimum>maximum)throw Error('RVC 가창 분할 용량으로 전곡을 나눌 수 없습니다.');
+  const nominal=Math.max(minimum,Math.min(maximum,Math.round(i*layout.frames/count)));
+  const maxDeviation=Math.floor(layout.info.sampleRate*.9);
+  const preferred=candidates.filter(frame=>frame>=minimum&&frame<=maximum&&
+   Math.abs(frame-nominal)<=maxDeviation);
+  preferred.sort((a,b)=>Math.abs(a-nominal)-Math.abs(b-nominal)||a-b);
+  boundaries.push(preferred[0]??nominal);
+ }
+ boundaries.push(layout.frames);
+ const chunks=[];
  for(let i=0;i<count;i++){
-  const coreFrom=i*balancedFrames,coreTo=Math.min(layout.frames,(i+1)*balancedFrames);
+  const coreFrom=boundaries[i],coreTo=boundaries[i+1];
   const from=Math.max(0,coreFrom-overlapFrames),to=Math.min(layout.frames,coreTo+overlapFrames);
   const wav=pcmWavSlice(layout,from,to);
   if(wav.byteLength>maxBytes)throw Error('RVC 분할 WAV 크기 제한을 초과했습니다.');
@@ -143,7 +161,8 @@ export function joinOverlappedRVCWavs(parts,durationSec){
  return new Blob([result],{type:'audio/wav'});
 }
 export async function convertLongSingingWithRVC(file,settings,{
- session,signal,onProgress=()=>{},convert=convertVoiceWithRVC,maxInputBytes=RVC_SOURCE_LIMIT
+ session,signal,onProgress=()=>{},convert=convertVoiceWithRVC,maxInputBytes=RVC_SOURCE_LIMIT,
+ preferredSplitSeconds=[]
 }={}){
  if(!(file instanceof Blob))throw Error('RVC 가창 원본 WAV가 필요합니다.');
  if(!Number.isInteger(maxInputBytes)||maxInputBytes<4096||maxInputBytes>RVC_SOURCE_LIMIT)throw Error('RVC 분할 크기 설정이 올바르지 않습니다.');
@@ -158,7 +177,7 @@ export async function convertLongSingingWithRVC(file,settings,{
   onProgress(1,1);
   return result;
  }
- const {chunks,durationSec}=planRVCWavChunks(bytes,{maxBytes:maxInputBytes});
+ const {chunks,durationSec}=planRVCWavChunks(bytes,{maxBytes:maxInputBytes,preferredSplitSeconds});
  const rendered=[];
  for(let i=0;i<chunks.length;i++){
   if(signal?.aborted)throw Error('RVC 긴 곡 변환을 취소했습니다.');
