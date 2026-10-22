@@ -83,7 +83,9 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   if(!scene||(!includeReferences&&(scene.personMv||scene.characterMv))||scene.videoClipAssetId)throw Error('장면이 변경됐습니다. 기존 미디어를 보존하고 중단했습니다.');
   let character=(currentData()?.characters||[]).find(c=>c.id===(scene.characterId||live.characterId));
   const reference=sceneReference(scene,character)||authorizedAutoSceneReference(scene,character,{includeReferences});
-  if(character?.rights==='reference')throw Error('Reference 전용 캐릭터로 AI 이미지를 생성할 수 없습니다.');
+  if(character&&(!['self','owned','licensed'].includes(character.rights)||
+   (character.rights==='licensed'&&!String(character.rightsNote||'').trim())))
+   throw Error('사용 허가가 확인되지 않은 인물·캐릭터로 AI 이미지를 생성할 수 없습니다.');
   let direction=null;try{direction=buildMvDirectionPlan(live,currentData()?.characters||[]).scenes.find(s=>s.id===sceneId)}catch{}
   let request=buildSceneImageRequest(live,scene,character,direction,reference);
   if(!scene.imageAssetId){
