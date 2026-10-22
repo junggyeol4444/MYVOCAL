@@ -96,6 +96,15 @@ export async function generateAndStoreMvSinging(project,{
     convertRegisteredRVC(chunk,{...settings,modelFile,indexFile},requestOptions);
    onProgress('등록된 RVC 체크포인트와 FAISS 인덱스를 실제 로컬 추론에 연결했습니다.');
   }
+  // 원본 한국어 노랫말과 MIDI 가창 시간표의 실제 휴지 경계를
+  // 긴 곡 RVC 신경망 구간 분할에 전달한다. 음성 원본은 읽기만 한다.
+  const cues=alignment.cues||[];
+  conversion.preferredSplitSeconds=cues.slice(1).flatMap((cue,i)=>{
+   const previous=cues[i];
+   const pause=Number(cue.startSec)-Number(previous.endSec);
+   return Number.isFinite(pause)&&pause>=.18?
+    [(Number(cue.startSec)+Number(previous.endSec))/2]:[];
+  });
   output=await convert(original,{...rvcOptions,rightsConfirmed:true},conversion);
   guard();
   if(!(output instanceof Blob)||output.size<44)throw Error('RVC가 실제 WAV 파일을 생성하지 않았습니다.');
