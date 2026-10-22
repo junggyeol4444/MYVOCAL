@@ -10,6 +10,22 @@ function scoreSection(i,total){
  if(i>=Math.floor(total*.75))return 'Final Chorus';
  return i%4===3?'Chorus':i%4===2?'Pre-Chorus':'Verse';
 }
+function projectSectionAtBeat(project,beat){
+ const sections=Array.isArray(project?.sections)?project.sections:[];
+ let position=0;
+ for(const section of sections.slice(0,256)){
+  const bars=Number(section?.bars);
+  if(!Number.isInteger(bars)||bars<1||bars>512)return null;
+  const end=position+4*bars;
+  if(beat<end){
+   const genres=Array.isArray(section.genreMix)?section.genreMix.slice(0,5)
+    .map(g=>limited(g?.name,30)).filter(Boolean).join(', '):'';
+   return {name:limited(section.name||'Verse',70),genres};
+  }
+  position=end;
+ }
+ return null;
+}
 export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSec=.5,segmentSeconds=[],basePrompt}={}){
  if(!Number.isInteger(segments)||segments<2||segments>20||
     !Number.isFinite(seconds)||seconds<3||seconds>20||
@@ -35,6 +51,9 @@ export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSe
   const to=(fromSec+chunkSec)*bpm/60;
   const center=(from+to)/2;
   const section=Math.min(totalSections-1,Math.floor(center/32));
+  const actualSection=projectSectionAtBeat(project,center);
+  const sectionName=actualSection?.name||scoreSection(section,totalSections);
+  const sectionGenres=actualSection?.genres||genre;
   const take=role=>recent.get(role).filter(n=>Number.isInteger(n.pitch)&&n.pitch>=0&&n.pitch<=127&&
    Number.isFinite(n.startBeat)&&Number.isFinite(n.length)&&n.length>0&&
    n.startBeat<to&&n.startBeat+n.length>from).sort((a,b)=>a.startBeat-b.startBeat);
@@ -46,7 +65,7 @@ export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSe
   const drums=take('drums');
   const energy=drums.length?drums.reduce((s,n)=>s+Number(n.velocity||0),0)/drums.length:75;
   const intensity=energy>=95?'powerful':energy<=55?'gentle':'balanced';
-  return limited(base+'; '+genre+'; '+key+'; '+bpm+' BPM; '+scoreSection(section,totalSections)+
+  return limited(base+'; '+sectionGenres+'; '+key+'; '+bpm+' BPM; '+sectionName+
    '; continuous original arrangement with drums, bass, guitar, keys and pads; '+
    intensity+' energy; MIDI lead pitches '+(melody||'carry preceding motif')+
    '; chord pitch classes '+(harmony||'follow established harmony')+
