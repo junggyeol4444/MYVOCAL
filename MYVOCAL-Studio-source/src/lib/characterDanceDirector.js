@@ -44,9 +44,39 @@ export function createDancePlan(character,project=null,{bpm=project?.bpm??120,du
  const plan={version:DANCE88_VERSION,bpm,durationMs:Math.round(durationSec*1000),projectId:project?.id||'',genreMix:mix,referenceAssetId,sections,cues};
  return validateDancePlan(character,plan);
 }
+// 원본 29·30항: 기존 30초 STEP88을 보존하면서 실제 음악 프로젝트
+// 3~6분 BPM·곡 구간을 전부 포함하는 춤 연출을 생성한다.
+// 사용자가 직접 작성한 STEP88 큐는 이 함수에서 절대 변경하지 않는다.
+export function createFullSongDancePlan(character,project,{durationSec=project?.neuralAutoScore?.durationSec}={}){
+ permitted(character);
+ if(!project?.id||!Array.isArray(project.tracks))
+  fail('장편 춤을 만들 기존 음악 프로젝트가 필요합니다.');
+ if(!modelAssets(character).length&&!character.layerPlan?.reviewed)
+  fail('장편 춤에는 등록된 2D/3D 캐릭터가 필요합니다.');
+ const bpm=Number(project.bpm);
+ if(!finite(bpm,40,240)||!finite(durationSec,150,360))
+  fail('3~6분 장편 춤에는 실제 곡 길이와 40~240 BPM이 필요합니다.');
+ const mix=resolveGenreMix(project.genreMix??null,project.genre||'Rock');
+ const sections=sectionSnapshot(project,bpm,mix);
+ const durationMs=Math.round(durationSec*1000),barMs=240000/bpm;
+ const totalBars=Math.ceil(durationMs/barMs),barsPerCue=Math.max(1,Math.ceil(totalBars/256));
+ const cues=[];
+ for(let bar=0;bar<totalBars;bar+=barsPerCue){
+  const startMs=Math.round(bar*barMs);
+  const endMs=Math.min(durationMs,Math.round((bar+barsPerCue)*barMs));
+  if(endMs<=startMs)continue;
+  const section=sections.find(x=>startMs>=x.startMs&&startMs<x.endMs)||sections.at(-1);
+  const isChorus=/chorus|후렴|drop/i.test(section.name);
+  cues.push({startMs,endMs,move:chooseMove(section.genreMix,section.name,bar),
+   strength:isChorus?.9:.65,section:section.name,referenceStartMs:null});
+ }
+ const plan={version:DANCE88_VERSION,bpm,durationMs,projectId:project.id,genreMix:mix,
+  referenceAssetId:'',sections,cues};
+ return validateDancePlan(character,plan);
+}
 export function validateDancePlan(character,plan){
  permitted(character);
- if(!valid(plan)||plan.version!==DANCE88_VERSION||!finite(plan.bpm,40,240)||!Number.isInteger(plan.durationMs)||plan.durationMs<2000||plan.durationMs>30000||typeof plan.projectId!=='string'||plan.projectId.length>120)fail('STEP88 춤 계획 버전·BPM·길이 오류');
+ if(!valid(plan)||plan.version!==DANCE88_VERSION||!finite(plan.bpm,40,240)||!Number.isInteger(plan.durationMs)||plan.durationMs<2000||plan.durationMs>360000||typeof plan.projectId!=='string'||plan.projectId.length>120)fail('STEP88 춤 계획 버전·BPM·길이 오류');
  if(!modelAssets(character).length&&!character.layerPlan?.reviewed)fail('사용 가능한 2D/3D 캐릭터가 없습니다.');
  validateGenreMix(plan.genreMix);
  if(typeof plan.referenceAssetId!=='string'||plan.referenceAssetId.length>120||plan.referenceAssetId&&!danceReferences(character).some(a=>a.id===plan.referenceAssetId))fail('STEP88 동작 참고 영상 자산을 찾지 못했습니다.');
