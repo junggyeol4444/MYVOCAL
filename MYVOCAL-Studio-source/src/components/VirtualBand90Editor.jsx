@@ -1,8 +1,8 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {Button,Field,Notice} from './UI';
 import {getFile} from '../lib/assetDb.js';
 import {downloadText} from '../lib/store.js';
-import {eligibleBandCharacters,createBand90,saveBand90,bandFrame90,BAND90_ROLES} from '../lib/virtualBand90.js';
+import {eligibleBandCharacters,createBand90,createFullSongBand90,saveBand90,bandFrame90,BAND90_ROLES} from '../lib/virtualBand90.js';
 import {modelAssets,parseCharacter3d} from '../lib/character3d.js';
 import {Character3dRenderer} from '../lib/character3dRenderer.js';
 import {createStageSettings,stageRigSettings} from '../lib/characterStage3d.js';
@@ -12,13 +12,37 @@ import {usableDancePlan} from '../lib/characterDanceDirector.js';
 import {usableExpressionPlan} from '../lib/characterExpressionDirector.js';
 import {usablePerformance89} from '../lib/characterPerformance89.js';
 import {recordStageWebM,supportedStageWebM} from '../lib/stage3dRecording.js';
+import {audioEnd,mixdownWav} from '../lib/audioEngine.js';
+import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
+import {resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
+import {makeFullSongInstrumentPerformance} from '../lib/fullSongInstrumentPerformance.js';
 const positions=['left','center','right'];
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
 export default function VirtualBand90Editor({project,characters,onSave,notify}){
  const [plan,setPlan]=useState(()=>project.band90||createBand90(project,characters));
  const [time,setTime]=useState(0),[playing,setPlaying]=useState(false),[busy,setBusy]=useState(false),[status,setStatus]=useState('멤버별 로컬 영상·모델을 불러옵니다.');
+ const [music,setMusic]=useState(null);
  const canvas=useRef(null),sources=useRef(new Map()),frameRef=useRef(0),lastRef=useRef(0),timeRef=useRef(0),abort=useRef(null);
  const available=eligibleBandCharacters(characters),byId=new Map(characters.map(c=>[c.id,c]));
+ const rolePerformance=useMemo(()=>{
+  const plans=new Map();
+  if(plan.durationSec<150)return plans;
+  for(const member of plan.members){
+   if(!['guitar','bass','drums','piano','strings','synth'].includes(member.role))continue;
+   try{plans.set(member.characterId,makeFullSongInstrumentPerformance(project,{durationSec:plan.durationSec,role:member.role}));}
+   catch{/* 해당 악기 MIDI가 없으면 기존 STEP89 공연 계획을 사용한다. */}
+  }
+  return plans;
+ },[project,plan.durationSec,plan.members]);
+ const lipByMember=useMemo(()=>{
+  const result=new Map();
+  for(const member of plan.members){
+   const c=byId.get(member.characterId);if(!c)continue;
+   try{result.set(c.id,resolveProjectVrmLipSync(project,c)?.lipSync||c.lipSync);}
+   catch{result.set(c.id,c.lipSync);}
+  }
+  return result;
+ },[project,characters,plan.members]);
  const patch=(key,value)=>setPlan(p=>({...p,[key]:value}));
  const patchMember=(index,key,value)=>setPlan(p=>({...p,members:p.members.map((m,i)=>i===index?{...m,[key]:value}:m)}));
  useEffect(()=>{let stopped=false;const fresh=new Map();setStatus('로컬 미디어 불러오는 중…');
@@ -35,8 +59,8 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   const active=bandFrame90(project,characters,plan,Math.max(0,Math.min(plan.durationSec,t)));const tileW=Math.floor(w/Math.max(1,active.length));
   active.forEach((member,i)=>{const c=byId.get(member.characterId),src=sources.current.get(c.id),x=i*tileW;ctx.save();ctx.beginPath();ctx.rect(x,0,tileW,h);ctx.clip();
    ctx.fillStyle=i%2?'#252d48':'#182b43';ctx.fillRect(x,0,tileW,h);
-   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,c.stage3d||null,c.lipSync,usableExpressionPlan(c),c,usableDancePlan(c),usablePerformance89(c));ctx.drawImage(src.element,x,0,tileW,h-62);}
-    else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,c.lipSync,usableExpressionPlan(c),c,usableDancePlan(c),usablePerformance89(c));ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
+   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,c.stage3d||null,lipByMember.get(c.id)||c.lipSync,usableExpressionPlan(c),c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(src.element,x,0,tileW,h-62);}
+    else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,usableExpressionPlan(c),c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='person'&&src.element.readyState>=2)ctx.drawImage(src.element,x,0,tileW,h-62);
    }catch{/* display fallback tile instead of failing the entire ensemble */}
    ctx.fillStyle='#0a1022';ctx.fillRect(x,h-62,tileW,62);ctx.fillStyle='white';ctx.font='bold 21px sans-serif';ctx.fillText(String(member.name).slice(0,28),x+12,h-34);ctx.font='15px sans-serif';ctx.fillStyle='#b8d2ef';ctx.fillText(`${member.role} · ${member.viseme?.viseme||'-'} · ${member.kind}`,x+12,h-12);ctx.restore();});
@@ -48,17 +72,59 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   try{draw(timeRef.current);}catch(e){setStatus(e.message);setPlaying(false);return;}
   setTime(timeRef.current);if(timeRef.current>=plan.durationSec){setPlaying(false);return;}frameRef.current=requestAnimationFrame(tick);};frameRef.current=requestAnimationFrame(tick);return ()=>cancelAnimationFrame(frameRef.current);},[playing,busy,plan]);
  const seek=t=>{timeRef.current=t;setTime(t);draw(t);};
+ const prepareFullSong=async()=>{
+  if(busy)return;
+  setBusy(true);
+  try{
+   setStatus('기존 악기·보컬·MIDI 전곡 WAV 믹스 생성 중');
+   const duration=audioEnd(project),full=createFullSongBand90(project,characters,duration,{existing:plan});
+   const wav=await mixdownWav(project,{bitDepth:16,sampleRate:44100,channels:2});
+   if(!(wav instanceof Blob)||wav.size<44||wav.size>96*1024*1024)
+    throw Error('실제 음악 WAV가 없거나 96MiB를 초과합니다.');
+   setPlan(full);
+   setMusic({file:wav,projectId:project.id,durationSec:duration});
+   notify('3~6분 원곡 악기·보컬 믹스와 가상 밴드 6인 이내 등장 시간표를 연결했습니다.');
+  }catch(e){notify('전체 밴드 음악 연결 실패: '+e.message);}
+  finally{setBusy(false);}
+ };
+ const prepareCurrentMusic=async()=>{
+  if(busy)return;setBusy(true);
+  try{
+   const duration=audioEnd(project);
+   if(duration+.08<plan.durationSec)throw Error('현재 공연 영상보다 프로젝트 음악이 짧습니다.');
+   const wav=await mixdownWav(project,{bitDepth:16,sampleRate:44100,channels:2});
+   if(!(wav instanceof Blob)||wav.size<44||wav.size>96*1024*1024)
+    throw Error('프로젝트 음악 WAV가 없거나 96MiB를 초과합니다.');
+   setMusic({file:wav,projectId:project.id,durationSec:duration});
+   notify('기존 DAW의 실제 음악·가창 믹스를 가상 밴드 공연에 연결했습니다.');
+  }catch(e){notify('밴드 음악 연결 실패: '+e.message);}
+  finally{setBusy(false);}
+ };
  const save=()=>{try{onSave(saveBand90(project,characters,plan));notify('90단계 다중 캐릭터 공연 타임라인을 저장했습니다.');}catch(e){notify('공연 저장 오류: '+e.message);}};
- const record=async()=>{try{saveBand90(project,characters,plan);if(!supportedStageWebM())throw Error('이 브라우저는 무음 WebM 녹화를 지원하지 않습니다.');setPlaying(false);setBusy(true);const controller=new AbortController();abort.current=controller;
-  const video=await recordStageWebM({canvas:canvas.current,duration:plan.durationSec,fps:plan.fps,draw:t=>{for(const m of plan.members){const src=sources.current.get(m.characterId);if(src?.kind==='person'&&src.element.readyState>=1)try{src.element.currentTime=Math.max(0,t-m.startSec);}catch{}}draw(t);},signal:controller.signal});download(video,'MYVOCAL-Step90-band.webm');notify('90단계 무음 밴드 영상 출력 완료');
+ const record=async({includeAudio=false,asMp4=false}={})=>{try{saveBand90(project,characters,plan);if(!supportedStageWebM())throw Error('이 Windows EXE는 WebM 녹화를 지원하지 않습니다.');
+  if(includeAudio&&(!music||music.projectId!==project.id||music.durationSec+.08<plan.durationSec))throw Error('실제 음악 WAV를 연결해 주세요.');
+  if(asMp4&&!window.__MYVOCAL_SESSION_KEY)throw Error('MP4에는 로컬 Windows EXE 세션이 필요합니다.');setPlaying(false);setBusy(true);const controller=new AbortController();abort.current=controller;
+  const video=await recordStageWebM({canvas:canvas.current,duration:plan.durationSec,fps:plan.fps,
+   videoBitsPerSecond:plan.durationSec>180?1600000:2400000,
+   audioBlob:includeAudio?music.file:null,
+   draw:t=>{for(const m of plan.members){const src=sources.current.get(m.characterId);if(src?.kind==='person'&&src.element.readyState>=1)try{src.element.currentTime=Math.max(0,t-m.startSec);}catch{}}draw(t);},
+   signal:controller.signal});
+  download(video,'MYVOCAL-Step90-band.webm');
+  notify(includeAudio?'음악 포함 가상 밴드 실제 WebM 출력 완료':'가상 밴드 무음 WebM 출력 완료');
+  if(asMp4){
+   const mp4=await convertRecordedWebMToMP4(video,{session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal});
+   download(mp4,'MYVOCAL-Step90-band.mp4');
+   notify('가상 밴드 실제 FFmpeg MP4 출력 완료 · 기존 WebM도 보존했습니다.');
+  }
  }catch(e){notify('밴드 영상 출력 실패: '+e.message);}finally{abort.current=null;setBusy(false);}};
- return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}><Notice>**STEP90 가상 밴드** · 최대 6명의 2D·3D·실제 사람을 단일 Canvas에 동시에 합성하고 각자의 STEP85/87/88/89 연출을 사용합니다. 출력은 **무음 WebM**입니다. 별도 가창 오디오 믹스나 MP4는 98단계입니다. 실제 사람은 등록 영상 프레임만 사용합니다.</Notice>
- <Field label="영상 길이 (2~30초)"><input type="number" min="2" max="30" value={plan.durationSec} disabled={busy} onChange={e=>patch('durationSec',Number(e.target.value))}/></Field>
+ return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}><Notice>**STEP90 가상 밴드** · 최대 6명의 2D·3D·실제 사람을 단일 Canvas에 동시에 합성하고 각자의 STEP85/87/88/89 연출을 사용합니다. 기존 무음 WebM 출력도 유지하며 원곡 전체 음악·가창을 넣은 3~6분 WebM과 로컬 FFmpeg MP4도 출력합니다. 실제 사람은 등록 영상 프레임만 사용합니다.</Notice>
+ <Field label="영상 길이 (2~360초)"><input type="number" min="2" max="360" value={plan.durationSec} disabled={busy} onChange={e=>patch('durationSec',Number(e.target.value))}/></Field>
  <Field label="FPS"><select value={plan.fps} onChange={e=>patch('fps',Number(e.target.value))}><option value={24}>24</option><option value={30}>30</option></select></Field>
  {plan.members.map((m,i)=><div className="hstack" key={i} style={{gap:6,flexWrap:'wrap',margin:'8px 0'}}><select aria-label={`멤버 ${i+1}`} value={m.characterId} onChange={e=>patchMember(i,'characterId',e.target.value)}>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select aria-label={`역할 ${i+1}`} value={m.role} onChange={e=>patchMember(i,'role',e.target.value)}>{BAND90_ROLES.map(role=><option key={role}>{role}</option>)}</select><select value={m.position} onChange={e=>patchMember(i,'position',e.target.value)}>{positions.map(pos=><option key={pos}>{pos}</option>)}</select><label>시작<input type="number" min="0" step="0.1" style={{width:58}} value={m.startSec} onChange={e=>patchMember(i,'startSec',Number(e.target.value))}/></label><label>종료<input type="number" min="0" step="0.1" style={{width:58}} value={m.endSec} onChange={e=>patchMember(i,'endSec',Number(e.target.value))}/></label><Button onClick={()=>patch('members',plan.members.filter((_,j)=>j!==i))}>제외</Button></div>)}
  <Button disabled={plan.members.length>=6||available.length<=plan.members.length} onClick={()=>patch('members',[...plan.members,{characterId:available.find(c=>!plan.members.some(m=>m.characterId===c.id))?.id||'',role:'harmony',position:'center',startSec:0,endSec:plan.durationSec}])}>멤버 추가</Button>
- <p role="status">{status}</p><canvas ref={canvas} width="960" height="540" style={{display:'block',width:'100%',height:'auto',background:'#111827'}} aria-label="90단계 가상 밴드 동시 공연"/>
+ <div className="look-actions"><Button disabled={busy} onClick={prepareFullSong}>3~6분 전체 음악·밴드 연결</Button><Button disabled={busy} onClick={prepareCurrentMusic}>현재 밴드 음악 WAV 연결</Button></div>
+ <p role="status">{status}{music?.projectId===project.id?' · 음악 WAV 준비됨':''}</p><canvas ref={canvas} width="960" height="540" style={{display:'block',width:'100%',height:'auto',background:'#111827'}} aria-label="90단계 가상 밴드 동시 공연"/>
  <div className="look-actions"><Button disabled={busy} onClick={()=>setPlaying(v=>!v)}>{playing?'일시정지':'재생'}</Button><span>{time.toFixed(2)} / {plan.durationSec}초</span></div><input type="range" min="0" max={plan.durationSec} step="0.02" value={time} disabled={busy} onChange={e=>{setPlaying(false);seek(Number(e.target.value));}} style={{width:'100%'}}/>
- <div className="modal-actions"><Button disabled={busy} onClick={()=>downloadText(JSON.stringify({format:'MYVOCAL_BAND90',...plan},null,2),'MYVOCAL-Step90-band.json','application/json')}>JSON</Button><Button disabled={busy} onClick={save}>공연 설정 저장</Button><Button disabled={busy||!supportedStageWebM()} onClick={record}>무음 WebM 출력</Button>{busy&&<Button onClick={()=>abort.current?.abort()}>중단</Button>}</div>
- <Notice>프로그램 내부 3D WebGL/2D Canvas 렌더러를 재사용합니다. GPU·웹캠·동영상 디코딩은 실제 Windows에서 확인이 필요합니다. 3D 호환 모프가 없으면 발음에 따른 입 변화가 보이지 않습니다. 90단계는 오디오 녹음/믹싱·개별 MIDI 악기 모델 접촉을 생성하지 않습니다.</Notice></div>;
+ <div className="modal-actions"><Button disabled={busy} onClick={()=>downloadText(JSON.stringify({format:'MYVOCAL_BAND90',...plan},null,2),'MYVOCAL-Step90-band.json','application/json')}>JSON</Button><Button disabled={busy} onClick={save}>공연 설정 저장</Button><Button disabled={busy||!supportedStageWebM()} onClick={()=>record()}>무음 WebM 출력</Button><Button disabled={busy||!music||music.projectId!==project.id||!supportedStageWebM()} onClick={()=>record({includeAudio:true})}>음악 포함 WebM 출력</Button><Button disabled={busy||!music||music.projectId!==project.id||!supportedStageWebM()} onClick={()=>record({includeAudio:true,asMp4:true})}>음악 포함 MP4 출력</Button>{busy&&<Button onClick={()=>abort.current?.abort()}>중단</Button>}</div>
+ <Notice>프로그램 내부 3D WebGL/2D Canvas 렌더러를 재사용합니다. GPU·웹캠·동영상 디코딩은 실제 Windows에서 확인이 필요합니다. 3D 호환 모프가 없으면 발음에 따른 입 변화가 보이지 않습니다. 기존 DAW의 실제 악기·가창 믹스를 공연 오디오에 사용합니다. 6분 MP4는 로컬 FFmpeg 및 WAV·WebM 용량 제한을 따릅니다. 원본 WAV와 WebM을 보존합니다.</Notice></div>;
 }
