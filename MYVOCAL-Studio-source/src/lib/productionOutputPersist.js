@@ -19,21 +19,24 @@ export async function persistProductionDeliverables(project,outputs,{
  const entries=[],records=[],selected=new Set();
  for(const output of outputs){
   guard();
-  const kind=output?.kind,blob=output?.file;
-  if(!Object.hasOwn(PRODUCTION_OUTPUT_TYPES,kind)||selected.has(kind)||
+  const kind=output?.kind,blob=output?.file,variant=output?.variant||'base';
+  const uniqueKey=kind+':'+variant;
+  if(!Object.hasOwn(PRODUCTION_OUTPUT_TYPES,kind)||!['base','face-lip'].includes(variant)||
+    (variant==='face-lip'&&kind!=='mp4')||selected.has(uniqueKey)||
     !(blob instanceof Blob)||blob.type!==PRODUCTION_OUTPUT_TYPES[kind]||
     blob.size<44||blob.size>LIMITS[kind])
    throw Error('완성 WAV/WebM/MP4 실제 파일의 형식·용량 또는 중복이 올바르지 않습니다.');
   const assetId=newId('delivery');
   if(typeof assetId!=='string'||!/^delivery_[A-Za-z0-9_-]{1,90}$/.test(assetId)||seen.has(assetId))
    throw Error('최종 결과의 신규 자산 ID가 중복됐거나 올바르지 않습니다.');
-  seen.add(assetId);selected.add(kind);
+  seen.add(assetId);selected.add(uniqueKey);
   const timestamp=now();
   if(typeof timestamp!=='string'||!Number.isFinite(Date.parse(timestamp)))throw Error('최종 결과 생성 시간 오류');
-  const name='MYVOCAL-'+String(project.title||'작업').replace(/[^\w가-힣-]/g,'_').slice(0,55)+'-완성.'+kind;
+  const name='MYVOCAL-'+String(project.title||'작업').replace(/[^\w가-힣-]/g,'_').slice(0,55)+
+   '-완성'+(variant==='face-lip'?'-실사립싱크':'')+'.'+kind;
   const file=new File([blob],name,{type:PRODUCTION_OUTPUT_TYPES[kind]});
   entries.push([assetId,file]);
-  records.push({assetId,kind,mime:file.type,name:file.name,size:file.size,createdAt:timestamp,
+  records.push({assetId,kind,variant,mime:file.type,name:file.name,size:file.size,createdAt:timestamp,
    source:'real-local-music-mv-production'});
  }
  guard();
