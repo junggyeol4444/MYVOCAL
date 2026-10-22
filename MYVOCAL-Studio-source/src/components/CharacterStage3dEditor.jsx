@@ -13,6 +13,7 @@ import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {linkedVrmSingingProjects,resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
 import {inspectSingingWav} from '../lib/singingOutputValidation.js';
+import {audioEnd,mixdownWav} from '../lib/audioEngine.js';
 const backdrops={concert:'공연장 · 보라 LED',neon:'네온 · 사이버',theater:'극장 · 따뜻한 무대'};
 const cameras={fixed:'고정',orbit:'회전',track:'트래킹',dolly:'줌 인·아웃',cuts:'쇼트 전환'};
 const lights={concert:'스튜디오',warm:'웜',cool:'쿨',pulse:'박동 조명'};
@@ -76,6 +77,25 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
    notify('선택한 프로젝트의 실제 보컬 WAV·한국어 음소·곡 길이를 3D 무대에 연결했습니다.');
   }catch(e){notify('프로젝트 3D 무대 연결 실패: '+e.message);}
  };
+ const loadProjectMusic=async()=>{
+  try{
+   if(!activeProject)throw Error('연결할 음악 프로젝트가 없습니다.');
+   const duration=audioEnd(activeProject);
+   if(!Number.isFinite(duration)||duration<2||duration>360)
+    throw Error('프로젝트에 2~360초 길이의 실제 오디오 또는 MIDI가 필요합니다.');
+   const wav=await mixdownWav(activeProject,{bitDepth:16,channels:2,sampleRate:44100});
+   if(!(wav instanceof Blob))throw Error('기존 음악 편집기에서 WAV 믹스를 만들지 못했습니다.');
+   const info=inspectSingingWav(await wav.arrayBuffer());
+   if(!info.valid||info.peak<.001||info.durationSec<2||info.durationSec>360)
+    throw Error('프로젝트 전체 음악 WAV가 올바르지 않습니다.');
+   const synced=resolveProjectVrmLipSync(activeProject,character);
+   if(synced?.lipSync?.cues?.some(c=>c.endMs>info.durationSec*1000+50))
+    throw Error('한국어 립싱크 길이가 음악보다 깁니다.');
+   setSingingWav(new File([wav],'MYVOCAL-프로젝트-전체-음악.wav',{type:'audio/wav'}));
+   setSettings(old=>({...old,duration:Math.round(info.durationSec*100)/100}));
+   notify('프로젝트의 기존 모든 활성 악기·보컬 트랙을 한 개의 실제 음악 WAV로 믹싱하여 3D 공연에 연결했습니다. 원본 트랙은 보존됩니다.');
+  }catch(e){notify('3D 무대 전체 음악 연결 실패: '+e.message);}
+ };
  const save=()=>{try{const next=saveStageSettings(character,settings);onSave(next);notify('STEP84 3D 무대 설정 저장 완료. 원본 VRM/GLB는 유지됩니다.');}catch(e){notify('3D 무대 저장 실패: '+e.message);}};
  const json=()=>{try{downloadText(JSON.stringify(stageMetadata(character,settings),null,2),`MYVOCAL-Step84-${safeFilename(character.id)}-stage.json`,'application/json');}catch(e){notify(e.message);}};
  const snapshot=()=>{try{draw(clock.current);canvas.current.toBlob(blob=>{if(blob)downloadBlob(blob,`MYVOCAL-Step84-${safeFilename(character.id)}.png`);else notify('PNG 인코딩 실패');},'image/png');}catch(e){notify(e.message);}};
@@ -95,7 +115,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
  const stageFields=(label,key,min,max,step)=> <Field label={`${label}: ${settings[key]}`}><input type="range" style={{width:'100%'}} min={min} max={max} step={step} value={settings[key]} disabled={exporting} onChange={e=>patch(key,Number(e.target.value))}/></Field>;
  return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}>
   <Notice>**STEP84 · 3D 무대 연출** — 기존 VRM/GLB 캐릭터를 무대에 배치하고 카메라·조명·배경·본/모션을 실제 WebGL에서 재생합니다. 최대 360초 **WebM 공연 영상(가창 WAV 오디오 선택 가능)**을 로컬에서 녹화합니다. 저장된 STEP85 음소 Lip Sync와 STEP87 표정 계획은 미리보기와 녹화에 반영합니다. 기존 Windows EXE의 로컬 FFmpeg를 통한 실제 MP4 내보내기도 지원합니다.</Notice>
-  {eligibleProjects.length>0&&<><Field label="3D 공연에 연결할 한국어 Singing 프로젝트"><select disabled={exporting} value={activeProject?.id||''} onChange={e=>{setLinkedProjectId(e.target.value);setSingingWav(null);}}>{eligibleProjects.map(p=><option key={p.id} value={p.id}>{p.title||p.id}</option>)}</select></Field><div className="look-actions"><Button disabled={exporting} onClick={loadProjectVocal}>프로젝트 보컬 WAV·립싱크·곡 길이 연결</Button></div></>}
+  {eligibleProjects.length>0&&<><Field label="3D 공연에 연결할 한국어 Singing 프로젝트"><select disabled={exporting} value={activeProject?.id||''} onChange={e=>{setLinkedProjectId(e.target.value);setSingingWav(null);}}>{eligibleProjects.map(p=><option key={p.id} value={p.id}>{p.title||p.id}</option>)}</select></Field><div className="look-actions"><Button disabled={exporting} onClick={loadProjectVocal}>프로젝트 보컬 WAV·립싱크·곡 길이 연결</Button><Button disabled={exporting} onClick={loadProjectMusic}>프로젝트 전체 음악 WAV·립싱크 연결</Button></div></>}
   <Field label="등록된 3D 원본"><select value={settings.assetId} disabled={exporting} onChange={e=>selectAsset(e.target.value)}>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
   <p role="status" className="muted">{status}</p>
   <canvas ref={canvas} width="640" height="360" aria-label={`${character.name} 3D 무대 공연 화면`} style={{display:'block',width:'min(100%,640px)',height:'auto',background:'#0b1020',borderRadius:8}}/>
