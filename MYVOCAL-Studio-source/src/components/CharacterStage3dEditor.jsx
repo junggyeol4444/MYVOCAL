@@ -9,6 +9,7 @@ import {modelAssets,parseCharacter3d,EXPRESSIONS} from '../lib/character3d.js';
 import {Character3dRenderer} from '../lib/character3dRenderer.js';
 import {createStageSettings,validateStageSettings,saveStageSettings,stageRigSettings,stageMetadata,STAGE_FPS} from '../lib/characterStage3d.js';
 import {recordStageWebM,supportedStageWebM} from '../lib/stage3dRecording.js';
+import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {linkedVrmSingingProjects,resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
 import {inspectSingingWav} from '../lib/singingOutputValidation.js';
@@ -78,15 +79,22 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
  const save=()=>{try{const next=saveStageSettings(character,settings);onSave(next);notify('STEP84 3D 무대 설정 저장 완료. 원본 VRM/GLB는 유지됩니다.');}catch(e){notify('3D 무대 저장 실패: '+e.message);}};
  const json=()=>{try{downloadText(JSON.stringify(stageMetadata(character,settings),null,2),`MYVOCAL-Step84-${safeFilename(character.id)}-stage.json`,'application/json');}catch(e){notify(e.message);}};
  const snapshot=()=>{try{draw(clock.current);canvas.current.toBlob(blob=>{if(blob)downloadBlob(blob,`MYVOCAL-Step84-${safeFilename(character.id)}.png`);else notify('PNG 인코딩 실패');},'image/png');}catch(e){notify(e.message);}};
- const record=async()=>{try{if(!model)throw Error('3D 모델을 먼저 불러오세요.');validateStageSettings(character,settings);if(!supportedStageWebM())throw Error('사용 중인 브라우저에서 WebM 영상 인코딩을 사용할 수 없습니다.');
+ const record=async(asMp4=false)=>{try{if(!model)throw Error('3D 모델을 먼저 불러오세요.');validateStageSettings(character,settings);if(!supportedStageWebM())throw Error('사용 중인 브라우저에서 WebM 영상 인코딩을 사용할 수 없습니다.');
+   if(asMp4&&!window.__MYVOCAL_SESSION_KEY)throw Error('MP4 출력에는 기존 Windows EXE 로컬 세션이 필요합니다.');
    busy.current=true;setPlaying(false);setExporting(true);setProgress(0);
    const controller=new AbortController();abort.current=controller;
    const clip=await recordStageWebM({canvas:canvas.current,duration:settings.duration,fps:settings.fps,draw,onProgress:setProgress,signal:controller.signal,audioBlob:singingWav});
-   downloadBlob(clip,`MYVOCAL-Step84-${safeFilename(character.id)}-stage.webm`);notify(`STEP84 3D 공연 영상 WebM (${(clip.size/1048576).toFixed(2)}MiB) 출력 완료 · ${singingWav?'가창 WAV 포함':'무음 영상'}`);
+   downloadBlob(clip,`MYVOCAL-Step84-${safeFilename(character.id)}-stage.webm`);
+   notify(`STEP84 3D 공연 WebM (${(clip.size/1048576).toFixed(2)}MiB) 출력 완료 · ${singingWav?'가창 WAV 포함':'무음 영상'}`);
+   if(asMp4){
+    const mp4=await convertRecordedWebMToMP4(clip,{session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal});
+    downloadBlob(mp4,`MYVOCAL-Step84-${safeFilename(character.id)}-stage.mp4`);
+    notify(`STEP84 3D 공연 실제 MP4 (${(mp4.size/1048576).toFixed(2)}MiB) 출력 완료 · 기존 WebM도 보존했습니다.`);
+   }
   }catch(e){notify('3D 공연 영상 출력 실패: '+e.message);}finally{busy.current=false;abort.current=null;setExporting(false);start.current=0;}}
  const stageFields=(label,key,min,max,step)=> <Field label={`${label}: ${settings[key]}`}><input type="range" style={{width:'100%'}} min={min} max={max} step={step} value={settings[key]} disabled={exporting} onChange={e=>patch(key,Number(e.target.value))}/></Field>;
  return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}>
-  <Notice>**STEP84 · 3D 무대 연출** — 기존 VRM/GLB 캐릭터를 무대에 배치하고 카메라·조명·배경·본/모션을 실제 WebGL에서 재생합니다. 최대 360초 **WebM 공연 영상(가창 WAV 오디오 선택 가능)**을 로컬에서 녹화합니다. 저장된 STEP85 음소 Lip Sync와 STEP87 표정 계획은 미리보기와 녹화에 반영하며, 98단계 최종 MP4 합성은 포함하지 않습니다.</Notice>
+  <Notice>**STEP84 · 3D 무대 연출** — 기존 VRM/GLB 캐릭터를 무대에 배치하고 카메라·조명·배경·본/모션을 실제 WebGL에서 재생합니다. 최대 360초 **WebM 공연 영상(가창 WAV 오디오 선택 가능)**을 로컬에서 녹화합니다. 저장된 STEP85 음소 Lip Sync와 STEP87 표정 계획은 미리보기와 녹화에 반영합니다. 기존 Windows EXE의 로컬 FFmpeg를 통한 실제 MP4 내보내기도 지원합니다.</Notice>
   {eligibleProjects.length>0&&<><Field label="3D 공연에 연결할 한국어 Singing 프로젝트"><select disabled={exporting} value={activeProject?.id||''} onChange={e=>{setLinkedProjectId(e.target.value);setSingingWav(null);}}>{eligibleProjects.map(p=><option key={p.id} value={p.id}>{p.title||p.id}</option>)}</select></Field><div className="look-actions"><Button disabled={exporting} onClick={loadProjectVocal}>프로젝트 보컬 WAV·립싱크·곡 길이 연결</Button></div></>}
   <Field label="등록된 3D 원본"><select value={settings.assetId} disabled={exporting} onChange={e=>selectAsset(e.target.value)}>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
   <p role="status" className="muted">{status}</p>
@@ -108,7 +116,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
   <div className="look-actions"><Button disabled={!model||exporting} onClick={snapshot}>현재 프레임 PNG</Button><Button disabled={exporting} onClick={json}>무대 설정 JSON</Button><Button disabled={!model||exporting} onClick={save} variant="primary">무대 설정 저장</Button></div>
   <Field label="3D 공연 영상에 실제 가창 WAV 음성 추가 (선택)"><input type="file" accept=".wav,audio/wav" disabled={exporting} onChange={e=>setSingingWav(e.target.files?.[0]||null)}/></Field>
   <Notice>선택한 WAV는 실제 미디어 오디오 트랙으로 녹화됩니다. 저장된 STEP85 입 모양 시간표는 동일한 공연 시간에 VRM 표정 모프로 렌더링됩니다. 원본 모델과 WAV는 수정하지 않습니다.</Notice>
-  <div className="look-actions"><Button variant="primary" disabled={!model||exporting||!supportedStageWebM()} onClick={record}>{exporting?`WebM 녹화 중 ${Math.round(progress*100)}%`:'공연 영상 WebM 내보내기'}</Button>{exporting&&<Button onClick={()=>abort.current?.abort()}>녹화 취소</Button>}</div>
-  <Notice>WAV를 선택하면 음성이 포함된 **WebM**을 출력하고, 선택하지 않으면 무음입니다. 영상 인코딩은 사용 중인 브라우저의 MediaRecorder·WebGL 지원에 따라 달라집니다. 오디오 파일을 선택하면 실제 WAV 음성이 함께 녹화되며, 저장된 Lip Sync 타임라인이 3D 입 모양에 적용됩니다. MToon/PBR·물리효과가 없는 Step83 로컬 렌더러와 동일한 3D 모델 제약이 적용됩니다. 원본 파일은 변경하지 않습니다.</Notice>
+  <div className="look-actions"><Button variant="primary" disabled={!model||exporting||!supportedStageWebM()} onClick={()=>record(false)}>{exporting?`녹화 중 ${Math.round(progress*100)}%`:'공연 영상 WebM 내보내기'}</Button><Button disabled={!model||exporting||!supportedStageWebM()} onClick={()=>record(true)}>공연 영상 MP4 내보내기 (로컬 FFmpeg)</Button>{exporting&&<Button onClick={()=>abort.current?.abort()}>녹화 취소</Button>}</div>
+  <Notice>WAV를 선택하면 음성이 포함된 **WebM**을 출력하고, 선택하지 않으면 무음입니다. 영상 인코딩은 기존 Windows EXE WebView2의 MediaRecorder·WebGL, MP4 변환은 설치된 로컬 FFmpeg 지원에 따라 달라집니다. 오디오 파일을 선택하면 실제 WAV 음성이 함께 녹화되며, 저장된 Lip Sync 타임라인이 3D 입 모양에 적용됩니다. MToon/PBR·물리효과가 없는 Step83 로컬 렌더러와 동일한 3D 모델 제약이 적용됩니다. 원본 파일은 변경하지 않습니다.</Notice>
  </div>;
 }
