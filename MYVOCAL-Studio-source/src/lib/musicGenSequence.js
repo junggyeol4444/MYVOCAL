@@ -84,7 +84,7 @@ export function joinMusicGenWaves(waves,{crossfadeSec=.5}={}){
  assertUsableSingingWav(out,{maxDurationSec:360});
  return new File([out],'MYVOCAL-MusicGen-긴반주.wav',{type:'audio/wav'});
 }
-export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec=.5,prompts=[],continuation=false,signal,onProgress=()=>{},generate=generateMusicGenAudio,session}={}){
+export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec=.5,prompts=[],continuation=false,segmentSeconds=[],trimToSeconds=null,signal,onProgress=()=>{},generate=generateMusicGenAudio,session}={}){
  if(!Number.isInteger(segments)||segments<2||segments>MAX_SEQUENCE_SEGMENTS)throw Error('긴 반주는 2~20구간이어야 합니다.');
  musicGenSettingsValid(settings);
  if(typeof continuation!=='boolean')throw Error('MusicGen 연결 모드가 올바르지 않습니다.');
