@@ -71,7 +71,7 @@ class OfficialRVCWorkerTest(unittest.TestCase):
                 audio.setnchannels(1)
                 audio.setsampwidth(2)
                 audio.setframerate(16000)
-                audio.writeframes(b'\x01\x00' * 2000)
+                audio.writeframes((b'\x10\x27' + b'\xf0\xd8') * 1000)
         elif stage.endswith('train.py'):
             name = cmd[cmd.index('-e') + 1]
             exp = self.root / 'logs' / name
@@ -186,7 +186,7 @@ class OfficialRVCWorkerTest(unittest.TestCase):
                 self.assertNotIn('--index',cmd)
                 target=Path(cmd[cmd.index('--output')+1])
                 with wave.open(str(target),'wb') as wav:
-                    wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(16000);wav.writeframes(b'\x01\x00'*2000)
+                    wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(16000);wav.writeframes((b'\x10\x27' + b'\xf0\xd8')*1000)
             else:self.fake_stage(cmd,cwd,check)
         self.execute(run)
         self.assertEqual(len(calls),5)
