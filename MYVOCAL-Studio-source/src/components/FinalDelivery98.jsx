@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Notice,Panel} from './UI';
 import {getFile} from '../lib/assetDb.js';
+import {readSavedProductionOutput} from '../lib/productionOutputRetrieval.js';
 import {downloadProjectBundle} from '../lib/projectBundle.js';
 import {exportCapabilities98,lyricsSrt98,sceneGuideSrt98,midi98,wav98,stemsZip98,captureMp498} from '../lib/finalExport98.js';
 import {renderPv95Canvas,pv95Frame,pv95Duration} from '../lib/vocalSynthPv95.js';
@@ -32,6 +33,11 @@ export default function FinalDelivery98({project,data,notify}){
  });
  const runAudit=()=>{const a=auditIntegration99(data,project);setAudit(a);setMessage(`진단: 자동/수동 항목 통과 ${a.passed}개, 미완료·미검증 ${a.blocked}개`);};
  const acceptance=acceptance100(data,project);
+ const storedOutputs=Array.isArray(project.deliverables)?project.deliverables:[];
+ const fetchProductionOutput=entry=>task('완성 '+entry.kind+' 다시 저장',async()=>{
+  const original=await readSavedProductionOutput(project,entry,{load:getFile});
+  downloadBlob(original.file,original.name);
+ });
  return <><Panel title="STEP98 · 최종 파일 내보내기" description="기존 DAW·MIDI·가사 싱크·PV 모듈을 하나의 출력 화면에 연결합니다.">
   <canvas ref={canvas} width={768} height={432} style={{display:'none'}} aria-hidden="true"/>
   <div className="hstack" style={{flexWrap:'wrap',gap:8}}>
@@ -45,6 +51,13 @@ export default function FinalDelivery98({project,data,notify}){
    {busy==='MP4'&&<Button onClick={()=>cancelRef.current?.abort()}>MP4 출력 취소</Button>}
   </div><p role="status">{message||caps.notes}</p>
   <Notice>MP4는 브라우저에서 MP4(MediaRecorder) 인코더를 실제 지원하고, 유효한 오디오가 있고, PV가 30초 이하일 때만 출력합니다. 미지원 환경에서는 버튼을 비활성화합니다. WebM을 MP4로 이름만 바꾸지 않습니다. WAV·MIDI·자막은 해당 원본과 정렬 데이터가 있어야 활성화됩니다. 트랙별 WAV는 기존 오프라인 믹서로 개별 렌더링하며 AI 악기 분리 모델 실행과 구분됩니다.</Notice>
+ </Panel>
+ <Panel title="완성 Music+MV WAV·영상 원본 보관함" description="기존 원클릭 생성에서 저장한 완성 파일을 삭제·수정하지 않고 다시 내려받습니다.">
+  {storedOutputs.length?<div className="mv7-item">{storedOutputs.map((entry,i)=><div className="hstack" key={entry.assetId||i} style={{gap:8,flexWrap:'wrap',alignItems:'center'}}>
+   <span>{entry.variant==='face-lip'?'실사 립싱크 ':''}{String(entry.name||'완성 영상')} · {Number.isFinite(entry.size)?(entry.size/1048576).toFixed(1)+' MiB':''}</span>
+   <Button disabled={!!busy} onClick={()=>fetchProductionOutput(entry)}>저장된 원본 다시 받기</Button>
+  </div>)}</div>:<p className="muted">이 프로젝트에 별도로 보존된 완성 Music+MV 파일이 없습니다.</p>}
+  <Notice>기존 프로젝트에서 생성한 원본만 표시합니다. 다른 프로젝트의 WAV·영상은 읽거나 덮어쓰지 않습니다. 백업에는 등록된 산출물이 포함되며 전체 원본 용량 제한을 확인해야 합니다.</Notice>
  </Panel>
  <Panel title="STEP99 · 통합 안정화 진단" description="실제 자료 연결·출력 준비와 실기기 미검증을 별도 판정합니다."><div className="hstack"><Button onClick={runAudit}>현재 프로젝트 검사</Button><Button onClick={()=>downloadText(JSON.stringify(auditIntegration99(data,project),null,2),`${stem}-audit99.json`,'application/json')}>검사 JSON 저장</Button></div>
  {audit&&<div>{audit.items.map(i=><p key={i.id}>{i.status==='pass'?'✓':'○'} {i.label}: {i.status==='pass'?'자동 확인':'미완료/미검증'} · {i.detail}</p>)}</div>}
