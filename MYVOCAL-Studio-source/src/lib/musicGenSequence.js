@@ -3,6 +3,7 @@
 import {generateMusicGenAudio,musicGenSettingsValid} from './musicGenClient.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 import {smoothMusicGenCrossfade} from './musicGenTransitionEnvelope.js';
+import {assertFreshMusicGenPcm} from './musicGenChunkIntegrity.js';
 export const MAX_SEQUENCE_SEGMENTS=20;
 export function musicGenContinuationPrompt(previous,{seconds=6}={}){
  const bytes=previous instanceof Uint8Array?previous:new Uint8Array(previous);
@@ -109,6 +110,7 @@ export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec
   if(baseline&&(part.channels!==baseline.channels||part.rate!==baseline.rate))
    throw Error('MusicGen 모델이 구간마다 다른 샘플레이트·채널 WAV를 생성했습니다. 모델 설정을 확인하세요.');
   baseline||={channels:part.channels,rate:part.rate};
+  for(const previous of parts)assertFreshMusicGenPcm(part,parsePcm16(previous));
   parts.push(bytes);
   onProgress(i+1,segments);
  }
