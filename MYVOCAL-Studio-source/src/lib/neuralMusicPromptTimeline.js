@@ -10,11 +10,14 @@ function scoreSection(i,total){
  if(i>=Math.floor(total*.75))return 'Final Chorus';
  return i%4===3?'Chorus':i%4===2?'Pre-Chorus':'Verse';
 }
-export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSec=.5,basePrompt}={}){
+export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSec=.5,segmentSeconds=[],basePrompt}={}){
  if(!Number.isInteger(segments)||segments<2||segments>20||
     !Number.isFinite(seconds)||seconds<3||seconds>20||
     !Number.isFinite(crossfadeSec)||crossfadeSec<.1||crossfadeSec>1.5||crossfadeSec>=seconds/2)
   throw Error('신경망 반주 구간과 연결 시간을 확인하세요.');
+ if(!Array.isArray(segmentSeconds)||segmentSeconds.length&&segmentSeconds.length!==segments||
+  segmentSeconds.some(s=>!Number.isInteger(s)||s<3||s>20))
+  throw Error('MIDI 오디오 구간 시간표가 올바르지 않습니다.');
  const bpm=Number(project?.bpm);
  if(!Number.isFinite(bpm)||bpm<40||bpm>240)return [];
  const batch=latestCompleteNeuralScore(project);
@@ -24,8 +27,12 @@ export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSe
  const base=limited(basePrompt||project.prompt||project.title||'오리지널 한국어 노래',220);
  const genre=limited(project.genre||'K-pop',40),key=limited(project.key||'C Major',30);
  return Array.from({length:segments},(_,index)=>{
-  const from=index*(seconds-crossfadeSec)*bpm/60;
-  const to=(index*(seconds-crossfadeSec)+seconds)*bpm/60;
+  const fromSec=segmentSeconds.length?
+   segmentSeconds.slice(0,index).reduce((sum,s)=>sum+s,0)-index*crossfadeSec:
+   index*(seconds-crossfadeSec);
+  const chunkSec=segmentSeconds.length?segmentSeconds[index]:seconds;
+  const from=fromSec*bpm/60;
+  const to=(fromSec+chunkSec)*bpm/60;
   const center=(from+to)/2;
   const section=Math.min(totalSections-1,Math.floor(center/32));
   const take=role=>recent.get(role).filter(n=>Number.isInteger(n.pitch)&&n.pitch>=0&&n.pitch<=127&&
