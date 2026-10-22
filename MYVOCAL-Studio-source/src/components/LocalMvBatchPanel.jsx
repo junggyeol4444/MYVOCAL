@@ -183,6 +183,16 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      try{a.href=url;a.download=outputName+suffix+'.'+ext;document.body.append(a);a.click();a.remove();}
      finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
     };
+    const archiveFinished=async()=>{
+     if(!finishedFiles.length)return;
+     const source=current();
+     if(!source||source.id!==project.id)throw Error('완성 결과 보관 중 프로젝트 변경');
+     await persistProductionDeliverables(source,finishedFiles,{
+      current,onChange:commit,newId:genId,save:putFilesAtomic,remove:deleteFilesAtomic,
+      signal:controller.signal
+     });
+     finishedFiles.length=0;
+    };
     // Even if the optional licensed Wav2Lip model fails, preserve the real
     // already-rendered music+video WebM; never invent a converted MP4.
     download(result.file,'webm');
@@ -192,6 +202,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      if(!(wav instanceof Blob)||wav.size<44)throw Error('완성 음악 PCM WAV가 만들어지지 않았습니다. 기존 WebM은 보존됩니다.');
      download(wav,'wav','-완성음악');
     }
+    // MP4 변환이 실패해도 이미 만든 WebM·음악 WAV는 프로젝트와 다운로드에 남는다.
+    await archiveFinished();
     if(makeMp4){
      setMessage('실제 로컬 FFmpeg로 원본 음악·MV MP4 변환 중');
      let mp4;
@@ -199,15 +211,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      catch(e){throw Error('원본 WebM·생성된 WAV는 보존됩니다. 실제 MP4 변환 실패: '+e.message);}
      download(mp4,'mp4','-원본');
     }
-    // Wav2Lip 선택 모델이 실패해도 이미 정상 생성된 음악·영상은 별도 보존한다.
+    // 실사 립싱크가 실패해도 앞서 만든 일반 MP4는 유지한다.
+    await archiveFinished();
     if(faceNeuralSync){
-     const originalOutput=current();
-     if(!originalOutput||originalOutput.id!==project.id)throw Error('기존 완성 파일 보관 전 프로젝트가 변경됐습니다.');
-     await persistProductionDeliverables(originalOutput,finishedFiles,{
-      current,onChange:commit,newId:genId,save:putFilesAtomic,remove:deleteFilesAtomic,
-      signal:controller.signal
-     });
-     finishedFiles.length=0;
      setMessage('실제 사람 Wav2Lip 얼굴/가창 신경망 립싱크 MP4 제작 중');
      const actual=current();
      if(!actual||actual.id!==project.id)throw Error('실제 사람 립싱크 전 프로젝트가 변경됐습니다.');
@@ -219,12 +225,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      download(face.file,'mp4','-립싱크');
      setMessage('음악+MV WebM 및 실제 Wav2Lip 얼굴 립싱크 MP4 모두 저장 완료');
     }
-    const outputProject=current();
-    if(!outputProject||outputProject.id!==project.id)throw Error('완성 결과 저장 중 프로젝트 변경');
-    if(finishedFiles.length)await persistProductionDeliverables(outputProject,finishedFiles,{
-     current,onChange:commit,newId:genId,save:putFilesAtomic,remove:deleteFilesAtomic,
-     signal:controller.signal
-    });
+    await archiveFinished();
     setMessage(`전체 MV ${result.seconds.toFixed(1)}초 저장: 신규 이미지 ${result.generatedImages}장, 영상 클립 ${result.generatedVideos}개. 보컬·반주 믹스 ${result.audioIncluded?'포함':'없음'}.`);
     notify('완성 MV WebM'+(makeMp4?'·MP4':'')+(exportWav?' 및 음악 WAV':'')+' 저장을 완료했습니다.');
    }else{
