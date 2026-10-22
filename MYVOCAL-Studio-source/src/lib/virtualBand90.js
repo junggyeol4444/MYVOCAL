@@ -9,8 +9,20 @@ const allowed=c=>c&&['owned','self','licensed'].includes(c.rights)&&(c.rights!==
 const number=(n,low,high)=>typeof n==='number'&&Number.isFinite(n)&&n>=low&&n<=high;
 export function eligibleBandCharacters(characters){return (characters||[]).filter(c=>allowed(c)&&(modelAssets(c).length||c.layerPlan?.reviewed||personVideoAssets(c).length));}
 export function createBand90(project,characters){if(!project?.id)throw Error('음악 프로젝트가 필요합니다.');const first=eligibleBandCharacters(characters).slice(0,2);return {version:1,durationSec:10,fps:24,members:first.map((c,i)=>({characterId:c.id,role:i?'harmony':'lead',startSec:0,endSec:10,position:i?'right':'left'}))};}
+// 원본 47항: 기존 STEP90 짧은 공연 구성원을 유지하면서 전곡 공연으로 확장한다.
+export function createFullSongBand90(project,characters,durationSec,{existing=project?.band90}={}){
+ if(!Number.isFinite(durationSec)||durationSec<150||durationSec>360)
+  throw Error('3~6분 전체 음악 길이를 입력해야 합니다.');
+ const original=existing||createBand90(project,characters);
+ const members=original.members.map(member=>({
+  ...member,
+  startSec:Math.min(member.startSec,Math.max(0,durationSec-.001)),
+  endSec:Math.abs(member.endSec-original.durationSec)<.001?durationSec:Math.min(member.endSec,durationSec)
+ }));
+ return validateBand90(project,characters,{...original,durationSec,members});
+}
 export function validateBand90(project,characters,plan){
- if(!project?.id||!plan||plan.version!==1||!number(plan.durationSec,2,30)||!Number.isInteger(plan.fps)||![24,30].includes(plan.fps)||!Array.isArray(plan.members)||plan.members.length<1||plan.members.length>6)throw Error('STEP90 공연 인원·길이·FPS 오류');
+ if(!project?.id||!plan||plan.version!==1||!number(plan.durationSec,2,360)||!Number.isInteger(plan.fps)||![24,30].includes(plan.fps)||!Array.isArray(plan.members)||plan.members.length<1||plan.members.length>6)throw Error('STEP90 공연 인원·길이·FPS 오류');
  const eligible=new Map(eligibleBandCharacters(characters).map(c=>[c.id,c])),seen=new Set();
  for(const m of plan.members){if(!m||typeof m.characterId!=='string'||!eligible.has(m.characterId)||seen.has(m.characterId)||!BAND90_ROLES.includes(m.role)||!['left','center','right'].includes(m.position)||!number(m.startSec,0,plan.durationSec)||!number(m.endSec,0,plan.durationSec)||m.endSec<=m.startSec||Math.abs(m.startSec*1000-Math.round(m.startSec*1000))>1e-7||Math.abs(m.endSec*1000-Math.round(m.endSec*1000))>1e-7)throw Error('멤버 중복·사용권한·구간·포지션 오류');seen.add(m.characterId);}
  return plan;
