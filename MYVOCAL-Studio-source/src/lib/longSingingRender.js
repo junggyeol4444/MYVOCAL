@@ -4,6 +4,7 @@
 import {buildSingingRequest} from './singingBridge.js';
 import {phonemeSourceKey,validatePhonemePlan} from './phonemePlan.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
+import {smoothSingingPcm16ChunkEdges} from './singingChunkSeam.js';
 
 const MAX_SECONDS=360;
 const MAX_CUES=2048;
@@ -58,7 +59,7 @@ export function combineSingingWavChunks(parts,durationSec){
  if(!Array.isArray(parts)||!parts.length||!Number.isFinite(durationSec)||durationSec<=0||durationSec>MAX_SECONDS)
   throw Error('가창 합치기 정보가 잘못됐습니다.');
  let format=null,output=null,frames=0,lastLimit=0;
- for(const part of parts){
+ for(const [partIndex,part] of parts.entries()){
   const info=assertUsableSingingWav(part.bytes);
   const decoded=extractPCM(part.bytes);
   if(!format){format=decoded.format;
@@ -76,6 +77,10 @@ export function combineSingingWavChunks(parts,durationSec){
   const required=part.requiredDurationSec??0;
   if(info.durationSec+0.025<required)throw Error('엔진 WAV가 입력 MIDI 음표보다 짧게 생성됐습니다.');
   output.set(decoded.data.subarray(0,maxFrames*format.align),44+from*format.align);
+  if(format.codec===1&&format.bits===16)
+   smoothSingingPcm16ChunkEdges(output,{startFrame:from,frames:maxFrames,
+    sampleRate:format.rate,channels:format.channels,
+    fadeIn:partIndex>0,fadeOut:partIndex<parts.length-1});
   lastLimit=next;
  }
  const view=new DataView(output.buffer);
