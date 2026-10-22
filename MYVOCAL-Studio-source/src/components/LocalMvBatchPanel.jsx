@@ -21,6 +21,7 @@ import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.
 import {getInstalledLocalModels} from '../lib/localAiComposer.js';
 import {applyNeuralFaceLipToMv} from '../lib/autoMvRealPersonLip.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
+import {persistProductionDeliverables} from '../lib/productionOutputPersist.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
  const cancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
@@ -175,7 +176,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }
     const result=await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,prewarmedAudioContext:warmed,onProgress:setMessage});
     const outputName='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV';
+    const finishedFiles=[];
     const download=(blob,ext,suffix='')=>{
+     finishedFiles.push({kind:ext,file:blob,...(suffix==='-립싱크'?{variant:'face-lip'}:{})});
      const url=URL.createObjectURL(blob),a=document.createElement('a');
      try{a.href=url;a.download=outputName+suffix+'.'+ext;document.body.append(a);a.click();a.remove();}
      finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
@@ -208,6 +211,12 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      download(face.file,'mp4','-립싱크');
      setMessage('음악+MV WebM 및 실제 Wav2Lip 얼굴 립싱크 MP4 모두 저장 완료');
     }
+    const outputProject=current();
+    if(!outputProject||outputProject.id!==project.id)throw Error('완성 결과 저장 중 프로젝트 변경');
+    await persistProductionDeliverables(outputProject,finishedFiles,{
+     current,onChange:commit,newId:genId,save:putFilesAtomic,remove:deleteFilesAtomic,
+     signal:controller.signal
+    });
     setMessage(`전체 MV ${result.seconds.toFixed(1)}초 저장: 신규 이미지 ${result.generatedImages}장, 영상 클립 ${result.generatedVideos}개. 보컬·반주 믹스 ${result.audioIncluded?'포함':'없음'}.`);
     notify('완성 MV WebM'+(makeMp4?'·MP4':'')+(exportWav?' 및 음악 WAV':'')+' 저장을 완료했습니다.');
    }else{
