@@ -199,7 +199,15 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      catch(e){throw Error('원본 WebM·생성된 WAV는 보존됩니다. 실제 MP4 변환 실패: '+e.message);}
      download(mp4,'mp4','-원본');
     }
+    // Wav2Lip 선택 모델이 실패해도 이미 정상 생성된 음악·영상은 별도 보존한다.
     if(faceNeuralSync){
+     const originalOutput=current();
+     if(!originalOutput||originalOutput.id!==project.id)throw Error('기존 완성 파일 보관 전 프로젝트가 변경됐습니다.');
+     await persistProductionDeliverables(originalOutput,finishedFiles,{
+      current,onChange:commit,newId:genId,save:putFilesAtomic,remove:deleteFilesAtomic,
+      signal:controller.signal
+     });
+     finishedFiles.length=0;
      setMessage('실제 사람 Wav2Lip 얼굴/가창 신경망 립싱크 MP4 제작 중');
      const actual=current();
      if(!actual||actual.id!==project.id)throw Error('실제 사람 립싱크 전 프로젝트가 변경됐습니다.');
@@ -213,7 +221,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }
     const outputProject=current();
     if(!outputProject||outputProject.id!==project.id)throw Error('완성 결과 저장 중 프로젝트 변경');
-    await persistProductionDeliverables(outputProject,finishedFiles,{
+    if(finishedFiles.length)await persistProductionDeliverables(outputProject,finishedFiles,{
      current,onChange:commit,newId:genId,save:putFilesAtomic,remove:deleteFilesAtomic,
      signal:controller.signal
     });
