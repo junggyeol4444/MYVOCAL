@@ -19,6 +19,7 @@ import sys
 import uuid
 from rvc_pitch_coverage import inspect_rvc_pitch_coverage
 from rvc_training_dataset_quality import inspect_training_dataset
+from rvc_inference_audio_quality import verify_rvc_inference_wav
 
 
 REQUIRED = (
@@ -182,12 +183,10 @@ def execute(args):
             command.extend(['--index', index_path])
         run_stage(root, '6/6 실제 체크포인트·검색 인덱스 추론 검증', command)
         require_file(check_wav, '추론 검증 결과 WAV')
-        try:
-            with wave.open(str(check_wav), 'rb') as audio:
-                if audio.getnframes() < 800 or audio.getframerate() < 8000 or audio.getnchannels() not in (1, 2):
-                    raise RuntimeError('RVC 실제 추론 WAV의 길이·채널이 올바르지 않습니다')
-        except (wave.Error, EOFError) as error:
-            raise RuntimeError('RVC 실제 추론이 올바른 PCM WAV를 생성하지 못했습니다') from error
+        quality = verify_rvc_inference_wav(check_wav)
+        print('[MYVOCAL RVC] 실제 추론 PCM 검사: ' +
+              f"{quality['duration_sec']:.2f}초, RMS={quality['rms']:.4f}, " +
+              f"클리핑={quality['clipped_ratio']:.2%}", flush=True)
         # Publish new model and optional index with exclusive creation. Roll
         # back ONLY files created by this invocation if either copy fails.
         output.parent.mkdir(parents=True, exist_ok=True)
