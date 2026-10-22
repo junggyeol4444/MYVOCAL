@@ -31,7 +31,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(false),[musicDuration,setMusicDuration]=useState(180);
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(false),[singingPort,setSingingPort]=useState('7867');
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
- const [alsoConvertRVC,setAlsoConvertRVC]=useState(false);
+ const [alsoConvertRVC,setAlsoConvertRVC]=useState(false),[registeredRVCId,setRegisteredRVCId]=useState('');
  const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
  const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(''),[soundfontFile,setSoundfontFile]=useState('');
  const [makeNeuralAudioStems,setMakeNeuralAudioStems]=useState(false);
@@ -43,6 +43,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const permittedPeople=(data.characters||[]).filter(c=>['self','owned','licensed'].includes(c.rights));
 
  const voices=(data.voices||[]).filter(v=>['self','owned','licensed'].includes(v.rights));
+ const selectedRVCSinger=voices.find(v=>v.id===(singingVoiceId||project.voiceId))||voices[0];
+ const registeredRVCModels=(data.voiceModels||[]).filter(m=>
+  m?.engineId==='rvc'&&m.voiceId===selectedRVCSinger?.id&&m.assetId&&m.sha256);
  const [musicPaths]=useState(()=>{try{return readMusicGenPreferences(window.localStorage)}catch{return {}}});
  const [musicPython,setMusicPython]=useState(musicPaths.python||'');
  const [musicModelDir,setMusicModelDir]=useState(musicPaths.modelDir||'');
@@ -149,9 +152,10 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       ||(dataRef.current?.voices||[]).find(v=>['self','owned','licensed'].includes(v.rights));
      if(!singer)throw Error('등록된 본인 또는 사용 허가 목소리가 필요합니다.');
      const rvcOptions=alsoConvertRVC?readRVCPreferences(window.localStorage):null;
+     const registeredRVCModel=alsoConvertRVC?registeredRVCModels.find(m=>m.id===registeredRVCId)||null:null;
      const sung=await generateAndStoreMvSinging(vocalProject,{
       voice:singer,port:Number(singingPort),modelId:vocalProject.singingEngine?.modelId||'',
-      session:base.session,convertRVC:alsoConvertRVC,rvcOptions,confirmed:singingRights,
+      session:base.session,convertRVC:alsoConvertRVC,rvcOptions,registeredRVCModel,confirmed:singingRights,
       signal:controller.signal,onProgress:setMessage,
       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
        createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
@@ -283,8 +287,12 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      {voices.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
    </select></label>
    <label><input type="checkbox" checked={alsoConvertRVC} disabled={busy} onChange={e=>setAlsoConvertRVC(e.target.checked)}/> 등록한 RVC 모델로 본인 음색까지 변환</label>
+   {alsoConvertRVC&&<label>실제 RVC 모델 선택<select disabled={busy} value={registeredRVCId} onChange={e=>setRegisteredRVCId(e.target.value)}>
+     <option value="">기존 로컬 경로의 모델 사용</option>
+     {registeredRVCModels.map(m=><option key={m.id} value={m.id}>{m.name||m.id} {m.indexAssetId?'· FAISS 포함':''}</option>)}
+   </select></label>}
    <label><input type="checkbox" checked={singingRights} disabled={busy} onChange={e=>setSingingRights(e.target.checked)}/> 해당 목소리·가창·RVC 모델 사용 권한과 실제 학습 모델 사용을 확인합니다.</label>
-   <Notice>기존 가사·MIDI 싱크와 실행 가능한 실제 신경망 Singing 엔진이 있어야 합니다. RVC 선택 시 사용자가 미리 저장한 모델·FAISS 설정을 사용합니다. 실제 WAV가 생성되어야 후속 MV 단계에 진입하며, 실패 시 원본은 변경되지 않습니다.</Notice>
+   <Notice>기존 가사·MIDI 싱크와 실행 가능한 실제 신경망 Singing 엔진이 있어야 합니다. RVC 선택 시 기존 로컬 경로 또는 등록된 본인 음색 모델·FAISS 인덱스를 선택합니다. 등록된 체크포인트는 SHA-256 확인 후 원본을 보존한 채 추론에 사용합니다. 실제 WAV가 생성되어야 후속 MV 단계에 진입하며, 실패 시 원본은 변경되지 않습니다.</Notice>
   </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={faceNeuralSync} onChange={e=>{setFaceNeuralSync(e.target.checked);setFaceRights(false);setFaceModelRights(false);}}/> 동일한 등록 실제 사람이 등장하는 MV 전체를 Wav2Lip 신경망으로 추가 립싱크 MP4 제작</label>}
   {saveFullMovie&&faceNeuralSync&&<div className="mv7-item">
