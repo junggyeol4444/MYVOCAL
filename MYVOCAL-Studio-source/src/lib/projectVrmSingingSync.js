@@ -3,8 +3,27 @@
 // 학습/추론 성공을 대신하지 않으며 캐릭터·프로젝트 원본은 수정하지 않는다.
 import {automaticSingingVisemes} from './autoMvPhonemeLip.js';
 import {validateLipSync,phonemeViseme} from './characterLipSync.js';
+import {isAlignmentStale} from './lyricAlignment.js';
+import {isPhonemePlanStale,validatePhonemePlan} from './phonemePlan.js';
 
 const toPhoneme={A:'a',I:'i',U:'u',E:'e',O:'o',M:'m',F:'f',sil:'sil'};
+function directProjectSingingVisemes(project,character){
+ if((Array.isArray(project.scenes)&&project.scenes.length)||
+    project.characterId!==character.id||!project.vocalAlignment||!project.phonemePlan||
+    isAlignmentStale(project,project.vocalAlignment)||
+    isPhonemePlanStale(project.vocalAlignment,project.phonemePlan))return null;
+ validatePhonemePlan(project.phonemePlan,project.vocalAlignment);
+ const cues=[];
+ for(const segment of project.phonemePlan.segments){
+  const startMs=Math.round(segment.startSec*1000),endMs=Math.round(segment.endSec*1000);
+  if(!Number.isInteger(startMs)||!Number.isInteger(endMs)||startMs<0||
+     endMs<=startMs||endMs>360000)continue;
+  cues.push({startMs,endMs,viseme:phonemeViseme(segment.token),
+   lyric:project.vocalAlignment.cues[segment.cueIndex-1]?.lyric||''});
+ }
+ cues.sort((a,b)=>a.startMs-b.startMs||a.endMs-b.endMs);
+ return cues.length?{characterId:character.id,cues,source:'existing-korean-phoneme-hints'}:null;
+}
 export function resolveProjectVrmLipSync(project,character){
  if(!project?.id||!character?.id||!['owned','self','licensed'].includes(character.rights)||
     (character.rights==='licensed'&&!String(character.rightsNote||'').trim()))
@@ -15,7 +34,7 @@ export function resolveProjectVrmLipSync(project,character){
   return {lipSync:character.lipSync,source:'STEP85 수동 검토 립싱크',durationSec:Math.min(360,
     Math.ceil(character.lipSync.cues.at(-1).endMs/1000))};
  }
- const hints=automaticSingingVisemes(project,[character]);
+ const hints=automaticSingingVisemes(project,[character])||directProjectSingingVisemes(project,character);
  if(!hints||hints.characterId!==character.id||!hints.cues?.length)return null;
  let end=0;
  const cues=[];
@@ -36,7 +55,7 @@ export function resolveProjectVrmLipSync(project,character){
 export function linkedVrmSingingProjects(character,projects=[]){
  if(!character?.id||!Array.isArray(projects))return [];
  return projects.filter(project=>{
-  if(project?.characterId!==character.id||!Array.isArray(project.scenes))return false;
+  if(project?.characterId!==character.id)return false;
   try{return !!resolveProjectVrmLipSync(project,character);}catch{return false;}
  });
 }
