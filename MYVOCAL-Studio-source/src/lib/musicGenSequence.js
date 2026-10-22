@@ -4,6 +4,7 @@ import {generateMusicGenAudio,musicGenSettingsValid} from './musicGenClient.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 import {smoothMusicGenCrossfade} from './musicGenTransitionEnvelope.js';
 import {assertFreshMusicGenPcm} from './musicGenChunkIntegrity.js';
+import {trimMusicGenWavToScore} from './neuralStemScoreTiming.js';
 export const MAX_SEQUENCE_SEGMENTS=20;
 export function musicGenContinuationPrompt(previous,{seconds=6}={}){
  const bytes=previous instanceof Uint8Array?previous:new Uint8Array(previous);
