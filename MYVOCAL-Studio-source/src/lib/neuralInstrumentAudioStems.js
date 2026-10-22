@@ -5,6 +5,7 @@ import {generateMusicGenSequence} from './musicGenSequence.js';
 import {buildNeuralMusicPrompts} from './neuralMusicPromptTimeline.js';
 import {latestCompleteNeuralScore,NEURAL_SCORE_ROLES} from './neuralScoreBatch.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
+import {analyzeNeuralStemPcm,assertDistinctNeuralStems} from './neuralStemPcmIntegrity.js';
 
 const INSTRUMENT={
  melody:['lead melody','멜로디'],chords:['piano chord progression','코드'],
@@ -39,7 +40,7 @@ export async function renderAndStoreNeuralAudioStems(project,{
  crossfadeSec!==.5)throw Error('로컬 MusicGen 실행 환경과 3~6분 설정을 확인하세요.');
  alive(project,current,signal);
  if(!latestCompleteNeuralScore(project))throw Error('실제 로컬 AI가 생성한 동일 회차의 6악기 MIDI가 필요합니다.');
- const entries=[],tracks=[],allocated=new Set(project.tracks.map(t=>t.id));
+ const entries=[],tracks=[],integrity=[],allocated=new Set(project.tracks.map(t=>t.id));
  let baseline=0;
  const allocate=prefix=>{
   const id=newId(prefix);
@@ -57,7 +58,11 @@ export async function renderAndStoreNeuralAudioStems(project,{
   alive(project,current,signal);
   if(!(rendered instanceof Blob)||rendered.size<44||rendered.size>90*1024*1024)
    throw Error('로컬 신경망이 실제 PCM WAV를 반환하지 않았습니다: '+INSTRUMENT[role][1]);
-  assertUsableSingingWav(await rendered.arrayBuffer(),{maxDurationSec:360});
+  const pcm=await rendered.arrayBuffer();
+  assertUsableSingingWav(pcm,{maxDurationSec:360});
+  const profile=analyzeNeuralStemPcm(pcm);
+  for(const previous of integrity)assertDistinctNeuralStems(profile,previous.profile,role,previous.role);
+  integrity.push({role,profile});
   const info=await readInfo(rendered);alive(project,current,signal);
   const duration=Number(info?.duration??info?.durationSec);
   if(!Number.isFinite(duration)||duration<160||duration>360||
