@@ -42,13 +42,15 @@ export async function composeNeuralMidiArrangement({model,prompt,genre='Pop',key
  if(sections<1)throw Error('이 BPM에서는 8마디 이상을 생성할 수 없습니다.');
  const durationSec=sections*32*60/bpm;
  const byRole=Object.fromEntries(ROLES.map(role=>[role,[]]));
- let previousMelody=[];
+ let previousMelody=[],previousHarmony=[],themeMotif=[];
  for(let section=0;section<sections;section++){
   if(signal?.aborted)throw Error('AI 작곡을 취소했습니다. 기존 프로젝트는 보존합니다.');
   const barStart=section*8+1;
   const label=section===0?'Intro':section===sections-1?'Outro':section>=Math.floor(sections*.75)?'Final Chorus':
    section%4===3?'Chorus':section%4===2?'Pre-Chorus':'Verse';
-  const body={model,prompt,genre,key,bpm,bars:8,barStart,section:label,previousMelody};
+  const recalledMotif=label.includes('Chorus')?themeMotif:[];
+  const body={model,prompt,genre,key,bpm,bars:8,barStart,section:label,
+   previousMelody,previousHarmony,themeMotif:recalledMotif};
   const response=await request('/api/local-ai/midi-section',{method:'POST',
    headers:{'X-MYVOCAL-Session':session,'Content-Type':'application/json'},
    body:JSON.stringify(body),cache:'no-store',signal});
@@ -61,7 +63,10 @@ export async function composeNeuralMidiArrangement({model,prompt,genre='Pop',key
       id:'neural_'+role+'_'+section+'_'+index});
    }
   }
-  previousMelody=notes.melody.slice(-12).map(note=>note.pitch);
+  previousMelody=notes.melody.filter(n=>n.pitch>=36&&n.pitch<=96).slice(-12).map(n=>n.pitch);
+  previousHarmony=[...new Set(notes.chords.map(n=>n.pitch%12))].slice(0,8);
+  if(label==='Chorus'&&!themeMotif.length)
+   themeMotif=notes.melody.filter(n=>n.pitch>=36&&n.pitch<=96).slice(0,12).map(n=>n.pitch);
   onProgress(section+1,sections);
  }
  if(signal?.aborted)throw Error('AI 작곡을 취소했습니다. 기존 프로젝트는 보존합니다.');
