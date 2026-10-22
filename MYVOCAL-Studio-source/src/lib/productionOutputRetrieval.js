@@ -15,8 +15,8 @@ export async function readSavedProductionOutput(project,entry,{load}={}){
  const file=await load(entry.assetId);
  if(!(file instanceof Blob)||file.size!==entry.size||file.type!==entry.mime)
   throw Error('완성 WAV/영상 원본이 누락되었거나 변경되었습니다. 기존 파일은 보존됩니다.');
- const safe=String(entry.name||'').replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_');
- if(!safe||safe.length>200||!safe.endsWith('.'+entry.kind))
+ const safe=String(entry.name||'');
+ if(/[\\/:*?"<>|\u0000-\u001f]/.test(safe)||!safe||safe.length>200||!safe.endsWith('.'+entry.kind))
   throw Error('완성 산출물 파일명이 올바르지 않습니다.');
  return {file,name:safe,kind:entry.kind};
 }
