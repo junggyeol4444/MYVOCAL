@@ -20,6 +20,8 @@ type neuralMidiInput struct {
  BarStart int `json:"barStart"`
  Section string `json:"section"`
  PreviousMelody []int `json:"previousMelody"`
+ PreviousHarmony []int `json:"previousHarmony"`
+ ThemeMotif []int `json:"themeMotif"`
 }
 type neuralMidiNote struct{
  Pitch int `json:"pitch"`
@@ -44,10 +46,12 @@ func (a *appServer) neuralMidiSectionWith(w http.ResponseWriter,r *http.Request,
  if !modelNamePattern.MatchString(input.Model)||len(input.Prompt)<3||len(input.Prompt)>1200||
  len(input.Genre)>60||len(input.Key)>40||input.BPM<40||input.BPM>240||
  input.Bars!=8||input.BarStart<1||input.BarStart>360||
- len(input.Section)>60||len(input.PreviousMelody)>16{
+ len(input.Section)>60||len(input.PreviousMelody)>16||len(input.PreviousHarmony)>8||len(input.ThemeMotif)>12{
   jsonError(w,400,"신경망 MIDI 마디·BPM·모델 설정이 잘못됐습니다");return
  }
  for _,p:=range input.PreviousMelody{if p<36||p>96{jsonError(w,400,"이전 멜로디 정보가 손상됐습니다");return}}
+ for _,p:=range input.PreviousHarmony{if p<0||p>11{jsonError(w,400,"이전 화성 피치 클래스가 잘못됐습니다");return}}
+ for _,p:=range input.ThemeMotif{if p<36||p>96{jsonError(w,400,"후렴 테마의 MIDI 음표 범위를 확인하세요");return}}
  system:=`한국어 창작 음악가입니다. 8마디(32박) 동안 6개 악기 파트의 오리지널 MIDI 음표를 창작합니다.
 저작권 있는 기존 멜로디를 복제하지 않습니다. 오직 JSON 객체로 응답하세요:
 {"stems":[{"role":"melody","notes":[{"pitch":60,"startBeat":0,"length":1,"velocity":88}]}]}
@@ -55,12 +59,16 @@ func (a *appServer) neuralMidiSectionWith(w http.ResponseWriter,r *http.Request,
 startBeat는 해당 8마디의 0~32, length는 0.125~8박, pitch 0~127, velocity 1~127.
 melody는 48~84, bass는 28~64, chords/guitar/pad는 36~96의 MIDI 음정.
 drums는 일반 MIDI 드럼 노트 36,38,42,46,49를 사용하세요.
-각 파트가 실제 음표를 가지도록 하세요. 이전 멜로디 음형을 활용해 새로운 변형을 만들고 전후 구간이 이어지게 합니다.
+각 파트가 실제 음표를 가지도록 하세요. 이전 멜로디와 화성 피치 클래스를 반영해 전후 구간을 연결하세요. 이전 후렴의 오리지널 테마가 제공되면 마지막 후렴에서 음정을 보존하거나 변주해 재등장시키세요. 원래 사용자 데이터는 그대로 두세요.
 프로젝트 파일, 개인 녹음 또는 모델을 변경하거나 로컬 명령을 실행하지 마세요.`
  user:=`곡 설명: `+input.Prompt+"\n장르: "+input.Genre+"\n조성: "+input.Key+
  "\n템포: "+stringInt(input.BPM)+" BPM\n이번 구간: "+input.Section+
  "\n시작 마디: "+stringInt(input.BarStart)+"\n이전 멜로디 음높이: "
  for _,n:=range input.PreviousMelody{user+=stringInt(n)+","}
+ user+="\n이전 구간 화성 피치 클래스: "
+ for _,n:=range input.PreviousHarmony{user+=stringInt(n)+","}
+ user+="\n이 곡의 앞선 오리지널 후렴 테마 MIDI 음높이: "
+ for _,n:=range input.ThemeMotif{user+=stringInt(n)+","}
  payload:=map[string]interface{}{"model":input.Model,"stream":false,"format":"json","system":system,"prompt":user,
   "options":map[string]interface{}{"temperature":0.52,"num_predict":3800},"keep_alive":"5m"}
  body,_:=json.Marshal(payload)
