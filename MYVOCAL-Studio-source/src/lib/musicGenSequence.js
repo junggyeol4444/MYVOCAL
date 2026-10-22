@@ -91,14 +91,19 @@ export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec
  if(continuation&&settings.seconds>20)throw Error('이전 음원 기반 연속 생성은 구간당 20초까지입니다.');
  if(!Number.isFinite(crossfadeSec)||crossfadeSec<.1||crossfadeSec>1.5||crossfadeSec>=settings.seconds/2)throw Error('크로스페이드는 0.1~1.5초, 구간 길이보다 충분히 짧아야 합니다.');
  if(!Number.isInteger(settings.seed)||settings.seed+segments-1>2147483647)throw Error('랜덤 시드 범위가 초과됐습니다.');
- const projectedSeconds=segments*settings.seconds-(segments-1)*crossfadeSec;
+ const durations=segmentSeconds.length?segmentSeconds:Array(segments).fill(settings.seconds);
+ if(!Array.isArray(durations)||durations.length!==segments||durations.some(n=>!Number.isFinite(n)||n<3||n>30))throw Error('MusicGen 구간별 생성 초가 올바르지 않습니다.');
+ if(continuation&&durations.some(n=>n>20))throw Error('연속 생성 구간은 최대 20초입니다.');
+ if(durations.some(n=>crossfadeSec>=n/2))throw Error('크로스페이드가 구간보다 깁니다.');
+ if(trimToSeconds!==null&&(!Number.isFinite(trimToSeconds)||trimToSeconds<3||trimToSeconds>360))throw Error('최종 오디오 길이가 올바르지 않습니다.');
+ const projectedSeconds=durations.reduce((a,b)=>a+b,0)-(segments-1)*crossfadeSec;
  if(projectedSeconds>360+1e-9)throw Error('긴 반주 예상 길이가 360초를 초과합니다. 구간 수나 길이를 줄이세요.');
  if(!Array.isArray(prompts)||prompts.length>MAX_SEQUENCE_SEGMENTS||prompts.some(x=>typeof x!=='string'||[...x].length>600))throw Error('구간별 음악 설명이 올바르지 않습니다.');
  const parts=[];let baseline=null;
  for(let i=0;i<segments;i++){
   if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.');
   const prompt=prompts[i]?.trim()||settings.prompt;
-  const next={...settings,prompt,seed:settings.seed+i};
+  const next={...settings,prompt,seconds:durations[i],seed:settings.seed+i};
   if(continuation&&i>0)next.audioPrompt=musicGenContinuationPrompt(parts[i-1],{seconds:Math.min(6,settings.seconds)});
   const segment=await generate(next,{session,signal});
   if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.');
@@ -116,5 +121,8 @@ export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec
   onProgress(i+1,segments);
  }
  if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다.');
- return joinMusicGenWaves(parts,{crossfadeSec});
+ const joined=joinMusicGenWaves(parts,{crossfadeSec});
+ if(trimToSeconds===null)return joined;
+ if(trimToSeconds>projectedSeconds+0.05)throw Error('요청 길이가 실제 생성 구간보다 깁니다.');
+ return trimMusicGenWavToScore(joined,trimToSeconds);
 }
