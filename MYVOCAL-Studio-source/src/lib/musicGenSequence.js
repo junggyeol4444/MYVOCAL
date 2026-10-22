@@ -1,7 +1,7 @@
 // Local MusicGen sequence assembler. Each source is a REAL MusicGen inference
 // WAV; this is PCM overlap/crossfade, NOT neural continuation or full-song AI.
 import {generateMusicGenAudio,musicGenSettingsValid} from './musicGenClient.js';
-import {assertUsableSingingWav} from './singingOutputValidation.js';
+import {assertUsableSingingWav,inspectSingingWav} from './singingOutputValidation.js';
 import {smoothMusicGenCrossfade} from './musicGenTransitionEnvelope.js';
 import {assertFreshMusicGenPcm} from './musicGenChunkIntegrity.js';
 import {trimMusicGenWavToScore} from './neuralStemScoreTiming.js';
@@ -81,7 +81,11 @@ export function joinMusicGenWaves(waves,{crossfadeSec=.5,maxDurationSec=360}={})
  v.setUint16(20,1,true);v.setUint16(22,channels,true);v.setUint32(24,rate,true);
  v.setUint32(28,rate*channels*2,true);v.setUint16(32,channels*2,true);v.setUint16(34,16,true);
  v.setUint32(40,size-44,true);
- assertUsableSingingWav(out,{maxDurationSec});
+ if(maxDurationSec>360){
+  const info=inspectSingingWav(out);
+  if(!info.valid||info.peak<.001||info.durationSec>maxDurationSec+1e-6)
+   throw Error('MusicGen MIDI 길이 보정 전 WAV가 손상됐습니다.');
+ }else assertUsableSingingWav(out,{maxDurationSec});
  return new File([out],'MYVOCAL-MusicGen-긴반주.wav',{type:'audio/wav'});
 }
 export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec=.5,prompts=[],continuation=false,segmentSeconds=[],trimToSeconds=null,signal,onProgress=()=>{},generate=generateMusicGenAudio,session}={}){
