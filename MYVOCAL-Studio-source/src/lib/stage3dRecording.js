@@ -4,9 +4,11 @@ export function supportedStageWebM(MediaRecorderClass=globalThis.MediaRecorder){
  if(!MediaRecorderClass||typeof MediaRecorderClass.isTypeSupported!=='function')return '';
  return ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorderClass.isTypeSupported(t))||'';
 }
-export async function recordStageWebM({canvas,duration,fps,draw,onProgress=()=>{},signal,audioBlob=null,AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext,MediaRecorderClass=globalThis.MediaRecorder}){
+export async function recordStageWebM({canvas,duration,fps,draw,onProgress=()=>{},signal,audioBlob=null,videoBitsPerSecond=3000000,AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext,MediaRecorderClass=globalThis.MediaRecorder}){
  if(!canvas||typeof canvas.captureStream!=='function')throw Error('현재 WebGL 캔버스는 영상 녹화를 지원하지 않습니다.');
  if(![24,30].includes(fps)||!Number.isFinite(duration)||duration<2||duration>360)throw Error('영상 길이 또는 FPS 설정 오류');
+ if(!Number.isInteger(videoBitsPerSecond)||videoBitsPerSecond<500000||videoBitsPerSecond>3000000)
+  throw Error('3~6분 영상 비트레이트는 0.5~3Mbps입니다.');
  const mimeType=supportedStageWebM(MediaRecorderClass);if(!mimeType)throw Error('이 Windows 브라우저에는 WebM MediaRecorder 인코더가 없습니다.');
  if(signal?.aborted)throw Error('영상 제작이 취소됐습니다.');
  let audioContext=null,audioSource=null;
@@ -27,7 +29,7 @@ export async function recordStageWebM({canvas,duration,fps,draw,onProgress=()=>{
   }catch(e){stream.getTracks().forEach(track=>track.stop());await audioContext.close().catch(()=>{});throw e;}
  }
  try{
-  recorder=new MediaRecorderClass(stream,{mimeType,videoBitsPerSecond:3000000});
+  recorder=new MediaRecorderClass(stream,{mimeType,videoBitsPerSecond});
   return await new Promise((resolve,reject)=>{
    const cleanup=()=>{cancelAnimationFrame(raf);signal?.removeEventListener('abort',abort);stream.getTracks().forEach(track=>track.stop());if(audioSource)try{audioSource.stop()}catch{};if(audioContext)void audioContext.close().catch(()=>{});};
    const fail=(e)=>{if(done)return;done=true;try{if(recorder.state!=='inactive')recorder.stop();}catch{}cleanup();reject(e instanceof Error?e:Error('영상 인코딩에 실패했습니다.'));};
