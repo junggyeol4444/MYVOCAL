@@ -96,6 +96,12 @@ export function combineSingingWavChunks(parts,durationSec){
 export async function renderLongSinging(alignment,{port,project,voice,model,request,signal,phonemePlan=null,onProgress=()=>{}}={}){
  if(typeof request!=='function')throw Error('실제 로컬 가창 엔진 호출 기능이 필요합니다.');
  const plan=planLongSingingChunks(alignment);
+ // 원본 3~6분 신경망 MIDI 전체 곡 길이를 유지한다. 마지막 음표 이후는 무음이며 가짜 보컬을 생성하지 않는다.
+ const scoreDuration=Number(project?.neuralAutoScore?.durationSec);
+ if(Number.isFinite(scoreDuration)&&scoreDuration>0&&scoreDuration+0.02<plan.durationSec)
+  throw Error('현재 한국어 MIDI 음표가 신경망 원곡 길이를 벗어났습니다.');
+ const totalDuration=Number.isFinite(scoreDuration)&&scoreDuration>=plan.durationSec&&scoreDuration<=MAX_SECONDS?
+  scoreDuration:plan.durationSec;
  if(phonemePlan)validatePhonemePlan(phonemePlan,alignment);
  const parts=[];
  for(let i=0;i<plan.chunks.length;i++){
@@ -114,11 +120,11 @@ export async function renderLongSinging(alignment,{port,project,voice,model,requ
   if(!(blob instanceof Blob))throw Error('외부 엔진이 WAV 파일을 반환하지 않았습니다.');
   const bytes=new Uint8Array(await blob.arrayBuffer());
   const requiredDurationSec=Math.max(...chunk.cues.map(c=>c.endSec));
-  parts.push({startSec:chunk.startSec,limitSec:plan.chunks[i+1]?.startSec??plan.durationSec,
+  parts.push({startSec:chunk.startSec,limitSec:plan.chunks[i+1]?.startSec??totalDuration,
    requiredDurationSec,bytes});
   onProgress(i+1,plan.chunks.length);
  }
  if(signal?.aborted)throw Error('보컬 생성이 취소됐습니다. 기존 자료는 보존합니다.');
- const wav=combineSingingWavChunks(parts,plan.durationSec);
- return {wav,notes:plan.notes,parts:parts.length,durationSec:plan.durationSec,kind:'external-singing-chunks'};
+ const wav=combineSingingWavChunks(parts,totalDuration);
+ return {wav,notes:plan.notes,parts:parts.length,durationSec:totalDuration,kind:'external-singing-chunks'};
 }
