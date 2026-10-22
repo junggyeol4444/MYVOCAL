@@ -21,11 +21,28 @@ export function instrumentNeuralPrompts(project,role,{segments,seconds=18,crossf
  const base=buildNeuralMusicPrompts(project,{segments,seconds,crossfadeSec,segmentSeconds});
  if(base.length!==segments)throw Error('같은 작곡 회차의 원본 6악기 MIDI가 필요합니다.');
  const musicalRole=INSTRUMENT[role][0];
- return base.map(text=>{
-  const trimmed=text.replace(/continuous original arrangement with drums, bass, guitar, keys and pads; /,
-   'original instrumental '+musicalRole+' performance only; no voice or sung lyrics; ');
-  const compact=trimmed.replace(/; preserve the same song theme and transition smoothly from the previous audio\.$/,'');
-  return [...(compact+'; '+musicalRole+' in focus; consistent tempo and musical motif.')].slice(0,600).join('');
+ const score=latestCompleteNeuralScore(project);
+ const notes=score?.get(role)?.midiNotes||[];
+ const bpm=Number(project.bpm);
+ const allDurations=segmentSeconds.length?segmentSeconds:Array(segments).fill(seconds);
+ let absoluteSec=0;
+ return base.map((text,index)=>{
+  const from=absoluteSec*bpm/60;
+  const to=(absoluteSec+allDurations[index])*bpm/60;
+  absoluteSec+=allDurations[index]-crossfadeSec;
+  const phrase=notes.filter(n=>Number.isInteger(n.pitch)&&Number.isFinite(n.startBeat)&&
+   Number.isFinite(n.length)&&n.length>0&&n.startBeat<to&&n.startBeat+n.length>from)
+   .sort((a,b)=>a.startBeat-b.startBeat).slice(0,16)
+   .map(n=>String(n.pitch)+'@'+Number(n.startBeat-from).toFixed(1)+
+    'b/'+Number(n.length).toFixed(1)+'b/'+Math.round(Number(n.velocity)||80)).join(' ');
+  const cue='solo '+musicalRole+' only, instrumental, no singing, no other instruments; '+
+   bpm+' BPM; actual MIDI pitches/relative beat/length/velocity '+(phrase||'continue previous original phrase')+'; ';
+  const compact=text.replace(/continuous original arrangement with drums, bass, guitar, keys and pads; /,
+   'maintain original instrumental theme; ')
+   .replace(/; preserve the same song theme and transition smoothly from the previous audio\.$/,'');
+  // Place this part's genuine neural MIDI before the generic scene prose
+  // so it remains available to the real MusicGen model at its prompt limit.
+  return [...(cue+compact)].slice(0,600).join('');
  });
 }
 export async function renderAndStoreNeuralAudioStems(project,{
