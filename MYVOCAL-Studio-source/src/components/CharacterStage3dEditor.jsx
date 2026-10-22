@@ -1,4 +1,4 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {Button,Field,Notice} from './UI';
 import {getFile} from '../lib/assetDb.js';
 import {usableExpressionPlan} from '../lib/characterExpressionDirector.js';
@@ -9,17 +9,28 @@ import {modelAssets,parseCharacter3d,EXPRESSIONS} from '../lib/character3d.js';
 import {Character3dRenderer} from '../lib/character3dRenderer.js';
 import {createStageSettings,validateStageSettings,saveStageSettings,stageRigSettings,stageMetadata,STAGE_FPS} from '../lib/characterStage3d.js';
 import {recordStageWebM,supportedStageWebM} from '../lib/stage3dRecording.js';
+import {linkedVrmSingingProjects,resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
+import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
+import {inspectSingingWav} from '../lib/singingOutputValidation.js';
 const backdrops={concert:'공연장 · 보라 LED',neon:'네온 · 사이버',theater:'극장 · 따뜻한 무대'};
 const cameras={fixed:'고정',orbit:'회전',track:'트래킹',dolly:'줌 인·아웃',cuts:'쇼트 전환'};
 const lights={concert:'스튜디오',warm:'웜',cool:'쿨',pulse:'박동 조명'};
 const motions={idle:'대기 자세',nod:'고개 끄덕이기',wave:'팔 흔들기'};
 const safeFilename=s=>String(s||'character').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,60);
 function downloadBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-export default function CharacterStage3dEditor({character,onSave,notify}){
+export default function CharacterStage3dEditor({character,onSave,notify,projects=[]}){
  const assets=modelAssets(character);
  const directedPlan=usableExpressionPlan(character);
  const dancePlan=usableDancePlan(character);
  const performancePlan=usablePerformance89(character);
+ const eligibleProjects=useMemo(()=>linkedVrmSingingProjects(character,projects),[character,projects]);
+ const [linkedProjectId,setLinkedProjectId]=useState('');
+ const activeProject=eligibleProjects.find(p=>p.id===linkedProjectId)||eligibleProjects[0]||null;
+ const activeLipSync=useMemo(()=>{
+  if(!activeProject)return character.lipSync;
+  try{return resolveProjectVrmLipSync(activeProject,character)?.lipSync||character.lipSync;}
+  catch{return character.lipSync;}
+ },[activeProject,character]);
  const initial=()=>{try{if(character.stage3d){validateStageSettings(character,character.stage3d);return {...character.stage3d};}}catch{}return createStageSettings(character);};
  const [settings,setSettings]=useState(initial),[model,setModel]=useState(null),[status,setStatus]=useState('3D 모델 분석 중…'),[playing,setPlaying]=useState(true),[time,setTime]=useState(0),[exporting,setExporting]=useState(false),[progress,setProgress]=useState(0),[singingWav,setSingingWav]=useState(null);
  const canvas=useRef(null),engine=useRef(null),raf=useRef(0),start=useRef(0),clock=useRef(0),config=useRef(settings),abort=useRef(null),busy=useRef(false);
@@ -28,7 +39,7 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
   (async()=>{try{const f=await getFile(settings.assetId);if(!f)throw Error('저장된 3D 모델 파일을 찾을 수 없습니다.');if(f.size>40*1024*1024)throw Error('모델은 40MB 이하만 지원됩니다.');
    const parsed=parseCharacter3d(await f.arrayBuffer(),f.name||assets.find(a=>a.id===settings.assetId)?.name);
    if(dead)return;const renderer=new Character3dRenderer(canvas.current,parsed);engine.current=renderer;setModel(parsed);setStatus(`모델 연결됨 · 메시 ${parsed.meshCount}개 · 본 ${parsed.skins.reduce((n,s)=>n+s.joints.length,0)}개 · 모션 ${parsed.animations.length}개`);
-   renderer.render(stageRigSettings(config.current),0,config.current,character.lipSync,directedPlan,character,dancePlan,performancePlan);
+   renderer.render(stageRigSettings(config.current),0,config.current,activeLipSync,directedPlan,character,dancePlan,performancePlan);
   }catch(e){if(!dead){setStatus('3D 무대 오류: '+e.message);notify(e.message);}}})();
   return ()=>{dead=true;abort.current?.abort();cancelAnimationFrame(raf.current);engine.current?.dispose();engine.current=null;};
  },[character.id,settings.assetId]);
@@ -36,15 +47,34 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
   const tick=now=>{if(!engine.current||busy.current)return;if(!start.current)start.current=now;
    if(playing)clock.current=(clock.current+(now-start.current)/1000)%config.current.duration;
    start.current=now;
-   try{engine.current.render(stageRigSettings(config.current),clock.current,config.current,character.lipSync,directedPlan,character,dancePlan,performancePlan);}catch(e){setStatus('무대 렌더링 오류: '+e.message);return;}
+   try{engine.current.render(stageRigSettings(config.current),clock.current,config.current,activeLipSync,directedPlan,character,dancePlan,performancePlan);}catch(e){setStatus('무대 렌더링 오류: '+e.message);return;}
    if(Math.floor(now/250)!==Math.floor((now-16)/250))setTime(clock.current);
    raf.current=requestAnimationFrame(tick);
   };raf.current=requestAnimationFrame(tick);return ()=>{cancelAnimationFrame(raf.current);start.current=0;};
- },[model,playing,exporting]);
+ },[model,playing,exporting,activeLipSync]);
  const patch=(name,value)=>setSettings(s=>({...s,[name]:value}));
- const draw=t=>{if(!engine.current)throw Error('3D 모델이 로딩되지 않았습니다.');engine.current.render(stageRigSettings(config.current),t,config.current,character.lipSync,directedPlan,character,dancePlan,performancePlan);};
+ const draw=t=>{if(!engine.current)throw Error('3D 모델이 로딩되지 않았습니다.');engine.current.render(stageRigSettings(config.current),t,config.current,activeLipSync,directedPlan,character,dancePlan,performancePlan);};
  const seek=t=>{clock.current=Math.max(0,Math.min(config.current.duration,Number(t)));setTime(clock.current);try{draw(clock.current);}catch(e){notify(e.message);}};
  const selectAsset=id=>{const next=createStageSettings({...character,rig3d:null,stage3d:null,assets:character.assets?.filter(a=>a.id===id)});setSettings({...next,assetId:id});clock.current=0;};
+ const loadProjectVocal=async()=>{
+  try{
+   if(!activeProject)throw Error('연결된 한국어 Singing 프로젝트가 없습니다.');
+   const sources=projectVocalSources(activeProject);
+   if(!sources.length)throw Error('프로젝트에 저장된 실제 보컬 WAV가 없습니다.');
+   const vocal=await getFile(sources[0].assetId);
+   if(!(vocal instanceof Blob)||vocal.size<44||vocal.size>96*1024*1024)
+    throw Error('프로젝트 보컬 WAV가 없거나 용량이 초과됐습니다.');
+   const info=inspectSingingWav(await vocal.arrayBuffer());
+   if(!info.valid||info.durationSec<2||info.durationSec>360)
+    throw Error('프로젝트 보컬 WAV의 형식 또는 곡 길이가 올바르지 않습니다.');
+   const linked=resolveProjectVrmLipSync(activeProject,character);
+   if(!linked||linked.lipSync?.cues?.some(c=>c.endMs>info.durationSec*1000+50))
+    throw Error('현재 보컬 WAV와 한국어 음소 시간표가 일치하지 않습니다.');
+   setSingingWav(vocal);
+   setSettings(prev=>({...prev,duration:Math.floor(info.durationSec*100)/100}));
+   notify('선택한 프로젝트의 실제 보컬 WAV·한국어 음소·곡 길이를 3D 무대에 연결했습니다.');
+  }catch(e){notify('프로젝트 3D 무대 연결 실패: '+e.message);}
+ };
  const save=()=>{try{const next=saveStageSettings(character,settings);onSave(next);notify('STEP84 3D 무대 설정 저장 완료. 원본 VRM/GLB는 유지됩니다.');}catch(e){notify('3D 무대 저장 실패: '+e.message);}};
  const json=()=>{try{downloadText(JSON.stringify(stageMetadata(character,settings),null,2),`MYVOCAL-Step84-${safeFilename(character.id)}-stage.json`,'application/json');}catch(e){notify(e.message);}};
  const snapshot=()=>{try{draw(clock.current);canvas.current.toBlob(blob=>{if(blob)downloadBlob(blob,`MYVOCAL-Step84-${safeFilename(character.id)}.png`);else notify('PNG 인코딩 실패');},'image/png');}catch(e){notify(e.message);}};
@@ -57,6 +87,7 @@ export default function CharacterStage3dEditor({character,onSave,notify}){
  const stageFields=(label,key,min,max,step)=> <Field label={`${label}: ${settings[key]}`}><input type="range" style={{width:'100%'}} min={min} max={max} step={step} value={settings[key]} disabled={exporting} onChange={e=>patch(key,Number(e.target.value))}/></Field>;
  return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}>
   <Notice>**STEP84 · 3D 무대 연출** — 기존 VRM/GLB 캐릭터를 무대에 배치하고 카메라·조명·배경·본/모션을 실제 WebGL에서 재생합니다. 최대 360초 **WebM 공연 영상(가창 WAV 오디오 선택 가능)**을 로컬에서 녹화합니다. 저장된 STEP85 음소 Lip Sync와 STEP87 표정 계획은 미리보기와 녹화에 반영하며, 98단계 최종 MP4 합성은 포함하지 않습니다.</Notice>
+  {eligibleProjects.length>0&&<><Field label="3D 공연에 연결할 한국어 Singing 프로젝트"><select disabled={exporting} value={activeProject?.id||''} onChange={e=>{setLinkedProjectId(e.target.value);setSingingWav(null);}}>{eligibleProjects.map(p=><option key={p.id} value={p.id}>{p.title||p.id}</option>)}</select></Field><div className="look-actions"><Button disabled={exporting} onClick={loadProjectVocal}>프로젝트 보컬 WAV·립싱크·곡 길이 연결</Button></div></>}
   <Field label="등록된 3D 원본"><select value={settings.assetId} disabled={exporting} onChange={e=>selectAsset(e.target.value)}>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
   <p role="status" className="muted">{status}</p>
   <canvas ref={canvas} width="640" height="360" aria-label={`${character.name} 3D 무대 공연 화면`} style={{display:'block',width:'min(100%,640px)',height:'auto',background:'#0b1020',borderRadius:8}}/>
