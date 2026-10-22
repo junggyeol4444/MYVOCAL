@@ -6,8 +6,8 @@ import {videoSourceKey,applySceneVideo,generateLocalVideoClip,readSourceFrame} f
 import {buildMvDirectionPlan} from './mvDirection.js';
 import {getFile,putFileNew} from './assetDb.js';
 import {genId} from './schema.js';
-import {validatePersonSource,generatePersonMvImage} from './imageToMv.js';
-import {validateCharacterArtwork,generateCharacterMvImage} from './characterToMv.js';
+import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
+import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
 // A registered character reuses the SAME sampling seed in each scene.
 // img2img still uses the original authorized reference; seed consistency
 // reduces variation but does not guarantee neural identity equivalence.
@@ -30,6 +30,30 @@ const sceneReference=(scene,character)=>{
  validateCharacterArtwork(character,scene.characterMv.referenceAssetId);
  return {assetId:scene.characterMv.referenceAssetId,denoise:scene.characterMv.denoise,kind:'character'};
 };
+// 등록된 동일 원본 참조는 사용자가 참조 이미지 포함을 선택한 경우에만 사용한다.
+// 기존 장면의 수동 personMv/characterMv 연결을 우선하며 원본 연결 메타데이터를 변경하지 않는다.
+export function authorizedAutoSceneReference(scene,character,{includeReferences=false}={}){
+ if(!includeReferences||scene?.personMv||scene?.characterMv||!character?.id||
+    character.identityLock===false)return null;
+ if(character.kind==='person'){
+  if(character.rights!=='self'&&!(character.rights==='licensed'&&String(character.rightsNote||'').trim()))return null;
+  const first=personPhotoAssets(character).find(a=>['portrait','front'].includes(a.role))||
+   personPhotoAssets(character)[0];
+  if(!first)return null;
+  validatePersonSource(character,first.id);
+  return {assetId:first.id,denoise:.25,kind:'person',source:'registered-identity'};
+ }
+ if(character.kind==='character'){
+  if(!['self','owned'].includes(character.rights)&&
+     !(character.rights==='licensed'&&String(character.rightsNote||'').trim()))return null;
+  const first=characterArtworkAssets(character).find(a=>['portrait','front'].includes(a.role))||
+   characterArtworkAssets(character)[0];
+  if(!first)return null;
+  validateCharacterArtwork(character,first.id);
+  return {assetId:first.id,denoise:.25,kind:'character',source:'registered-identity'};
+ }
+ return null;
+}
 export function planMvBatch(project,{maxScenes=20,includeReferences=false}={}){
  if(!project?.id||!Array.isArray(project.scenes)||!project.scenes.length)throw Error('MV 장면이 있는 프로젝트를 선택해 주세요.');
  if(project.scenes.length>maxScenes)throw Error(`한 번에 최대 ${maxScenes}개 장면만 처리합니다. 구간을 나누어 실행하세요.`);
@@ -58,10 +82,10 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   let scene=live.scenes.find(s=>s.id===sceneId);
   if(!scene||(!includeReferences&&(scene.personMv||scene.characterMv))||scene.videoClipAssetId)throw Error('장면이 변경됐습니다. 기존 미디어를 보존하고 중단했습니다.');
   let character=(currentData()?.characters||[]).find(c=>c.id===(scene.characterId||live.characterId));
-  const reference=sceneReference(scene,character);
+  const reference=sceneReference(scene,character)||authorizedAutoSceneReference(scene,character,{includeReferences});
   if(character?.rights==='reference')throw Error('Reference 전용 캐릭터로 AI 이미지를 생성할 수 없습니다.');
   let direction=null;try{direction=buildMvDirectionPlan(live,currentData()?.characters||[]).scenes.find(s=>s.id===sceneId)}catch{}
-  let request=buildSceneImageRequest(live,scene,character,direction);
+  let request=buildSceneImageRequest(live,scene,character,direction,reference);
   if(!scene.imageAssetId){
    progress?.(`${index+1}/${plan.total}장면: ComfyUI 이미지 생성 중`);
    const seed=character?.id?stableMvCharacterSeed(initialId,character.id):Math.floor(Math.random()*2000000000);
@@ -78,7 +102,7 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
    checkCancel();live=current();scene=live?.scenes?.find(s=>s.id===sceneId);
    if(!live||live.id!==initialId||!scene)throw Error('이미지 생성 중 장면이 변경됐습니다.');
    const latestCharacter=(currentData()?.characters||[]).find(c=>c.id===(scene.characterId||live.characterId));
-   if(JSON.stringify(sceneReference(scene,latestCharacter))!==JSON.stringify(reference)||buildSceneImageRequest(live,scene,latestCharacter,direction).key!==request.key)
+   if(JSON.stringify(sceneReference(scene,latestCharacter)||authorizedAutoSceneReference(scene,latestCharacter,{includeReferences}))!==JSON.stringify(reference)||buildSceneImageRequest(live,scene,latestCharacter,direction,reference).key!==request.key)
     throw Error('이미지 생성 중 캐릭터 원본 또는 장면 내용이 변경됐습니다.');
    checkCancel();const id=idFactory('img');await saveFile(id,new File([blob],`MYVOCAL-MV-${sceneId}-${seed}.${blob.type==='image/jpeg'?'jpg':'png'}`,{type:blob.type}));
    const updated=applySceneImage(live,sceneId,id,request,{seed,checkpoint,source:reference?.kind==='person'?'person-img2img':reference?.kind==='character'?'character-img2img':'plain'});commit(updated);generatedImages++;
@@ -86,9 +110,9 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   }
   if(!scene?.imageAssetId)throw Error('이미지 저장 상태를 확인할 수 없습니다.');
   character=(currentData()?.characters||[]).find(c=>c.id===(scene.characterId||live.characterId));
-  if(JSON.stringify(sceneReference(scene,character))!==JSON.stringify(reference))throw Error('장면 사람·캐릭터 참조가 변경됐습니다.');
+  if(JSON.stringify(sceneReference(scene,character)||authorizedAutoSceneReference(scene,character,{includeReferences}))!==JSON.stringify(reference))throw Error('장면 사람·캐릭터 참조가 변경됐습니다.');
   direction=null;try{direction=buildMvDirectionPlan(live,currentData()?.characters||[]).scenes.find(s=>s.id===sceneId)}catch{}
-  request=buildSceneImageRequest(live,scene,character,direction);
+  request=buildSceneImageRequest(live,scene,character,direction,reference);
   if(scene.imageGeneration?.key!==request.key)throw Error('장면과 생성 이미지가 일치하지 않습니다. 수동으로 확인해 주세요.');
   const sourceKey=videoSourceKey(live,scene,request),image=await loadFile(scene.imageAssetId);
   if(!image)throw Error('장면 이미지 파일이 없어 원본을 유지하고 중단했습니다.');
@@ -99,7 +123,7 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   checkCancel();live=current();scene=live?.scenes?.find(s=>s.id===sceneId);
   if(!live||live.id!==initialId||!scene||videoSourceKey(live,scene,request)!==sourceKey)throw Error('영상 생성 중 프로젝트 내용이 변경됐습니다. 기존 원본은 그대로 유지합니다.');
   const finalCharacter=(currentData()?.characters||[]).find(c=>c.id===(scene.characterId||live.characterId));
-  if(JSON.stringify(sceneReference(scene,finalCharacter))!==JSON.stringify(reference))throw Error('영상 생성 중 사람·캐릭터 참조가 변경됐습니다.');
+  if(JSON.stringify(sceneReference(scene,finalCharacter)||authorizedAutoSceneReference(scene,finalCharacter,{includeReferences}))!==JSON.stringify(reference))throw Error('영상 생성 중 사람·캐릭터 참조가 변경됐습니다.');
   checkCancel();const clipId=idFactory('vid');await saveFile(clipId,new File([clip],`MYVOCAL-MV-${sceneId}-${seed}.${clip.type==='video/mp4'?'mp4':'webp'}`,{type:clip.type}));
   commit(applySceneVideo(live,sceneId,clipId,sourceKey,{checkpoint:videoModel,seed,frames,fps,mime:clip.type}));generatedVideos++;
   progress?.(`${index+1}/${plan.total}장면 생성·저장 완료`);
