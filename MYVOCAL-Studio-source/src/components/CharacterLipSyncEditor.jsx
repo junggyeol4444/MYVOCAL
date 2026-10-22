@@ -4,6 +4,7 @@ import {parseLipSyncLines,lipSyncLines,saveLipSync,visemeAt} from '../lib/charac
 import {readAudioInfo} from '../lib/audioEngine';
 import {getFile} from '../lib/assetDb.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
+import {resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
 import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
 import {isAlignmentStale} from '../lib/lyricAlignment.js';
 export default function CharacterLipSyncEditor({character,onSave,notify,projects=[]}){
@@ -12,6 +13,13 @@ export default function CharacterLipSyncEditor({character,onSave,notify,projects
  const [projectId,setProjectId]=useState(''),[assetId,setAssetId]=useState(''),[audio,setAudio]=useState(null),[processing,setProcessing]=useState(false),[audioError,setAudioError]=useState('');
  const activeProject=eligible.find(p=>p.id===projectId)||eligible[0];
  const storedVocal=projectVocalSources(activeProject);
+ const importCurrentKoreanSinging=()=>{try{
+  if(character.lipSync?.cues?.length)throw Error('기존에 수동 저장한 입 모양 시간표가 있습니다. 자동 덮어쓰기는 하지 않습니다.');
+  const derived=resolveProjectVrmLipSync(activeProject,character);
+  if(!derived)throw Error('이 캐릭터에 연결된 최신 한국어 가창 MIDI·음소 시간표가 없습니다.');
+  setSource(lipSyncLines(derived.lipSync));
+  notify('한국어 Singing 음소를 실제 2D/3D 입 모양 편집 시간표로 불러왔습니다. 검토 후 저장하세요.');
+ }catch(e){setAudioError(e.message)}};
  const selectedStoredId=storedVocal.some(s=>s.assetId===assetId)?assetId:(storedVocal[0]?.assetId||'');
  const audioProposal=async()=>{if(!audio)return;setProcessing(true);setAudioError('');try{
   const project=eligible.find(p=>p.id===projectId)||eligible[0];if(!project)throw Error('노래 프로젝트의 가사·MIDI 싱크가 필요합니다.');
@@ -36,6 +44,7 @@ export default function CharacterLipSyncEditor({character,onSave,notify,projects
  <Notice>프로젝트 MIDI·가사가 바뀌어 이전 싱크가 오래된 경우에는 Singing 작업실에서 싱크를 다시 생성해야 합니다.</Notice>
  <Notice>실제 보컬 WAV의 음량과 프로젝트 가사·MIDI 싱크를 사용해 입 모양을 제안합니다. 음소 자동 인식·신경망 얼굴 변형은 아니며, 만들어진 시간표를 아래에서 수정·검토한 뒤 저장하세요.</Notice>
  {eligible.length>0&&<><Field label="가사·MIDI가 있는 프로젝트"><select value={projectId||eligible[0].id} disabled={processing} onChange={e=>{setProjectId(e.target.value);setAssetId("");setAudioError("")}}>{eligible.map(p=><option key={p.id} value={p.id}>{p.title||p.id}</option>)}</select></Field>
+ <Button disabled={processing} onClick={importCurrentKoreanSinging}>프로젝트 한국어 Singing 음소로 2D·3D 입 모양 불러오기</Button>
  {storedVocal.length>0&&<><Field label="프로젝트에 저장된 보컬 WAV"><select value={selectedStoredId} disabled={processing} onChange={e=>setAssetId(e.target.value)}>{storedVocal.map(s=><option key={s.assetId} value={s.assetId}>{s.trackName} · {s.name}</option>)}</select></Field>
  <Button disabled={processing} onClick={storedProposal}>프로젝트 보컬로 Lip Sync 시간표 생성</Button></>}
  <Field label="실제 노래 WAV"><input type="file" accept=".wav,audio/wav" disabled={processing} onChange={e=>setAudio(e.target.files?.[0]||null)}/></Field>
