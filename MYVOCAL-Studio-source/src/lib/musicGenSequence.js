@@ -45,8 +45,8 @@ function parsePcm16(bytes){
  if(!pcm.length)throw Error('MusicGen WAV에 오디오가 없습니다.');
  return {...format,pcm,frames:pcm.length/(2*format.channels)};
 }
-export function joinMusicGenWaves(waves,{crossfadeSec=.5}={}){
- if(!Array.isArray(waves)||waves.length<2||waves.length>MAX_SEQUENCE_SEGMENTS||!Number.isFinite(crossfadeSec)||crossfadeSec<.1||crossfadeSec>1.5)
+export function joinMusicGenWaves(waves,{crossfadeSec=.5,maxDurationSec=360}={}){
+ if(!Array.isArray(waves)||waves.length<2||waves.length>MAX_SEQUENCE_SEGMENTS||!Number.isFinite(crossfadeSec)||crossfadeSec<.1||crossfadeSec>1.5||!Number.isFinite(maxDurationSec)||maxDurationSec<360||maxDurationSec>361.1)
   throw Error('긴 반주 결합 조건(구간 2~20개, 크로스페이드 0.1~1.5초)이 올바르지 않습니다.');
  const sources=waves.map(input=>{
   const bytes=input instanceof Uint8Array?input:new Uint8Array(input);
@@ -57,7 +57,7 @@ export function joinMusicGenWaves(waves,{crossfadeSec=.5}={}){
  if(sources.some(s=>s.rate!==rate||s.channels!==channels||s.frames<=fade))throw Error('MusicGen 구간들의 샘플레이트·채널이 다르거나 연결에 너무 짧습니다.');
  const frames=sources.reduce((a,s)=>a+s.frames,0)-fade*(sources.length-1);
  const size=44+frames*channels*2;
- if(size>MAX_SEQUENCE_BYTES||!Number.isSafeInteger(size)||frames/rate>360)throw Error('완성 반주 길이 또는 WAV 용량이 360초/160MiB를 초과합니다.');
+ if(size>MAX_SEQUENCE_BYTES||!Number.isSafeInteger(size)||frames/rate>maxDurationSec+1e-6)throw Error('완성 반주 길이 또는 WAV 용량이 360초/160MiB를 초과합니다.');
  const out=new Uint8Array(size),v=new DataView(out.buffer);
  let used=0;
  for(const [idx,part] of sources.entries()){
@@ -81,7 +81,7 @@ export function joinMusicGenWaves(waves,{crossfadeSec=.5}={}){
  v.setUint16(20,1,true);v.setUint16(22,channels,true);v.setUint32(24,rate,true);
  v.setUint32(28,rate*channels*2,true);v.setUint16(32,channels*2,true);v.setUint16(34,16,true);
  v.setUint32(40,size-44,true);
- assertUsableSingingWav(out,{maxDurationSec:360});
+ assertUsableSingingWav(out,{maxDurationSec});
  return new File([out],'MYVOCAL-MusicGen-긴반주.wav',{type:'audio/wav'});
 }
 export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec=.5,prompts=[],continuation=false,segmentSeconds=[],trimToSeconds=null,signal,onProgress=()=>{},generate=generateMusicGenAudio,session}={}){
@@ -97,14 +97,17 @@ export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec
  if(durations.some(n=>crossfadeSec>=n/2))throw Error('크로스페이드가 구간보다 깁니다.');
  if(trimToSeconds!==null&&(!Number.isFinite(trimToSeconds)||trimToSeconds<3||trimToSeconds>360))throw Error('최종 오디오 길이가 올바르지 않습니다.');
  const projectedSeconds=durations.reduce((a,b)=>a+b,0)-(segments-1)*crossfadeSec;
- if(projectedSeconds>360+1e-9)throw Error('긴 반주 예상 길이가 360초를 초과합니다. 구간 수나 길이를 줄이세요.');
+ if(projectedSeconds>360+(trimToSeconds===null?1e-9:1.05))
+  throw Error('긴 반주 예상 길이가 360초를 초과합니다. 구간 수나 길이를 줄이세요.');
+ if(trimToSeconds!==null&&(trimToSeconds<150||projectedSeconds+0.02<trimToSeconds||projectedSeconds-trimToSeconds>1.05))
+  throw Error('MIDI 원곡 길이와 생성 구간 시간표가 일치하지 않습니다.');
  if(!Array.isArray(prompts)||prompts.length>MAX_SEQUENCE_SEGMENTS||prompts.some(x=>typeof x!=='string'||[...x].length>600))throw Error('구간별 음악 설명이 올바르지 않습니다.');
  const parts=[];let baseline=null;
  for(let i=0;i<segments;i++){
   if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.');
   const prompt=prompts[i]?.trim()||settings.prompt;
   const next={...settings,prompt,seconds:durations[i],seed:settings.seed+i};
-  if(continuation&&i>0)next.audioPrompt=musicGenContinuationPrompt(parts[i-1],{seconds:Math.min(6,settings.seconds)});
+  if(continuation&&i>0)next.audioPrompt=musicGenContinuationPrompt(parts[i-1],{seconds:Math.min(6,durations[i-1])});
   const segment=await generate(next,{session,signal});
   if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.');
   if(!(segment instanceof Blob))throw Error('MusicGen이 실제 WAV를 반환하지 않았습니다.');
@@ -112,6 +115,8 @@ export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec
   if(bytes.length>12*1024*1024)throw Error('MusicGen 구간 파일 용량 초과');
   assertUsableSingingWav(bytes,{maxDurationSec:30});
   const part=parsePcm16(bytes);
+  if(trimToSeconds!==null&&Math.abs(part.frames/part.rate-durations[i])>.15)
+   throw Error('MusicGen 모델의 실제 구간 길이가 MIDI 계획과 다릅니다.');
   if(part.frames/part.rate<=crossfadeSec)throw Error('MusicGen 구간이 연결에 너무 짧습니다.');
   if(baseline&&(part.channels!==baseline.channels||part.rate!==baseline.rate))
    throw Error('MusicGen 모델이 구간마다 다른 샘플레이트·채널 WAV를 생성했습니다. 모델 설정을 확인하세요.');
@@ -121,7 +126,7 @@ export async function generateMusicGenSequence(settings,{segments=4,crossfadeSec
   onProgress(i+1,segments);
  }
  if(signal?.aborted)throw Error('긴 반주 생성이 취소됐습니다.');
- const joined=joinMusicGenWaves(parts,{crossfadeSec});
+ const joined=joinMusicGenWaves(parts,{crossfadeSec,maxDurationSec:trimToSeconds===null?360:361.1});
  if(trimToSeconds===null)return joined;
  if(trimToSeconds>projectedSeconds+0.05)throw Error('요청 길이가 실제 생성 구간보다 깁니다.');
  return trimMusicGenWavToScore(joined,trimToSeconds);
