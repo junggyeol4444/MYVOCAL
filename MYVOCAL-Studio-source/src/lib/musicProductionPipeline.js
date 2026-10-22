@@ -10,12 +10,12 @@ function requireLive(signal){
  if(signal?.aborted)throw new DOMException('원클릭 제작이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.','AbortError');
 }
 
-export async function runMusicProductionPipeline({settings,sequence=false,segments=4,crossfadeSec=.5,continuation=false,prompts=[],demucs,stemMix={},signal,onProgress=()=>{},generate=generateMusicGenAudio,generateSequence=generateMusicGenSequence,split=splitMusicGenStems,remix=renderStemRemixMaster}={}){
+export async function runMusicProductionPipeline({settings,sequence=false,segments=4,crossfadeSec=.5,continuation=false,prompts=[],segmentSeconds=[],trimToSeconds=null,demucs,stemMix={},signal,onProgress=()=>{},generate=generateMusicGenAudio,generateSequence=generateMusicGenSequence,split=splitMusicGenStems,remix=renderStemRemixMaster}={}){
  if(!settings||!demucs)throw Error('MusicGen 및 Demucs 로컬 설정을 입력하세요.');
  requireLive(signal);
  onProgress('실제 MusicGen 신경망으로 반주 생성 중');
  const wav=sequence
-  ?await generateSequence(settings,{segments,crossfadeSec,continuation,prompts,signal,onProgress:(done,total)=>onProgress(`MusicGen 구간 ${done}/${total}개 완료`),generate})
+  ?await generateSequence(settings,{segments,crossfadeSec,continuation,prompts,segmentSeconds,trimToSeconds,signal,onProgress:(done,total)=>onProgress(`MusicGen 구간 ${done}/${total}개 완료`),generate})
   :await generate(settings,{signal});
  requireLive(signal);
  if(!(wav instanceof Blob)||wav.size<44)throw Error('MusicGen이 WAV를 생성하지 않았습니다.');
