@@ -16,6 +16,7 @@ import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
 import {buildNeuralMusicPrompts} from '../lib/neuralMusicPromptTimeline.js';
+import {planScoreMatchedMusicGenSegments} from '../lib/neuralStemScoreTiming.js';
 import {renderAndStoreNeuralMidiStems} from '../lib/autoMvSourceStems.js';
 import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
 import {getInstalledLocalModels} from '../lib/localAiComposer.js';
@@ -120,12 +121,18 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       throw Error('등록된 실제 사람·캐릭터의 사진을 사용하려면 원본 참조 이미지 생성 동의 항목을 먼저 선택하세요.');
      setMessage('실제 MusicGen 연속 작곡 → Demucs 4~6개 악기 분리 → PCM 마스터링 중');
      // One-click model pipeline uses real installed models, not a silent demo.
-     const sections=musicDuration===360?20:11;
+     const scoreDuration=Number(source.neuralAutoScore?.durationSec);
+     const targetSec=Number.isFinite(scoreDuration)&&scoreDuration>=150&&scoreDuration<=360?
+      scoreDuration:musicDuration;
+     const sections=targetSec>210?20:11;
+     const timing=planScoreMatchedMusicGenSegments(targetSec,sections,{fadeSec:.5});
      const prompts=buildNeuralMusicPrompts(source,{segments:sections,seconds:18,crossfadeSec:.5,
-      basePrompt:source.prompt||source.title||'original Korean music'});
+      segmentSeconds:timing.segmentSeconds,
+      basePrompt:source.prompt||source.title||'오리지널 한국어 노래'});
      const generated=await runMusicProductionPipeline({
       settings:{python:musicPython,modelDir:musicModelDir,prompt:source.prompt||source.title||'original Korean music',seconds:18,seed:42},
       sequence:true,segments:sections,crossfadeSec:.5,continuation:true,prompts,
+      segmentSeconds:timing.segmentSeconds,trimToSeconds:timing.targetSec,
       demucs:{python:musicPython,repo:demucsRoot,model:'htdemucs',device:'auto'},
       signal:controller.signal,onProgress:setMessage
      });
@@ -168,7 +175,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     const finalSource=current();
     if(!finalSource||finalSource.id!==project.id)throw Error('최종 MV 제작 중 프로젝트가 변경됐습니다.');
     const finalDuration=audioEnd(finalSource);
-    if(finalDuration>0&&finalDuration<=360&&finalSource.scenes.length<20){
+    if(finalDuration>0&&finalDuration<=360&&finalSource.scenes.length<120){
      const filled=extendMvToFullSong(finalSource,finalDuration,{newId:genId});
      if(filled.added)await Promise.resolve(commit(filled.project));
     }
@@ -272,6 +279,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <Notice>각 악기용 프롬프트로 로컬 신경망 WAV를 별도로 생성합니다. 단일 모델의 악기 혼입 가능성은 있으며 완벽한 악기 분리나 개별 MIDI 음정의 정확한 재현을 보장하지 않습니다. 원본 파일을 변경하지 않습니다.</Notice>
   </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeNeuralMusic} onChange={e=>setMakeNeuralMusic(e.target.checked)}/> 반주가 없어도 MusicGen 신경망 → Demucs 악기 분리·마스터링 → 전체 MV 영상까지 일괄 제작</label>}
+  {saveFullMovie&&(makeAutoScore||makeNeuralAudioStems)&&!makeNeuralMusic&&<label>목표 노래 길이<select disabled={busy} value={musicDuration} onChange={e=>setMusicDuration(Number(e.target.value))}><option value={180}>약 3분</option><option value={360}>최대 6분</option></select></label>}
   {saveFullMovie&&makeNeuralMusic&&<div className="mv7-item">
    <label>목표 노래 길이<select disabled={busy} value={musicDuration} onChange={e=>setMusicDuration(Number(e.target.value))}><option value={180}>약 3분</option><option value={360}>최대 6분</option></select></label>
    <label>실제 로컬 Python.exe<input disabled={busy} value={musicPython} onChange={e=>setMusicPython(e.target.value)} placeholder="D:\\AI\\python.exe"/></label>
