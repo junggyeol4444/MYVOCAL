@@ -65,7 +65,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
    if(!(vocal instanceof Blob)||vocal.size<44||vocal.size>96*1024*1024)
     throw Error('프로젝트 보컬 WAV가 없거나 용량이 초과됐습니다.');
    const info=inspectSingingWav(await vocal.arrayBuffer());
-   if(!info.valid||info.durationSec<2||info.durationSec>360)
+   if(!info.valid||info.peak<.001||info.durationSec<2||info.durationSec>360)
     throw Error('프로젝트 보컬 WAV의 형식 또는 곡 길이가 올바르지 않습니다.');
    const linked=resolveProjectVrmLipSync(activeProject,character);
    if(!linked||linked.lipSync?.cues?.some(c=>c.endMs>info.durationSec*1000+50))
