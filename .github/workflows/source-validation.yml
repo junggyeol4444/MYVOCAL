@@ -47,3 +47,8 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m unittest -v test_cli_adapter
+      - name: Verify official RVC pipeline and inference audio quality
+        working-directory: .
+        run: |
+          python -m pip install --disable-pip-version-check "numpy>=2.0,<3"
+          python -m unittest discover -s tests -p 'test_rvc_*.py' -v
