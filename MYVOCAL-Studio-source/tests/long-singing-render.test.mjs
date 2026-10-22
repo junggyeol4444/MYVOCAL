@@ -26,7 +26,8 @@ test('joins actual PCM samples and preserves silent time offsets',()=>{
  return joined.arrayBuffer().then(buf=>{
   const info=inspectSingingWav(buf);assert.equal(info.durationSec,1.5);assert.equal(info.peak>0.4,true);
   const view=new DataView(buf);assert.equal(view.getInt16(44,true),8000);
-  assert.equal(view.getInt16(44+8000*2,true),15000);
+  assert.ok(view.getInt16(44+8000*2,true)>0&&view.getInt16(44+8000*2,true)<15000);
+  assert.equal(view.getInt16(44+(8000+40)*2,true),15000);
   assert.equal(view.getInt16(44+6000*2,true),0);
  });
 });
