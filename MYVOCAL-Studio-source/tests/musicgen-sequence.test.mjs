@@ -29,7 +29,7 @@ test('invalid or silent WAV and mismatched model output abort the complete merge
 });
 test('long music calls real generation for each segment before delivering combined output',async()=>{
  const commands=[],progress=[],config={python:'D:\\AI\\python.exe',modelDir:'D:\\musicgen',prompt:'Korean rock instrumental',seconds:3,seed:14};
- const result=await generateMusicGenSequence(config,{segments:3,prompts:['verse piano','chorus guitars','final orchestra'],onProgress:(done,total)=>progress.push([done,total]),generate:async setting=>{commands.push(setting);return new Blob([wav(3)],{type:'audio/wav'});}});
+ const result=await generateMusicGenSequence(config,{segments:3,prompts:['verse piano','chorus guitars','final orchestra'],onProgress:(done,total)=>progress.push([done,total]),generate:async setting=>{commands.push(setting);return new Blob([wav(3,8000,1,8000+commands.length*100)],{type:'audio/wav'});}});
  assert.deepEqual(commands.map(x=>x.seed),[14,15,16]);
  assert.deepEqual(commands.map(x=>x.prompt),['verse piano','chorus guitars','final orchestra']);
  assert.deepEqual(progress,[[1,3],[2,3],[3,3]]);
@@ -57,7 +57,7 @@ test('audio continuation mode passes a valid short WAV to the following model in
  await generateMusicGenSequence({python:'D:\\AI\\python.exe',modelDir:'D:\\Music',prompt:'cinematic rock',seconds:7,seed:7},
  {segments:3,crossfadeSec:.5,continuation:true,generate:async cfg=>{
    requests.push(cfg);
-   return new Blob([wav(7)],{type:'audio/wav'});
+   return new Blob([wav(7,8000,1,8000+requests.length*100)],{type:'audio/wav'});
  }});
  assert.equal(requests[0].audioPrompt,undefined);
  assert.ok(requests[1].audioPrompt?.length>1000);
