@@ -3,7 +3,7 @@
 const imageFields=['title','description','location','outfit','expression','action','camera','lighting'];
 const text=(v,max=320)=>String(v??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,max);
 export const MAX_SCENE_IMAGE_BYTES=12*1024*1024;
-export function buildSceneImageRequest(project,scene,character=null,direction=null){
+export function buildSceneImageRequest(project,scene,character=null,direction=null,autoReference=null){
  if(!project||!scene||!scene.id)throw Error('장면 또는 프로젝트가 없습니다.');
  const detail=imageFields.map(k=>text(scene[k])).join('|');
  const charName=character?text(character.name,160):'';
@@ -15,9 +15,10 @@ export function buildSceneImageRequest(project,scene,character=null,direction=nu
  // Preserve exact Step77/78 fingerprints for legacy scenes; append a photo identity only for Step79 scenes.
  if(scene.personMv)fingerprint.push(scene.characterId||'',scene.personMv.personId||'',scene.personMv.referenceAssetId||'',scene.personMv.denoise??null);
  if(scene.characterMv)fingerprint.push('Step80-character',scene.characterId||'',scene.characterMv.characterId||'',scene.characterMv.referenceAssetId||'',scene.characterMv.denoise??null);
+ if(autoReference&&!scene.personMv&&!scene.characterMv)fingerprint.push('registered-identity',character?.id||'',autoReference.kind,autoReference.assetId,autoReference.denoise);
  const key=JSON.stringify(fingerprint);
  const pieces=['High-quality cinematic music video storyboard still frame, detailed environment, coherent composition',
-  text(scene.description)||'music video scene',scene.personMv&&'Use the supplied real-person source photo as visual reference for this scene; preserve recognizable appearance where feasible',scene.characterMv&&'Use the supplied original 2D character artwork as the visual input; retain drawing style, clothing, colors and recognizable character features as far as the local model allows',scene.location&&`Setting: ${text(scene.location)}`,
+  text(scene.description)||'music video scene',scene.personMv&&'Use the supplied real-person source photo as visual reference for this scene; preserve recognizable appearance where feasible',scene.characterMv&&'Use the supplied original 2D character artwork as the visual input; retain drawing style, clothing, colors and recognizable character features as far as the local model allows',autoReference&&!scene.personMv&&!scene.characterMv&&'Use the same registered authorized reference image for this character across all scenes; retain the original face, colors, outfit, and identity where feasible',scene.location&&`Setting: ${text(scene.location)}`,
   charName&&`Character: ${charName}`,charDescription&&`Character concept: ${charDescription}`,appearance&&`Character appearance: ${appearance}`,scene.outfit&&`Outfit: ${text(scene.outfit)}`,
   scene.expression&&`Facial expression: ${text(scene.expression)}`,
   scene.action&&`Action: ${text(scene.action)}`,scene.camera&&`Camera: ${text(scene.camera)}`,
