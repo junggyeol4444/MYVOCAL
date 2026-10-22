@@ -8,13 +8,14 @@ function score(){
  ...roles.map((role,i)=>({id:'ai-'+role,role,generatedBy:'ollama-neural-score',
  midiNotes:[{pitch:role==='drums'?36:60+i,startBeat:0,length:1,velocity:85}]}))]};
 }
-function pcm(){
+function pcm(roleIndex=0){
  const frames=8000*160,b=new Uint8Array(44+frames*2),v=new DataView(b.buffer);
  for(const [at,tag] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']])
   for(let i=0;i<4;i++)b[at+i]=tag.charCodeAt(i);
  v.setUint32(4,b.length-8,true);v.setUint32(16,16,true);v.setUint16(20,1,true);
  v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,16000,true);
- v.setUint16(32,2,true);v.setUint16(34,16,true);v.setUint32(40,b.length-44,true);v.setInt16(44,6500,true);
+ v.setUint16(32,2,true);v.setUint16(34,16,true);v.setUint32(40,b.length-44,true);
+ for(let i=0;i<frames;i++)v.setInt16(44+i*2,Math.round(10000*Math.sin(2*Math.PI*(65+roleIndex*7)*i/8000)),true);
  return new Blob([b],{type:'audio/wav'});
 }
 const output=pcm();
@@ -25,7 +26,7 @@ function deps(project,custom={}){
   current:()=>actual,onChange:async next=>{actual=next},newId:p=>p+(++seq),
   readInfo:async()=>({duration:160}),createTrack:(_p,file,id,durationSec)=>({clips:[{assetId:id,durationSec}]}),
   save:async entries=>{created=entries},remove:async ids=>{removed=ids},
-  generate:async(settings,opts)=>{events.push({settings,opts});return output},
+  generate:async(settings,opts)=>{events.push({settings,opts});return pcm(events.length)},
   ...custom}};
 }
 test('6개 악기 모두 MIDI 조건으로 독립 신경망 구간 설명 작성',()=>{
