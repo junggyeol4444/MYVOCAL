@@ -6,6 +6,7 @@ import {buildNeuralMusicPrompts} from './neuralMusicPromptTimeline.js';
 import {latestCompleteNeuralScore,NEURAL_SCORE_ROLES} from './neuralScoreBatch.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 import {analyzeNeuralStemPcm,assertDistinctNeuralStems} from './neuralStemPcmIntegrity.js';
+import {planScoreMatchedMusicGenSegments} from './neuralStemScoreTiming.js';
 
 const INSTRUMENT={
  melody:['lead melody','멜로디'],chords:['piano chord progression','코드'],
@@ -15,9 +16,9 @@ const INSTRUMENT={
 const alive=(project,current,signal)=>{
  if(signal?.aborted||current()!==project)throw Error('신경망 악기 제작을 취소하거나 프로젝트를 변경했습니다. 원본을 보존합니다.');
 };
-export function instrumentNeuralPrompts(project,role,{segments,seconds=18,crossfadeSec=.5}={}){
+export function instrumentNeuralPrompts(project,role,{segments,seconds=18,crossfadeSec=.5,segmentSeconds=[]}={}){
  if(!Object.hasOwn(INSTRUMENT,role))throw Error('지원하지 않는 신경망 악기입니다.');
- const base=buildNeuralMusicPrompts(project,{segments,seconds,crossfadeSec});
+ const base=buildNeuralMusicPrompts(project,{segments,seconds,crossfadeSec,segmentSeconds});
  if(base.length!==segments)throw Error('같은 작곡 회차의 원본 6악기 MIDI가 필요합니다.');
  const musicalRole=INSTRUMENT[role][0];
  return base.map(text=>{
@@ -40,6 +41,9 @@ export async function renderAndStoreNeuralAudioStems(project,{
  crossfadeSec!==.5)throw Error('로컬 MusicGen 실행 환경과 3~6분 설정을 확인하세요.');
  alive(project,current,signal);
  if(!latestCompleteNeuralScore(project))throw Error('실제 로컬 AI가 생성한 동일 회차의 6악기 MIDI가 필요합니다.');
+ const scoreSec=Number(project.neuralAutoScore.durationSec)||
+  Number(project.neuralAutoScore.bars)*4*60/Number(project.bpm);
+ const timing=planScoreMatchedMusicGenSegments(scoreSec,segments,{fadeSec:crossfadeSec});
  const entries=[],tracks=[],integrity=[],allocated=new Set(project.tracks.map(t=>t.id));
  let baseline=0;
  const allocate=prefix=>{
@@ -49,11 +53,12 @@ export async function renderAndStoreNeuralAudioStems(project,{
  };
  for(const [index,role] of NEURAL_SCORE_ROLES.entries()){
   alive(project,current,signal);
-  const prompts=instrumentNeuralPrompts(project,role,{segments,seconds,crossfadeSec});
+  const prompts=instrumentNeuralPrompts(project,role,{segments,seconds,crossfadeSec,segmentSeconds:timing.segmentSeconds});
   onProgress('로컬 신경망 독립 악기 오디오 '+INSTRUMENT[role][1]+' '+(index+1)+'/6 생성 중');
   const rendered=await generate({
    python,modelDir,prompt:prompts[0],seconds,seed:4200+index*100
-  },{segments,crossfadeSec,prompts,continuation:true,session,signal,
+  },{segments,crossfadeSec,prompts,continuation:true,
+    segmentSeconds:timing.segmentSeconds,trimToSeconds:timing.targetSec,session,signal,
     onProgress:(done,total)=>onProgress(INSTRUMENT[role][1]+' '+done+'/'+total+'구간')});
   alive(project,current,signal);
   if(!(rendered instanceof Blob)||rendered.size<44||rendered.size>90*1024*1024)
@@ -65,6 +70,8 @@ export async function renderAndStoreNeuralAudioStems(project,{
   integrity.push({role,profile});
   const info=await readInfo(rendered);alive(project,current,signal);
   const duration=Number(info?.duration??info?.durationSec);
+  if(!Number.isFinite(duration)||Math.abs(duration-timing.targetSec)>.12)
+   throw Error('신경망 오디오와 한국어 MIDI 원곡 길이가 다릅니다. 원본을 보존합니다.');
   if(!Number.isFinite(duration)||duration<160||duration>360||
      (baseline&&Math.abs(duration-baseline)>.1))throw Error('신경망 악기 오디오가 3~6분 길이/동기화 조건을 충족하지 않습니다.');
   baseline||=duration;
