@@ -5,6 +5,28 @@ export const PRODUCTION_OUTPUT_TYPES=Object.freeze({
 });
 const LIMITS={wav:96*1024*1024,webm:160*1024*1024,mp4:200*1024*1024};
 const cancelled=()=>Error('최종 산출물 저장 중 취소되거나 프로젝트가 변경됐습니다. 기존 출력물은 보존합니다.');
+// 파일명이나 MIME만 바꾼 빈/가짜 출력은 프로젝트 자산으로 저장하지 않는다.
+// 최대 64바이트만 읽으므로 장시간 GPU 영상 파일을 메모리에 한꺼번에 복사하지 않는다.
+export async function verifyProductionContainer(kind,blob){
+ if(!Object.hasOwn(PRODUCTION_OUTPUT_TYPES,kind)||!(blob instanceof Blob)||
+    blob.type!==PRODUCTION_OUTPUT_TYPES[kind]||blob.size<44||blob.size>LIMITS[kind])
+  throw Error('생성 결과 WAV/WebM/MP4의 형식 또는 용량이 잘못됐습니다.');
+ const head=new Uint8Array(await blob.slice(0,64).arrayBuffer());
+ const ascii=(at,n)=>String.fromCharCode(...head.subarray(at,at+n));
+ if(kind==='wav'){
+  if(ascii(0,4)!=='RIFF'||ascii(8,4)!=='WAVE')
+   throw Error('실제 PCM WAV가 아닙니다. 사용자 원본은 그대로 유지합니다.');
+  const header=new DataView(head.buffer);
+  if(header.getUint32(4,true)+8!==blob.size)
+   throw Error('WAV 컨테이너 크기가 손상됐습니다.');
+ }else if(kind==='webm'){
+  if(head[0]!==0x1a||head[1]!==0x45||head[2]!==0xdf||head[3]!==0xa3)
+   throw Error('실제 WebM EBML 컨테이너가 아닙니다.');
+ }else if(ascii(4,4)!=='ftyp'){
+  throw Error('MP4 컨테이너가 아닙니다. WebM을 이름만 변경한 파일은 허용하지 않습니다.');
+ }
+ return true;
+}
 export async function persistProductionDeliverables(project,outputs,{
  current,onChange,newId,save,remove,signal,now=()=>new Date().toISOString()
 }={}){
@@ -26,6 +48,8 @@ export async function persistProductionDeliverables(project,outputs,{
     !(blob instanceof Blob)||blob.type!==PRODUCTION_OUTPUT_TYPES[kind]||
     blob.size<44||blob.size>LIMITS[kind])
    throw Error('완성 WAV/WebM/MP4 실제 파일의 형식·용량 또는 중복이 올바르지 않습니다.');
+  await verifyProductionContainer(kind,blob);
+  guard();
   const assetId=newId('delivery');
   if(typeof assetId!=='string'||!/^delivery_[A-Za-z0-9_-]{1,90}$/.test(assetId)||seen.has(assetId))
    throw Error('최종 결과의 신규 자산 ID가 중복됐거나 올바르지 않습니다.');
