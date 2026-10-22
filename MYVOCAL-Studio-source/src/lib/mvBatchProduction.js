@@ -6,6 +6,7 @@ import {videoSourceKey,applySceneVideo,generateLocalVideoClip,readSourceFrame} f
 import {buildMvDirectionPlan} from './mvDirection.js';
 import {getFile,putFileNew} from './assetDb.js';
 import {genId} from './schema.js';
+import {assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
 import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
 import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
 // A registered character reuses the SAME sampling seed in each scene.
@@ -54,7 +55,7 @@ export function authorizedAutoSceneReference(scene,character,{includeReferences=
  }
  return null;
 }
-export function planMvBatch(project,{maxScenes=20,includeReferences=false}={}){
+export function planMvBatch(project,{maxScenes=120,includeReferences=false}={}){
  if(!project?.id||!Array.isArray(project.scenes)||!project.scenes.length)throw Error('MV 장면이 있는 프로젝트를 선택해 주세요.');
  if(project.scenes.length>maxScenes)throw Error(`한 번에 최대 ${maxScenes}개 장면만 처리합니다. 구간을 나누어 실행하세요.`);
  const sceneIds=[];let already=0,linked=0;const knownIds=new Set();
@@ -120,14 +121,23 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   if(!image)throw Error('장면 이미지 파일이 없어 원본을 유지하고 중단했습니다.');
   const imageData=await sourceFrame(image);
   progress?.(`${index+1}/${plan.total}장면: SVD 영상 클립 생성 중`);
-  const seed=Math.floor(Math.random()*2000000000);
-  const clip=await generateVideo({port,checkpoint:videoModel,imageData,frames,fps,steps:videoSteps,motion,seed},session,signal);
+  // 원본 수동 장면은 기존 영상 설정을 그대로 사용한다.
+  const isFullSongAuto=scene.generatedBy==='full-song-auto-scene';
+  const sceneFrames=isFullSongAuto?25:frames,sceneFps=isFullSongAuto?8:fps;
+  const seed=isFullSongAuto?stableMvCharacterSeed(initialId,sceneId+'|'+(character?.id||'')):
+   Math.floor(Math.random()*2000000000);
+  const clip=await generateVideo({port,checkpoint:videoModel,imageData,
+   frames:sceneFrames,fps:sceneFps,steps:videoSteps,motion,seed},session,signal);
+  const actualSvd=isFullSongAuto?
+   await assertSvdAutoSceneClipDuration(clip,Number(scene.end)-Number(scene.start),{signal}):null;
   checkCancel();live=current();scene=live?.scenes?.find(s=>s.id===sceneId);
   if(!live||live.id!==initialId||!scene||videoSourceKey(live,scene,request)!==sourceKey)throw Error('영상 생성 중 프로젝트 내용이 변경됐습니다. 기존 원본은 그대로 유지합니다.');
   const finalCharacter=(currentData()?.characters||[]).find(c=>c.id===(scene.characterId||live.characterId));
   if(JSON.stringify(sceneReference(scene,finalCharacter)||authorizedAutoSceneReference(scene,finalCharacter,{includeReferences}))!==JSON.stringify(reference))throw Error('영상 생성 중 사람·캐릭터 참조가 변경됐습니다.');
   checkCancel();const clipId=idFactory('vid');await saveFile(clipId,new File([clip],`MYVOCAL-MV-${sceneId}-${seed}.${clip.type==='video/mp4'?'mp4':'webp'}`,{type:clip.type}));
-  commit(applySceneVideo(live,sceneId,clipId,sourceKey,{checkpoint:videoModel,seed,frames,fps,mime:clip.type}));generatedVideos++;
+  commit(applySceneVideo(live,sceneId,clipId,sourceKey,{checkpoint:videoModel,seed,
+   frames:sceneFrames,fps:sceneFps,mime:clip.type,
+   actualDurationSec:actualSvd?.durationSec,actualFrames:actualSvd?.frames}));generatedVideos++;
   progress?.(`${index+1}/${plan.total}장면 생성·저장 완료`);
  }
  return {...plan,generatedImages,generatedVideos,videoGenerated:generatedVideos>0,completedScenes:generatedVideos,fullMovieExported:false};
