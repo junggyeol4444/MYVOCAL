@@ -3,6 +3,8 @@ import {Button,Field,Notice,Panel} from './UI';
 import {generateMusicGenAudio} from '../lib/musicGenClient.js';
 import {splitMusicGenStems} from '../lib/musicStemsClient.js';
 import {generateMusicGenSequence} from '../lib/musicGenSequence.js';
+import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
+import {latestCompleteNeuralScore} from '../lib/neuralScoreBatch.js';
 import {readMusicGenPreferences,writeMusicGenPreferences} from '../lib/musicGenPreferences.js';
 import {musicGenSectionPrompts} from '../lib/musicGenSectionPrompts.js';
 import {readAudioInfo} from '../lib/audioEngine';
@@ -28,6 +30,9 @@ export default function MusicGenPanel({project,onChange,notify}){
  useEffect(()=>()=>{if(url)URL.revokeObjectURL(url)},[url]);
  useEffect(()=>{setWav(null);setUrl('');setStems(null);setRemix(null);setStemMix({});setMidiResult(null);setError('')},[project.id]);
  const clear=()=>{setWav(null);setUrl('');setStems(null);setRemix(null);setStemMix({});setMidiResult(null)};
+ const neuralScoreReady=!!latestCompleteNeuralScore(project)&&!!project.neuralAutoScore;
+ const neuralScoreSeconds=Number(project.neuralAutoScore?.durationSec)||Number(project.neuralAutoScore?.bars)*4*60/Number(project.bpm);
+ const neuralScoreLengthOK=Number.isFinite(neuralScoreSeconds)&&neuralScoreSeconds>=150&&neuralScoreSeconds<=360;
  const generate=async()=>{
   if(busy)return;const initial=latest.current,controller=new AbortController();active.current=controller;setBusy(true);clear();setError('');setProgress('');
   try{
@@ -38,6 +43,22 @@ export default function MusicGenPanel({project,onChange,notify}){
    if(controller.signal.aborted||latest.current!==initial)throw Error('생성 작업이 취소되거나 프로젝트가 변경됐습니다.');
    setWav({file,projectId:initial.id});setUrl(URL.createObjectURL(file));notify(sequence?'실제 MusicGen 오디오 구간을 크로스페이드해 WAV를 만들었습니다. 구간별 음악적 연속성은 보장하지 않습니다.':'실제 로컬 MusicGen WAV를 수신했습니다. 미리 듣고 저장할 수 있습니다.');
   }catch(e){setError(e.message)}finally{active.current=null;setBusy(false)}
+ };
+ const generateSixNeuralStems=async()=>{
+  if(busy||!python||!modelDir||!neuralScoreReady||!neuralScoreLengthOK)return;
+  const initial=latest.current,controller=new AbortController();active.current=controller;
+  setBusy(true);setError('');setProgress('MIDI 원곡 길이에 맞춘 독립 6악기 MusicGen 오디오 생성 중');
+  try{
+   const result=await renderAndStoreNeuralAudioStems(initial,{
+    python,modelDir,seconds:18,segments:neuralScoreSeconds<=210?11:20,
+    crossfadeSec:.5,audible:true,session:window.__MYVOCAL_SESSION_KEY,
+    signal:controller.signal,current:()=>latest.current,onChange,
+    newId:genId,readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
+    save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setProgress
+   });
+   notify('기존 프로젝트에 원천 생성 6악기 MusicGen WAV '+result.tracks+'트랙을 추가했습니다. MIDI 원곡 길이 '+result.durationSec.toFixed(2)+'초에 맞췄습니다.');
+  }catch(e){setError(e.message)}
+  finally{active.current=null;setBusy(false);setProgress('')}
  };
  const oneClickProduction=async()=>{
   if(busy||!python||!modelDir||!demucsRepo)return;
@@ -190,6 +211,11 @@ export default function MusicGenPanel({project,onChange,notify}){
    <div className="mv7-actions"><Button variant="primary" disabled={busy||!python||!modelDir} onClick={generate}>{busy?(progress||'MusicGen 생성 중'):(sequence?'긴 AI 반주 WAV 일괄 생성':'로컬 AI 반주 WAV 생성')}</Button>
     {busy&&<Button onClick={()=>active.current?.abort()}>생성 취소</Button>}
     {wav&&<Button disabled={busy} onClick={attach}>확인한 반주 WAV를 프로젝트 트랙에 추가</Button>}</div>
+   {neuralScoreReady&&<div className="mv7-item">
+    <p className="muted">동일 AI 작곡 회차의 멜로디·코드·베이스·드럼·기타·패드 MIDI를 기준으로 6개 MusicGen WAV를 독립 생성하여 편집 트랙에 저장합니다. Demucs 사후 분리가 아니며 악기 격리 품질은 로컬 모델에 따라 달라집니다.</p>
+    <p className="muted">MIDI 곡 길이: {neuralScoreLengthOK?neuralScoreSeconds.toFixed(2)+'초':'3~6분 원곡 정보 확인 필요'}</p>
+    <div className="mv7-actions"><Button disabled={busy||!python||!modelDir||!neuralScoreLengthOK} onClick={generateSixNeuralStems}>MIDI 동기화 6악기 MusicGen WAV 생성·트랙 저장</Button></div>
+   </div>}
    <div className="mv7-item">
     <Field label="기존 WAV 불러와서 분리"><input type="file" accept=".wav,audio/wav" disabled={busy} onChange={async e=>{
      const file=e.target.files?.[0];e.target.value='';if(!file)return;
