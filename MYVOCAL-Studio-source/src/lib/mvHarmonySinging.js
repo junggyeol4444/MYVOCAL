@@ -7,6 +7,10 @@ import {buildSingingRequest,singingCapabilitiesView,engineModelCompatibility} fr
 import {assertSingingStyleSupported} from './singingStyleControl.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 import {persistNeuralVocalTake} from './neuralVocalPersist.js';
+import {convertLongSingingWithRVC} from './rvcLongConversion.js';
+import {convertRegisteredRVC} from './rvcStoredConversion.js';
+import {getFile} from './assetDb.js';
+import {sha256File} from './voiceTraining.js';
 
 const PITCH_CLASSES=Object.freeze({C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11});
 const MAJOR=[0,2,4,5,7,9,11],MINOR=[0,2,3,5,7,8,10];
@@ -36,6 +40,7 @@ export function makeDiatonicHarmonyAlignment(project,{direction='above'}={}){
 }
 export async function generateAndStoreMvHarmony(project,{
  voice,port,modelId='',session,confirmed=false,direction='above',singingStyle='Natural',
+ convertRVC=false,rvcOptions=null,registeredRVCModel=null,convert=convertLongSingingWithRVC,
  signal,request=fetch,saveOptions,onProgress=()=>{}
 }={}){
  if(!project?.id||!voice||!['self','owned','licensed'].includes(voice.rights)||confirmed!==true)
@@ -92,20 +97,63 @@ export async function generateAndStoreMvHarmony(project,{
   throw Error('화음 WAV가 실제 원곡 마지막 MIDI 음표보다 짧습니다.');
  const label=direction==='above'?'상성 3도':'하성 3도';
  const file=new File([wav],'MYVOCAL-'+label+'-신경망-Singing.wav',{type:'audio/wav'});
+ let files=[file];
+ if(convertRVC){
+  if(!rvcOptions||!rvcOptions.root||!rvcOptions.python||
+     (!registeredRVCModel&&!rvcOptions.model))
+   throw Error('실제 RVC CUDA 음색 변환용 Python·모델 경로를 확인하세요.');
+  const conversion={session,signal,onProgress:(done,total)=>
+   onProgress('독립 화음 RVC 음색 변환 '+done+'/'+total+' 구간')};
+  if(registeredRVCModel){
+   const record=registeredRVCModel;
+   if(record.engineId!=='rvc'||record.voiceId!==voice.id||!record.assetId||
+      !/^[a-f0-9]{64}$/i.test(String(record.sha256||'')))
+    throw Error('화음 음색은 선택한 본인/허가된 RVC 모델에서만 변환할 수 있습니다.');
+   const modelFile=await getFile(record.assetId);
+   if(!(modelFile instanceof Blob)||await sha256File(modelFile)!==record.sha256)
+    throw Error('등록된 RVC 본인 음색 체크포인트 SHA-256이 일치하지 않습니다.');
+   let indexFile=null;
+   if(record.indexAssetId){
+    indexFile=await getFile(record.indexAssetId);
+    if(!(indexFile instanceof Blob)||!/^[a-f0-9]{64}$/i.test(String(record.indexSha256||''))||
+       await sha256File(indexFile)!==record.indexSha256)
+     throw Error('등록된 RVC FAISS 인덱스 SHA-256이 일치하지 않습니다.');
+   }
+   if(Number(rvcOptions.indexRate)>0&&!indexFile)
+    throw Error('RVC 검색 비율을 사용하려면 실제 등록 FAISS 인덱스가 필요합니다.');
+   guard();
+   conversion.convert=(chunk,settings,options)=>convertRegisteredRVC(chunk,{
+    ...settings,modelFile,indexFile},options);
+  }
+  const converted=await convert(file,{...rvcOptions,rightsConfirmed:true},conversion);
+  guard();
+  if(!(converted instanceof Blob)||converted.size<44)
+   throw Error('본인 음색 RVC 화음 신경망 WAV가 생성되지 않았습니다.');
+  const convertedInfo=assertUsableSingingWav(await converted.arrayBuffer(),{maxDurationSec:360});
+  if(Math.abs(convertedInfo.durationSec-info.durationSec)>.15)
+   throw Error('화음 RVC 실제 PCM 길이가 원본 신경망 Singing과 일치하지 않습니다.');
+  files=[file,new File([converted],'MYVOCAL-'+label+'-본인음색-RVC-화음.wav',{type:'audio/wav'})];
+ }
  const job={id:saveOptions.newId('singjob'),at:new Date().toISOString(),
   mode:'실제 한국어 신경망 Singing '+label,result:'원본 보컬 보존·독립 화음 WAV 신규 편집 트랙',
   notes:harmony.cues.length,engine:capabilities.name||'로컬 신경망'};
  let named=null;
- const saved=await persistNeuralVocalTake(project,[file],{...saveOptions,signal,
+ const saved=await persistNeuralVocalTake(project,files,{...saveOptions,signal,
   engineInfo:{port,modelId:model.id},job,
   onChange:next=>{
-   const track=next.tracks.at(-1);
-   named={...next,tracks:[...next.tracks.slice(0,-1),{...track,
-    name:'한국어 신경망 Singing · '+label+' 화음',source:'neural-harmony-singing',
-    harmonyDirection:direction,volume:48,mute:false}]};
+   const total=files.length;
+   const head=next.tracks.slice(0,-total);
+   const appended=next.tracks.slice(-total).map((track,index)=>({...track,
+    name:'한국어 신경망 · '+label+(convertRVC&&index===0?' 원본 화음 참조':' 독립 화음')+
+     (convertRVC&&index===1?' · 실제 RVC 본인음색':''),
+    source:convertRVC&&index===1?'neural-rvc-harmony':'neural-harmony-singing',
+    harmonyDirection:direction,volume:convertRVC&&index===0?25:48,
+    mute:convertRVC&&index===0
+   }));
+   named={...next,tracks:[...head,...appended]};
    return saveOptions.onChange(named);
   }
  });
  return {project:named||saved.project,assets:saved.assets,direction,voiceId:voice.id,
-  modelId:model.id,neuralHarmony:true};
+  modelId:model.id,neuralHarmony:true,convertedWithRVC:convertRVC};
 }
