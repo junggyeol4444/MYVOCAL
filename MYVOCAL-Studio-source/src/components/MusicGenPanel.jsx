@@ -5,6 +5,8 @@ import {splitMusicGenStems} from '../lib/musicStemsClient.js';
 import {generateMusicGenSequence} from '../lib/musicGenSequence.js';
 import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
 import {latestCompleteNeuralScore} from '../lib/neuralScoreBatch.js';
+import {planScoreMatchedMusicGenSegments} from '../lib/neuralStemScoreTiming.js';
+import {buildNeuralMusicPrompts} from '../lib/neuralMusicPromptTimeline.js';
 import {readMusicGenPreferences,writeMusicGenPreferences} from '../lib/musicGenPreferences.js';
 import {musicGenSectionPrompts} from '../lib/musicGenSectionPrompts.js';
 import {readAudioInfo} from '../lib/audioEngine';
@@ -22,7 +24,7 @@ export default function MusicGenPanel({project,onChange,notify}){
  const [python,setPython]=useState(paths.python||''),[modelDir,setModelDir]=useState(paths.modelDir||''),[prompt,setPrompt]=useState('cinematic instrumental music'),[seconds,setSeconds]=useState('12'),[seed,setSeed]=useState('42');
  const [wav,setWav]=useState(null),[url,setUrl]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [demucsRepo,setDemucsRepo]=useState(''),[demucsModel,setDemucsModel]=useState('htdemucs'),[demucsDevice,setDemucsDevice]=useState('auto'),[stems,setStems]=useState(null);
- const [sequence,setSequence]=useState(false),[continuation,setContinuation]=useState(false),[segments,setSegments]=useState('4'),[fade,setFade]=useState('0.5'),[partPrompts,setPartPrompts]=useState(''),[progress,setProgress]=useState('');
+ const [sequence,setSequence]=useState(false),[scoreMatch,setScoreMatch]=useState(false),[continuation,setContinuation]=useState(false),[segments,setSegments]=useState('4'),[fade,setFade]=useState('0.5'),[partPrompts,setPartPrompts]=useState(''),[progress,setProgress]=useState('');
  const [stemMix,setStemMix]=useState({}),[remix,setRemix]=useState(null);
  const [midiPython,setMidiPython]=useState(''),[midiStem,setMidiStem]=useState('bass'),[midiResult,setMidiResult]=useState(null);
  const active=useRef(null),latest=useRef(project);latest.current=project;
@@ -33,12 +35,28 @@ export default function MusicGenPanel({project,onChange,notify}){
  const neuralScoreReady=!!latestCompleteNeuralScore(project)&&!!project.neuralAutoScore;
  const neuralScoreSeconds=Number(project.neuralAutoScore?.durationSec)||Number(project.neuralAutoScore?.bars)*4*60/Number(project.bpm);
  const neuralScoreLengthOK=Number.isFinite(neuralScoreSeconds)&&neuralScoreSeconds>=150&&neuralScoreSeconds<=360;
+ // 기존 신경망 MIDI 원곡이 있을 때만 실제 MusicGen 모델에 시간표를 전달한다.
+ const scoreSequenceOptions=source=>{
+  if(!sequence||!scoreMatch)return null;
+  if(!latestCompleteNeuralScore(source))
+   throw Error('MIDI 동기화 음악 제작에는 동일 회차의 신경망 6악기 MIDI가 필요합니다.');
+  const duration=Number(source.neuralAutoScore?.durationSec)||
+   Number(source.neuralAutoScore?.bars)*4*60/Number(source.bpm);
+  const parts=duration<=210?11:20;
+  const timing=planScoreMatchedMusicGenSegments(duration,parts,{fadeSec:.5});
+  const prompts=buildNeuralMusicPrompts(source,{segments:parts,seconds:18,
+   crossfadeSec:.5,segmentSeconds:timing.segmentSeconds,basePrompt:prompt});
+  if(prompts.length!==parts)throw Error('MIDI 원곡 구간을 MusicGen으로 연결할 수 없습니다.');
+  return {segments:parts,crossfadeSec:.5,continuation:true,prompts,
+   segmentSeconds:timing.segmentSeconds,trimToSeconds:timing.targetSec};
+ };
  const generate=async()=>{
   if(busy)return;const initial=latest.current,controller=new AbortController();active.current=controller;setBusy(true);clear();setError('');setProgress('');
   try{
-   const settings={python,modelDir,prompt,seconds:Number(seconds),seed:Number(seed)};
+   const scoreOptions=scoreSequenceOptions(initial);
+   const settings={python,modelDir,prompt,seconds:scoreOptions?18:Number(seconds),seed:Number(seed)};
    const file=sequence
-    ?await generateMusicGenSequence(settings,{segments:Number(segments),crossfadeSec:Number(fade),continuation,prompts:partPrompts.split(/\r?\n/),signal:controller.signal,onProgress:(done,total)=>setProgress(`${done}/${total}개 MusicGen 구간 생성 완료`)})
+    ?await generateMusicGenSequence(settings,{segments:Number(segments),crossfadeSec:Number(fade),continuation,prompts:partPrompts.split(/\r?\n/),...scoreOptions,signal:controller.signal,onProgress:(done,total)=>setProgress(`${done}/${total}개 MusicGen 구간 생성 완료`)})
     :await generateMusicGenAudio(settings,{signal:controller.signal});
    if(controller.signal.aborted||latest.current!==initial)throw Error('생성 작업이 취소되거나 프로젝트가 변경됐습니다.');
    setWav({file,projectId:initial.id});setUrl(URL.createObjectURL(file));notify(sequence?'실제 MusicGen 오디오 구간을 크로스페이드해 WAV를 만들었습니다. 구간별 음악적 연속성은 보장하지 않습니다.':'실제 로컬 MusicGen WAV를 수신했습니다. 미리 듣고 저장할 수 있습니다.');
@@ -65,10 +83,12 @@ export default function MusicGenPanel({project,onChange,notify}){
   const initial=latest.current,controller=new AbortController();active.current=controller;
   setBusy(true);setError('');setProgress('MusicGen 신경망 → Demucs 악기 분리 → PCM 마스터 생성 중');
   try{
+   const scoreOptions=scoreSequenceOptions(initial);
    const result=await runMusicProductionPipeline({
-    settings:{python,modelDir,prompt,seconds:Number(seconds),seed:Number(seed)},
+    settings:{python,modelDir,prompt,seconds:scoreOptions?18:Number(seconds),seed:Number(seed)},
     sequence,segments:Number(segments),crossfadeSec:Number(fade),continuation,
-    prompts:partPrompts.split(/\r?\n/),demucs:{python,repo:demucsRepo,model:demucsModel,device:demucsDevice},
+    prompts:partPrompts.split(/\r?\n/),...scoreOptions,
+    demucs:{python,repo:demucsRepo,model:demucsModel,device:demucsDevice},
     stemMix,signal:controller.signal,onProgress:setProgress
    });
    if(controller.signal.aborted||latest.current!==initial)throw Error('프로젝트 변경 또는 제작 취소');
@@ -197,7 +217,8 @@ export default function MusicGenPanel({project,onChange,notify}){
    </div>
    <div className="mv7-item">
     <label><input type="checkbox" checked={sequence} disabled={busy} onChange={e=>setSequence(e.target.checked)}/> 여러 실제 MusicGen 구간을 긴 반주 WAV로 결합</label>
-    {sequence&&<label><input type="checkbox" disabled={busy} checked={continuation} onChange={e=>setContinuation(e.target.checked)}/> 이전 MusicGen 음원을 참조하는 실제 오디오 연속 생성 (구간당 최대 20초)</label>}
+    {sequence&&neuralScoreReady&&<label><input type="checkbox" disabled={busy||!neuralScoreLengthOK} checked={scoreMatch} onChange={e=>setScoreMatch(e.target.checked)}/> 현재 MIDI 6악기의 실제 3~6분 길이·PCM 시간표로 MusicGen 자동 생성</label>}
+    {sequence&&<label><input type="checkbox" disabled={busy||scoreMatch} checked={continuation||scoreMatch} onChange={e=>setContinuation(e.target.checked)}/> 이전 MusicGen 음원을 참조하는 실제 오디오 연속 생성 (구간당 최대 20초)</label>}
     {sequence&&<div className="mv10-grid">
       <Field label="연속 구간 수 (2~20)"><input type="number" min="2" max="20" value={segments} disabled={busy} onChange={e=>setSegments(e.target.value)}/></Field>
       <Field label="구간 사이 크로스페이드 초 (0.1~1.5)"><input type="number" step=".1" min=".1" max="1.5" value={fade} disabled={busy} onChange={e=>setFade(e.target.value)}/></Field>
@@ -205,7 +226,7 @@ export default function MusicGenPanel({project,onChange,notify}){
     </div>}
     {sequence&&<Button disabled={busy} onClick={()=>{try{const guide=musicGenSectionPrompts(latest.current,prompt);setSegments(String(guide.segments));setPartPrompts(guide.prompts.join("\n"));notify("현재 프로젝트의 실제 곡 구간 설명을 긴 반주 프롬프트에 적용했습니다.")}catch(e){setError(e.message)}}}>현재 Intro·Verse·Chorus 구간 반영</Button>}
     <Button disabled={busy} onClick={()=>{try{writeMusicGenPreferences(window.localStorage,{python,modelDir});notify('MusicGen 실행 경로만 이 PC에 저장했습니다. 녹음·음원은 저장하지 않습니다.')}catch(e){setError(e.message)}}}>로컬 Python·모델 경로 기억</Button>
-    {sequence&&<p className="muted">예상 완성 길이: {Number.isFinite(Number(segments)*Number(seconds)-(Number(segments)-1)*Number(fade)) ? Math.max(0,Number(segments)*Number(seconds)-(Number(segments)-1)*Number(fade)).toFixed(1) : "계산 불가"}초 / 최대 360초. 실제 MusicGen 연속 생성은 설치된 모델에 따라 음악적 일관성이 달라집니다.</p>}
+    {sequence&&<p className="muted">예상 완성 길이: {scoreMatch&&neuralScoreLengthOK?neuralScoreSeconds.toFixed(2):Number.isFinite(Number(segments)*Number(seconds)-(Number(segments)-1)*Number(fade)) ? Math.max(0,Number(segments)*Number(seconds)-(Number(segments)-1)*Number(fade)).toFixed(1) : "계산 불가"}초 / 최대 360초. 실제 MusicGen 연속 생성은 설치된 모델에 따라 음악적 일관성이 달라집니다.</p>}
     <p className="muted">길이 설정은 구간 하나당 초이며, 긴 반주는 구간별 독립적인 AI 오디오를 이어 붙입니다. 연속 생성은 이전 6초를 모델 입력으로 사용합니다. 장편 음악의 멜로디·리듬 일관성은 모델에 따라 달라지며 보장되지 않습니다.</p>
    </div>
    <div className="mv7-actions"><Button variant="primary" disabled={busy||!python||!modelDir} onClick={generate}>{busy?(progress||'MusicGen 생성 중'):(sequence?'긴 AI 반주 WAV 일괄 생성':'로컬 AI 반주 WAV 생성')}</Button>
