@@ -299,7 +299,7 @@ export default function Characters({data,add,remove,notify,removeCharacterPersis
  {lipFor&&<Modal title={`STEP85 · 캐릭터 Lip Sync · ${lipFor.name}`} onClose={()=>setLipFor(null)}><CharacterLipSyncEditor character={data.characters.find(c=>c.id===lipFor.id)||lipFor} onSave={profile=>{add('characters',profile);setLipFor(null);}} notify={notify} projects={data.projects||[]}/></Modal>}
  {stageFor&&<Modal title={`STEP84 · 3D 무대 연출 · ${stageFor.name}`} onClose={()=>setStageFor(null)}><CharacterStage3dEditor character={data.characters.find(c=>c.id===stageFor.id)||stageFor} projects={data.projects||[]} onSave={profile=>{add('characters',profile);setStageFor(null);}} notify={notify}/></Modal>}
  {animationFor&&<Modal title={`STEP82 · 2D 캐릭터 애니메이션 · ${animationFor.name}`} onClose={()=>setAnimationFor(null)}>
-  <CharacterAnimationEditor character={data.characters.find(c=>c.id===animationFor.id)||animationFor} onSave={profile=>{add('characters',profile);setAnimationFor(null);}} notify={notify}/>
+  <CharacterAnimationEditor character={data.characters.find(c=>c.id===animationFor.id)||animationFor} projects={data.projects||[]} onSave={profile=>{add('characters',profile);setAnimationFor(null);}} notify={notify}/>
  </Modal>}
  {layerFor&&<Modal title={`STEP81 · 2D 캐릭터 레이어 분석 · ${layerFor.name}`} onClose={()=>setLayerFor(null)}>
   <CharacterLayerEditor character={data.characters.find(c=>c.id===layerFor.id)||layerFor} onSave={profile=>{add('characters',profile);setLayerFor(null);}} notify={notify}/>
