@@ -13,6 +13,7 @@ import {genId} from '../lib/schema.js';
 import {putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb.js';
 import {extendMvToFullSong} from '../lib/fullSongMvScenes.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
+import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {SINGING_STYLES} from '../lib/singingStyleControl.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
@@ -34,6 +35,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(false),[singingPort,setSingingPort]=useState('7867');
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
  const [singingStyle,setSingingStyle]=useState(project.singingStyle||'Natural');
+ const [makeHarmony,setMakeHarmony]=useState(false),[harmonyDirection,setHarmonyDirection]=useState('above');
  const [alsoConvertRVC,setAlsoConvertRVC]=useState(false),[registeredRVCId,setRegisteredRVCId]=useState('');
  const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
  const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(''),[soundfontFile,setSoundfontFile]=useState('');
@@ -171,7 +173,18 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      });
      if(controller.signal.aborted||current()?.id!==vocalProject.id)throw Error('신경망 가창 저장 중 취소 또는 프로젝트 변경');
      movieProject=sung.project;
-     setMessage('실제 신경망 한국어 가창 '+sung.vocalAssets+'개 저장 → 노래·장면 동기화 MV 제작 중');
+     if(makeHarmony){
+      // 기존 메인 보컬 뒤에 사용자 음색 모델로 실제 화음 WAV를 생성한다.
+      const harmonized=await generateAndStoreMvHarmony(current(),{
+       voice:singer,port:Number(singingPort),modelId:sung.modelId,
+       session:base.session,confirmed:singingRights,singingStyle,
+       direction:harmonyDirection,signal:controller.signal,onProgress:setMessage,
+       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
+        createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
+      });
+      movieProject=harmonized.project;
+      setMessage('원곡 메인 가창과 독립 신경망 3도 화음 WAV를 각각 편집 트랙에 저장했습니다.');
+     }else setMessage('실제 신경망 한국어 가창 '+sung.vocalAssets+'개 저장 → 노래·장면 동기화 MV 제작 중');
     }
     // Extend only unrendered tail scenes to the actual WAV length.
     const finalSource=current();
@@ -299,6 +312,10 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <label>노래 스타일 (Voice 음색과 별도)<select disabled={busy} value={singingStyle} onChange={e=>setSingingStyle(e.target.value)}>
     {SINGING_STYLES.map(style=><option key={style} value={style}>{style}</option>)}
    </select></label>
+   <label><input type="checkbox" checked={makeHarmony} disabled={busy} onChange={e=>setMakeHarmony(e.target.checked)}/> 원곡 MIDI로 실제 신경망 Singing 3도 화음도 별도 WAV/DAW 트랙 생성</label>
+   {makeHarmony&&<label>3도 화음 음역<select disabled={busy} value={harmonyDirection} onChange={e=>setHarmonyDirection(e.target.value)}>
+    <option value="above">메인 선율 위의 3도</option><option value="below">메인 선율 아래의 3도</option>
+   </select></label>}
    <label><input type="checkbox" checked={alsoConvertRVC} disabled={busy} onChange={e=>setAlsoConvertRVC(e.target.checked)}/> 등록한 RVC 모델로 본인 음색까지 변환</label>
    {alsoConvertRVC&&<label>실제 RVC 모델 선택<select disabled={busy} value={registeredRVCId} onChange={e=>setRegisteredRVCId(e.target.value)}>
      <option value="">기존 로컬 경로의 모델 사용</option>
