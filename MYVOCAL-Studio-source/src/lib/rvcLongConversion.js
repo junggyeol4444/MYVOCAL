@@ -159,6 +159,25 @@ export function joinOverlappedRVCWavs(parts,durationSec){
   if(previous && (Math.abs(part.coreStartSec-previous.coreEndSec)>.001 || part.startSec>previous.limitSec+.001))
    throw Error('RVC 분할 구간이 연속되지 않습니다.');
   const fadeStart=previous?from:to,fadeEnd=previous?Math.min(to,Math.round(previous.limitSec*format.sampleRate)):from;
+  // 두 RVC 출력의 실제 겹침 PCM RMS 차이를 제한적으로 보정한다.
+  // 원본 WAV는 읽기만 하며 1.5초에 걸쳐 원래 음량으로 복귀한다.
+  let gain=1;
+  if(previous&&fadeEnd-from>=Math.round(format.sampleRate*.04)){
+   let beforeEnergy=0,afterEnergy=0,count=0;
+   const stride=Math.max(1,Math.floor(format.sampleRate/1200));
+   for(let frame=from;frame<fadeEnd;frame+=stride){
+    for(let channel=0;channel<format.channels;channel++){
+     const old=readSample(result,44+frame*align+channel*format.bits/8,format);
+     const newer=readSample(pcm,(frame-from)*align+channel*format.bits/8,format);
+     beforeEnergy+=old*old;afterEnergy+=newer*newer;count++;
+    }
+   }
+   const beforeRms=Math.sqrt(beforeEnergy/Math.max(1,count));
+   const afterRms=Math.sqrt(afterEnergy/Math.max(1,count));
+   if(beforeRms>.008&&afterRms>.008)
+    gain=Math.max(.8,Math.min(1.25,beforeRms/afterRms));
+  }
+  const releaseFrames=Math.max(1,Math.round(format.sampleRate*1.5));
   for(let frame=from;frame<to;frame++){
    const sourceFrame=frame-from;
    if(sourceFrame>=part.layout.frames)break;
@@ -166,6 +185,10 @@ export function joinOverlappedRVCWavs(parts,durationSec){
     const src=sourceFrame*align+channel*format.bits/8;
     const dst=44+frame*align+channel*format.bits/8;
     let value=readSample(pcm,src,format);
+    if(gain!==1){
+     const release=Math.max(0,1-(frame-from)/releaseFrames);
+     value*=1+(gain-1)*release;
+    }
     if(previous && frame<fadeEnd){
      const old=readSample(result,dst,format);
      const blend=fadeEnd>fadeStart?(frame-fadeStart)/(fadeEnd-fadeStart):1;
@@ -187,11 +210,13 @@ export async function convertLongSingingWithRVC(file,settings,{
  if(!Number.isInteger(maxInputBytes)||maxInputBytes<4096||maxInputBytes>RVC_SOURCE_LIMIT)throw Error('RVC 분할 크기 설정이 올바르지 않습니다.');
  if(signal?.aborted)throw Error('RVC 긴 곡 변환을 취소했습니다.');
  const bytes=new Uint8Array(await file.arrayBuffer());
- assertUsableSingingWav(bytes,{maxDurationSec:MAX_SECONDS});
+ const originalInfo=assertUsableSingingWav(bytes,{maxDurationSec:MAX_SECONDS});
  if(bytes.byteLength<=maxInputBytes){
   const result=await convert(file,settings,{session,signal});
   if(!(result instanceof Blob))throw Error('RVC 신경망이 WAV를 반환하지 않았습니다.');
-  assertUsableSingingWav(new Uint8Array(await result.arrayBuffer()),{maxDurationSec:MAX_SECONDS});
+  const convertedInfo=assertUsableSingingWav(new Uint8Array(await result.arrayBuffer()),{maxDurationSec:MAX_SECONDS});
+  if(Math.abs(convertedInfo.durationSec-originalInfo.durationSec)>.05)
+   throw Error('RVC 실제 변환 WAV가 원본 MIDI 보컬 길이와 다릅니다. 기존 음원은 보존합니다.');
   if(signal?.aborted)throw Error('RVC 긴 곡 변환을 취소했습니다.');
   onProgress(1,1);
   return result;
