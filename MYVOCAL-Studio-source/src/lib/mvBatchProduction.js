@@ -124,7 +124,12 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   // 원본 수동 장면은 기존 영상 설정을 그대로 사용한다.
   const isFullSongAuto=scene.generatedBy==='full-song-auto-scene';
   const sceneFrames=isFullSongAuto?25:frames,sceneFps=isFullSongAuto?8:fps;
-  const seed=isFullSongAuto?stableMvCharacterSeed(initialId,sceneId+'|'+(character?.id||'')):
+  // 등록된 동일 원화·사진을 사용하는 자동 장면에서는 인물별
+  // SVD 시드도 일정하게 유지한다. 참조 없는 배경은 장면별 독립 시드를 사용한다.
+  // 이것만으로 모델의 얼굴 일관성이 보장되지는 않으며 실제 GPU 품질 확인이 필요하다.
+  const seed=isFullSongAuto?
+   (reference&&character?.id?stableMvCharacterSeed(initialId,character.id):
+    stableMvCharacterSeed(initialId,sceneId+'|background')):
    Math.floor(Math.random()*2000000000);
   const clip=await generateVideo({port,checkpoint:videoModel,imageData,
    frames:sceneFrames,fps:sceneFps,steps:videoSteps,motion,seed},session,signal);
