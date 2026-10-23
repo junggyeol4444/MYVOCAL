@@ -16,12 +16,16 @@ import {audioEnd,mixdownWav} from '../lib/audioEngine.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
 import {makeFullSongInstrumentPerformance} from '../lib/fullSongInstrumentPerformance.js';
+import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
+import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
+import {isAlignmentStale} from '../lib/lyricAlignment.js';
 const positions=['left','center','right'];
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
 export default function VirtualBand90Editor({project,characters,onSave,notify}){
  const [plan,setPlan]=useState(()=>project.band90||createBand90(project,characters));
  const [time,setTime]=useState(0),[playing,setPlaying]=useState(false),[busy,setBusy]=useState(false),[status,setStatus]=useState('멤버별 로컬 영상·모델을 불러옵니다.');
  const [music,setMusic]=useState(null);
+ const [duetLipSyncs,setDuetLipSyncs]=useState(null);
  const canvas=useRef(null),sources=useRef(new Map()),frameRef=useRef(0),lastRef=useRef(0),timeRef=useRef(0),abort=useRef(null);
  const available=eligibleBandCharacters(characters),byId=new Map(characters.map(c=>[c.id,c]));
  const rolePerformance=useMemo(()=>{
@@ -38,11 +42,13 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   const result=new Map();
   for(const member of plan.members){
    const c=byId.get(member.characterId);if(!c)continue;
-   try{result.set(c.id,resolveProjectVrmLipSync(project,c)?.lipSync||c.lipSync);}
+   try{result.set(c.id,duetLipSyncs?.projectId===project.id?
+     duetLipSyncs.lips.get(c.id)||resolveProjectVrmLipSync(project,c)?.lipSync||c.lipSync:
+     resolveProjectVrmLipSync(project,c)?.lipSync||c.lipSync);}
    catch{result.set(c.id,c.lipSync);}
   }
   return result;
- },[project,characters,plan.members]);
+ },[project,characters,plan.members,duetLipSyncs]);
  const patch=(key,value)=>setPlan(p=>({...p,[key]:value}));
  const patchMember=(index,key,value)=>setPlan(p=>({...p,members:p.members.map((m,i)=>i===index?{...m,[key]:value}:m)}));
  useEffect(()=>{let stopped=false;const fresh=new Map();setStatus('로컬 미디어 불러오는 중…');
@@ -66,12 +72,62 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
    ctx.fillStyle='#0a1022';ctx.fillRect(x,h-62,tileW,62);ctx.fillStyle='white';ctx.font='bold 21px sans-serif';ctx.fillText(String(member.name).slice(0,28),x+12,h-34);ctx.font='15px sans-serif';ctx.fillStyle='#b8d2ef';ctx.fillText(`${member.role} · ${member.viseme?.viseme||'-'} · ${member.kind}`,x+12,h-12);ctx.restore();});
   ctx.fillStyle='white';ctx.font='17px sans-serif';ctx.fillText(`MYVOCAL 90 · ${t.toFixed(2)}s`,12,25);
  };
- useEffect(()=>{if(busy)return;draw(timeRef.current);},[plan,busy,status]);
+ useEffect(()=>{if(busy)return;draw(timeRef.current);},[plan,busy,status,duetLipSyncs]);
  useEffect(()=>{if(!playing||busy)return;lastRef.current=0;const tick=stamp=>{if(!lastRef.current)lastRef.current=stamp;timeRef.current=Math.min(plan.durationSec,timeRef.current+(stamp-lastRef.current)/1000);lastRef.current=stamp;
   for(const m of plan.members){const src=sources.current.get(m.characterId);if(src?.kind==='person'&&src.element.readyState>=1){const should=Math.max(0,timeRef.current-m.startSec),diff=Math.abs(src.element.currentTime-should);if(diff>.1)try{src.element.currentTime=Math.min(should,src.element.duration||should);}catch{}}}
   try{draw(timeRef.current);}catch(e){setStatus(e.message);setPlaying(false);return;}
   setTime(timeRef.current);if(timeRef.current>=plan.durationSec){setPlaying(false);return;}frameRef.current=requestAnimationFrame(tick);};frameRef.current=requestAnimationFrame(tick);return ()=>cancelAnimationFrame(frameRef.current);},[playing,busy,plan]);
  const seek=t=>{timeRef.current=t;setTime(t);draw(t);};
+ const prepareRealSingerDuet=async()=>{
+  if(busy)return;
+  const mapping=project.duetSingers;
+  const source=project.vocalAlignment;
+  if(!mapping||mapping.version!==1||!source||isAlignmentStale(project,source)){
+   notify('실제 듀엣 보컬 두 트랙과 원곡 한국어 가사·MIDI 싱크를 먼저 저장하세요.');return;
+  }
+  const lead=mapping.lead,harmony=mapping.harmony;
+  if(!lead?.characterId||!harmony?.characterId||lead.characterId===harmony.characterId||
+     !plan.members.some(m=>m.characterId===lead.characterId&&m.role==='lead')||
+     !plan.members.some(m=>m.characterId===harmony.characterId&&m.role==='harmony')){
+   notify('듀엣의 주보컬·화음 캐릭터 두 명을 밴드에 lead·harmony 역할로 배치하세요.');return;
+  }
+  const choices=[lead,harmony];
+  const availableSources=projectVocalSources(project);
+  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioContextClass){notify('실제 노래 WAV 디코딩은 Windows WebView2 AudioContext가 필요합니다.');return;}
+  const context=new AudioContextClass();setBusy(true);setStatus('실제 듀엣 2인 보컬 WAV 각각의 발성 PCM 시간축 읽는 중');
+  try{
+   const lips=new Map();
+   for(let i=0;i<choices.length;i++){
+    const singer=choices[i];
+    const character=byId.get(singer.characterId);
+    if(!character||!['self','owned','licensed'].includes(character.rights)||
+       character.rights==='licensed'&&!String(character.rightsNote||'').trim())
+     throw Error('듀엣 가수 캐릭터 사용 권한이 올바르지 않습니다.');
+    const track=project.tracks.find(t=>t.id===singer.trackId);
+    const actual=availableSources.find(s=>s.trackId===track?.id);
+    if(!track||track.type!=='vocal'||track.mute||!actual)
+     throw Error((i===0?'주보컬':'화음')+' 실제 독립 WAV 편집 트랙을 선택하세요.');
+    if(track.singerCharacterId&&track.singerCharacterId!==character.id||
+       track.singerVoiceId&&track.singerVoiceId!==singer.voiceId)
+     throw Error('선택한 보컬 트랙의 가수와 프로젝트 듀엣 매핑이 일치하지 않습니다.');
+    const wav=await getFile(actual.assetId);
+    if(!(wav instanceof Blob)||wav.size<44||wav.size>90*1024*1024)
+     throw Error('등록된 듀엣 보컬 PCM WAV 자산을 읽지 못했습니다.');
+    const audio=await context.decodeAudioData(await wav.arrayBuffer());
+    if(audio.duration+.08<source.cues.at(-1)?.endSec||
+       audio.duration+.08<plan.durationSec)
+     throw Error('두 가수의 실제 독립 WAV가 원곡 MIDI 공연 시간보다 짧습니다.');
+    const lip=lipSyncFromSingingAudio(source,audio);
+    lips.set(character.id,lip);
+    setStatus('실제 '+(i===0?'주보컬':'화음')+' PCM → 한국어 음소 립싱크 '+lip.cues.length+'개');
+   }
+   setDuetLipSyncs({projectId:project.id,lips,
+    trackIds:choices.map(x=>x.trackId)});
+   notify('실제 원곡 주보컬·신경망 화음 WAV 각각의 음성 발성으로 2인 2D/VRM 립싱크를 연결했습니다. 원본 캐릭터와 WAV는 보존됩니다.');
+  }catch(e){notify('실제 듀엣 캐릭터별 립싱크 연결 실패: '+e.message);}
+  finally{await context.close().catch(()=>{});setBusy(false);}
+ };
  const prepareFullSong=async()=>{
   if(busy)return;
   setBusy(true);
@@ -123,6 +179,10 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
  {plan.members.map((m,i)=><div className="hstack" key={i} style={{gap:6,flexWrap:'wrap',margin:'8px 0'}}><select aria-label={`멤버 ${i+1}`} value={m.characterId} onChange={e=>patchMember(i,'characterId',e.target.value)}>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select aria-label={`역할 ${i+1}`} value={m.role} onChange={e=>patchMember(i,'role',e.target.value)}>{BAND90_ROLES.map(role=><option key={role}>{role}</option>)}</select><select value={m.position} onChange={e=>patchMember(i,'position',e.target.value)}>{positions.map(pos=><option key={pos}>{pos}</option>)}</select><label>시작<input type="number" min="0" step="0.1" style={{width:58}} value={m.startSec} onChange={e=>patchMember(i,'startSec',Number(e.target.value))}/></label><label>종료<input type="number" min="0" step="0.1" style={{width:58}} value={m.endSec} onChange={e=>patchMember(i,'endSec',Number(e.target.value))}/></label><Button onClick={()=>patch('members',plan.members.filter((_,j)=>j!==i))}>제외</Button></div>)}
  <Button disabled={plan.members.length>=6||available.length<=plan.members.length} onClick={()=>patch('members',[...plan.members,{characterId:available.find(c=>!plan.members.some(m=>m.characterId===c.id))?.id||'',role:'harmony',position:'center',startSec:0,endSec:plan.durationSec}])}>멤버 추가</Button>
  <div className="look-actions"><Button disabled={busy} onClick={prepareFullSong}>3~6분 전체 음악·밴드 연결</Button><Button disabled={busy} onClick={prepareCurrentMusic}>현재 밴드 음악 WAV 연결</Button></div>
+ {project.duetSingers?.version===1&&<div className="look-actions">
+  <Button disabled={busy} onClick={prepareRealSingerDuet}>실제 서로 다른 두 가수 WAV 발성 → 2D/VRM 듀엣 립싱크</Button>
+  {duetLipSyncs?.projectId===project.id&&<Button disabled={busy} onClick={()=>setDuetLipSyncs(null)}>듀엣 보컬 립싱크 해제</Button>}
+ </div>}
  <p role="status">{status}{music?.projectId===project.id?' · 음악 WAV 준비됨':''}</p><canvas ref={canvas} width="960" height="540" style={{display:'block',width:'100%',height:'auto',background:'#111827'}} aria-label="90단계 가상 밴드 동시 공연"/>
  <div className="look-actions"><Button disabled={busy} onClick={()=>setPlaying(v=>!v)}>{playing?'일시정지':'재생'}</Button><span>{time.toFixed(2)} / {plan.durationSec}초</span></div><input type="range" min="0" max={plan.durationSec} step="0.02" value={time} disabled={busy} onChange={e=>{setPlaying(false);seek(Number(e.target.value));}} style={{width:'100%'}}/>
  <div className="modal-actions"><Button disabled={busy} onClick={()=>downloadText(JSON.stringify({format:'MYVOCAL_BAND90',...plan},null,2),'MYVOCAL-Step90-band.json','application/json')}>JSON</Button><Button disabled={busy} onClick={save}>공연 설정 저장</Button><Button disabled={busy||!supportedStageWebM()} onClick={()=>record()}>무음 WebM 출력</Button><Button disabled={busy||!music||music.projectId!==project.id||!supportedStageWebM()} onClick={()=>record({includeAudio:true})}>음악 포함 WebM 출력</Button><Button disabled={busy||!music||music.projectId!==project.id||!supportedStageWebM()} onClick={()=>record({includeAudio:true,asMp4:true})}>음악 포함 MP4 출력</Button>{busy&&<Button onClick={()=>abort.current?.abort()}>중단</Button>}</div>
