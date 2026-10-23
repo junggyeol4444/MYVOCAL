@@ -1,6 +1,7 @@
 // Neural face lip sync with the user's installed Wav2Lip checkpoint.
 // Uses the existing Windows EXE loopback session and authorized ORIGINAL media.
 import {assertUsableSingingWav} from './singingOutputValidation.js';
+import {assertRealPersonLipAudioSync} from './realPersonMp4Integrity.js';
 const checkFile=(file,limit,label)=>{if(!(file instanceof Blob)||file.size<128||file.size>limit)throw Error(label+'의 원본 파일 크기를 확인하세요.');};
 export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,resize=1,rightsConfirmed=false,modelRights=false}={},
  {session=globalThis.window?.__MYVOCAL_SESSION_KEY,signal,request=fetch}={}){
@@ -13,7 +14,7 @@ export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,r
  if(!['video/mp4','video/webm'].includes(face.type))throw Error('실제 사람 영상은 MP4 또는 WebM이어야 합니다.');
  checkFile(audio,80*1024*1024,'가창 WAV');
  if(audio.type!=='audio/wav'&&audio.type!=='audio/x-wav')throw Error('신경망 립싱크는 실제 WAV 파일이 필요합니다.');
- assertUsableSingingWav(await audio.arrayBuffer(),{maxDurationSec:360});
+ const audioInfo=assertUsableSingingWav(await audio.arrayBuffer(),{maxDurationSec:360});
  if(signal?.aborted)throw Error('립싱크 영상을 취소했습니다.');
  const body=new FormData();
  body.set('face',face,face.type==='video/webm'?'MYVOCAL-original-person.webm':'MYVOCAL-original-person.mp4');
@@ -27,6 +28,8 @@ export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,r
  if(movie.size<128||movie.size>220*1024*1024)throw Error('신경망 MP4 출력 용량이 올바르지 않습니다.');
  const prefix=new Uint8Array(await movie.slice(0,8).arrayBuffer());
  if(String.fromCharCode(...prefix.slice(4,8))!=='ftyp')throw Error('실제 MP4 컨테이너가 아닌 출력입니다.');
+ if(signal?.aborted)throw Error('립싱크 영상 생성이 취소됐습니다.');
+ await assertRealPersonLipAudioSync(movie,audioInfo,{signal});
  if(signal?.aborted)throw Error('립싱크 영상 생성이 취소됐습니다.');
  return new File([movie],'MYVOCAL-실제사람-신경망립싱크.mp4',{type:'video/mp4'});
 }
