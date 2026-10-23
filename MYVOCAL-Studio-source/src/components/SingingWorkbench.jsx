@@ -13,6 +13,7 @@ import {SINGING_STYLES,assertSingingStyleSupported} from '../lib/singingStyleCon
 import {renderLongSinging} from '../lib/longSingingRender.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
+import {replaceProjectVoice54} from '../lib/voiceReplace54Neural.js';
 import EngineManager from './EngineManager';
 import RvcVoiceConversion from './RvcVoiceConversion.jsx';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
@@ -32,6 +33,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const [capability,setCapability]=useState(null),[engineModelId,setEngineModelId]=useState(p.singingEngine?.modelId||'');
  const [singingStyle,setSingingStyle]=useState(p.singingStyle||'Natural');
  const [harmonyDirection,setHarmonyDirection]=useState('above');
+ const [replacementVoiceId,setReplacementVoiceId]=useState(''),[replacementTrackId,setReplacementTrackId]=useState(''),[replacementConsent,setReplacementConsent]=useState(false);
  const [cueStart,setCueStart]=useState(1),[cueEnd,setCueEnd]=useState(4);
  const [autoRvc,setAutoRvc]=useState(false),[autoRvcRights,setAutoRvcRights]=useState(false),[sourceVocal,setSourceVocal]=useState(null),[saveNeuralTracks,setSaveNeuralTracks]=useState(false);
  const latestUrl=useRef('');
@@ -41,9 +43,10 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const alignment=p.vocalAlignment&&!isAlignmentStale(p,p.vocalAlignment)?p.vocalAlignment:null;
  const phonemePlan=alignment&&p.phonemePlan&&!isPhonemePlanStale(alignment,p.phonemePlan)?p.phonemePlan:null;
  const voice=usable.find(v=>v.id===voiceId)||usable[0];
+ const replaceableVocalTracks=(p.tracks||[]).filter(t=>t.type==='vocal'&&!t.mute&&Array.isArray(t.clips)&&t.clips.length);
  const samples=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId==='sampler'&&m.status==='sample-preview-ready');
  const externalModels=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId!=='sampler');
- useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setSingingStyle(p.singingStyle||'Natural');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setSourceVocal(null);},[p.id]);
+ useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setSingingStyle(p.singingStyle||'Natural');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setSourceVocal(null);setReplacementVoiceId('');setReplacementTrackId('');setReplacementConsent(false);},[p.id]);
  useEffect(()=>{const suggested=guessVowelModels(samples);if(!Object.values(suggested).some(Boolean)&&samples.length)suggested.a=samples[0].id;setModelMap(suggested);setExternalModelId('')},[voice?.id,data.voiceModels]);
  useEffect(()=>()=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current)},[]);
  const changeResult=(blob,kind,count,fileKind=kind,placement=null)=>{if(kind!=='rvc-neural')setSourceVocal(null);if(latestUrl.current)URL.revokeObjectURL(latestUrl.current);const u=URL.createObjectURL(blob);latestUrl.current=u;setUrl(u);setResult({file:new File([blob],outputName(p.title,fileKind),{type:'audio/wav'}),kind,count,placement});};
@@ -189,6 +192,25 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   setStatus('원곡 MIDI의 실제 신경망 Ad-lib '+result.notes+'음표 신규 WAV 저장');
   notify('실제 신경망 Ad-lib 추임새를 독립 편집 보컬 트랙에 추가했습니다.');
  });
+ const performVoiceReplace=()=>run(async()=>{
+  const selectedVoice=usable.find(v=>v.id===replacementVoiceId);
+  if(!selectedVoice||!replacementTrackId||!replacementConsent)
+   throw Error('기존 보컬 트랙, 새로운 사용 허가 목소리 및 원본 음소거 동의를 선택하세요.');
+  const portNumber=safePort(port);
+  const model=capability?.models?.find(m=>m.id===engineModelId);
+  if(!model)throw Error('실제 로컬 신경망 가창 모델을 먼저 확인하세요.');
+  const result=await replaceProjectVoice54(p,{
+   targetTrackId:replacementTrackId,voice:selectedVoice,confirmed:replacementConsent,
+   port:portNumber,modelId:model.id,singingStyle,
+   session:window.__MYVOCAL_SESSION_KEY,
+   current:()=>latestProject.current,onChange,newId:genId,
+   readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
+   store:putFilesAtomic,rollback:deleteFilesAtomic,onProgress:setStatus
+  });
+  setReplacementConsent(false);
+  setStatus('Voice Replace 완료 · 기존 보컬은 원본 파일을 유지하며 음소거, 새 본인 음색 가창 '+result.newVocalAssets+'개 WAV 트랙 저장');
+  notify('원래 캐릭터·뮤직비디오·MIDI는 그대로 두고 선택한 보컬 트랙만 안전하게 교체했습니다.');
+ });
  const validCount=alignment?.cues?.filter(c=>c.lyric&&c.lyric!=='—').length||0;
  return <>
   <Panel title="Singing Workbench · v1.6" description="가사와 MIDI를 오프라인 가창 가이드 또는 녹음 샘플 기반 WAV로 렌더링합니다. 별도 호환 엔진은 선택 사항이며 신경망 AI 모델은 내장되지 않았습니다.">
@@ -237,6 +259,20 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    <Button disabled={!alignment||!voice||busy||!capability?.inferenceReady} onClick={renderRealAdlib}>
     원곡 MIDI 휴지의 신경망 Ad-lib 추임새 실제 WAV 생성 → 신규 DAW 트랙
    </Button>
+   <Panel title="VOICE REPLACE · 원본 54항" description="실제 새 Singing 음색 WAV가 생성·저장된 뒤에만 선택한 보컬 트랙을 음소거합니다. 이전 WAV·사진·캐릭터·MV 장면은 삭제하지 않습니다.">
+    <Field label="교체 대상 기존 보컬 트랙"><select disabled={busy} value={replacementTrackId} onChange={e=>{setReplacementTrackId(e.target.value);setReplacementConsent(false);}}>
+     <option value="">음소거할 기존 트랙 선택</option>
+     {replaceableVocalTracks.map(t=><option key={t.id} value={t.id}>{t.name||t.id}</option>)}
+    </select></Field>
+    <Field label="새 Singing Voice"><select disabled={busy} value={replacementVoiceId} onChange={e=>{setReplacementVoiceId(e.target.value);setReplacementConsent(false);}}>
+     <option value="">실제 등록한 목소리 선택</option>
+     {usable.filter(v=>v.id!==p.voiceId).map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+    </select></Field>
+    <label className="check-item"><input type="checkbox" disabled={busy} checked={replacementConsent} onChange={e=>setReplacementConsent(e.target.checked)}/> 실제 새 음색 모델에 사용 권한이 있으며, 생성 성공 후 선택한 기존 보컬만 음소거하는 것에 동의합니다.</label>
+    <Button disabled={busy||!replacementConsent||!replacementVoiceId||!replacementTrackId||!capability?.inferenceReady} onClick={performVoiceReplace}>
+     기존 음악·MV·캐릭터 보존하고 실제 Voice Replace 실행
+    </Button>
+   </Panel>
    <label className="check-item"><input type="checkbox" checked={autoRvc} disabled={busy} onChange={e=>{setAutoRvc(e.target.checked);setAutoRvcRights(false)}}/>실제 신경망 Singing WAV 생성 후 저장된 RVC 모델로 음색 변환</label>
    {autoRvc&&<label className="check-item"><input type="checkbox" checked={autoRvcRights} disabled={busy} onChange={e=>setAutoRvcRights(e.target.checked)}/>목소리·모델·가창 원본에 대한 사용 권한이 있습니다.</label>}
    <label className="check-item"><input type="checkbox" checked={saveNeuralTracks} disabled={busy} onChange={e=>setSaveNeuralTracks(e.target.checked)}/>신경망 Singing 생성→RVC 음색 변환 결과까지 기존 프로젝트에 실제 WAV 트랙으로 자동 일괄 저장 (RVC 원본은 음소거 참고 트랙)</label>
