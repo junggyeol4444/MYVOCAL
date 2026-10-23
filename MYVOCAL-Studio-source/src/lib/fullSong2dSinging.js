@@ -12,6 +12,7 @@ import {isAlignmentStale} from './lyricAlignment.js';
 import {isPhonemePlanStale,validatePhonemePlan} from './phonemePlan.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 import {recordStageWebM} from './stage3dRecording.js';
+import {lipSyncFromSingingAudio} from './audioDrivenLipSync.js';
 
 export function fullSong2dKoreanLipSync(project,character){
  if(!project?.id||!character?.id)throw Error('2D 공연 원곡과 캐릭터 정보가 필요합니다.');
@@ -47,7 +48,7 @@ export function fullSong2dKoreanLipSync(project,character){
  throw Error('실제 한국어 가사·MIDI 음소 시간표 또는 검토해 저장한 캐릭터 립싱크가 필요합니다.');
 }
 export async function recordFullSong2dCharacter({
- project,character,canvas,image,settings,audioBlob,prewarmedAudioContext=null,
+ project,character,canvas,image,settings,audioBlob,vocalAudioBuffer=null,prewarmedAudioContext=null,
  signal,onProgress=()=>{},record=recordStageWebM
 }={}){
  if(!project?.id||!character?.id||!canvas||typeof canvas.getContext!=='function'||
@@ -70,7 +71,11 @@ export async function recordFullSong2dCharacter({
  if(duration<150||duration>360)throw Error('2D 전곡 공연은 실제 가창+반주 3~6분 길이가 필요합니다.');
  if(!Array.isArray(project.tracks)||!project.tracks.some(t=>t.type==='vocal'&&!t.mute&&t.clips?.length))
   throw Error('현재 음악 프로젝트에 실제 음성 WAV 보컬 트랙이 필요합니다.');
- const lipSync=fullSong2dKoreanLipSync(project,character);
+ // 선택적으로 **실제 보컬 WAV 샘플**의 발성 에너지로
+ // 기존 한국어 가사·MIDI 음소를 보정한다. 반주 WAV로 입을 움직이지 않는다.
+ const lipSync=vocalAudioBuffer?
+  lipSyncFromSingingAudio(project.vocalAlignment,vocalAudioBuffer):
+  fullSong2dKoreanLipSync(project,character);
  if(lipSync.cues.some(c=>c.endMs>duration*1000+65))
   throw Error('한국어 원곡 입 모양이 실제 완성 음악보다 깁니다.');
  const expressionPlan=usableExpressionPlan(character),dancePlan=usableDancePlan(character),
