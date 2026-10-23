@@ -14,6 +14,8 @@ import {recordStageWebM,supportedStageWebM} from '../lib/stage3dRecording.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {linkedVrmSingingProjects,resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
+import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
+import {isAlignmentStale} from '../lib/lyricAlignment.js';
 import {inspectSingingWav} from '../lib/singingOutputValidation.js';
 import {audioEnd,mixdownWav} from '../lib/audioEngine.js';
 const backdrops={concert:'공연장 · 보라 LED',neon:'네온 · 사이버',theater:'극장 · 따뜻한 무대'};
@@ -30,6 +32,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
  const performancePlan=usablePerformance89(character);
  const [fullSongPerformance,setFullSongPerformance]=useState(null);
  const [midiStageDirection,setMidiStageDirection]=useState(null);
+ const [audioDrivenLipSync,setAudioDrivenLipSync]=useState(null);
  const [instrumentRole,setInstrumentRole]=useState('all');
  const eligibleProjects=useMemo(()=>linkedVrmSingingProjects(character,projects),[character,projects]);
  const [linkedProjectId,setLinkedProjectId]=useState('');
@@ -37,10 +40,11 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
  const activeDancePlan=projectDancePlan?.projectId===activeProject?.id?projectDancePlan:dancePlan;
  const activePerformancePlan=fullSongPerformance?.projectId===activeProject?.id?fullSongPerformance:performancePlan;
  const activeLipSync=useMemo(()=>{
+  if(audioDrivenLipSync?.projectId===activeProject?.id)return audioDrivenLipSync.lipSync;
   if(!activeProject)return character.lipSync;
   try{return resolveProjectVrmLipSync(activeProject,character)?.lipSync||character.lipSync;}
   catch{return character.lipSync;}
- },[activeProject,character]);
+ },[activeProject,character,audioDrivenLipSync]);
  const initial=()=>{try{if(character.stage3d){validateStageSettings(character,character.stage3d);return {...character.stage3d};}}catch{}return createStageSettings(character);};
  const [settings,setSettings]=useState(initial),[model,setModel]=useState(null),[status,setStatus]=useState('3D 모델 분석 중…'),[playing,setPlaying]=useState(true),[time,setTime]=useState(0),[exporting,setExporting]=useState(false),[progress,setProgress]=useState(0),[singingWav,setSingingWav]=useState(null);
  const canvas=useRef(null),engine=useRef(null),raf=useRef(0),start=useRef(0),clock=useRef(0),config=useRef(settings),abort=useRef(null),busy=useRef(false);
@@ -66,7 +70,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
    if(Math.floor(now/250)!==Math.floor((now-16)/250))setTime(clock.current);
    raf.current=requestAnimationFrame(tick);
   };raf.current=requestAnimationFrame(tick);return ()=>{cancelAnimationFrame(raf.current);start.current=0;};
- },[model,playing,exporting,activeLipSync,activeDancePlan,activePerformancePlan]);
+ },[model,playing,exporting,activeLipSync,activeDancePlan,activePerformancePlan,midiStageDirection,activeProject?.id]);
  const patch=(name,value)=>setSettings(s=>({...s,[name]:value}));
  const draw=t=>{if(!engine.current)throw Error('3D 모델이 로딩되지 않았습니다.');const stage=stageAt(t);engine.current.render(stageRigSettings(stage),t,stage,activeLipSync,directedPlan,character,activeDancePlan,activePerformancePlan);};
  const seek=t=>{clock.current=Math.max(0,Math.min(config.current.duration,Number(t)));setTime(clock.current);try{draw(clock.current);}catch(e){notify(e.message);}};
@@ -107,6 +111,28 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
    setFullSongPerformance(plan);
    notify('현재 3~6분 MIDI 악기 음표 '+plan.instruments.length+'개를 3D 연주 모션에 연결했습니다. 기존 수동 STEP89 연기는 보존됩니다.');
   }catch(e){notify('장편 MIDI 연주 연결 실패: '+e.message);}
+ };
+ const applyRealVocalLip=async()=>{
+  try{
+   if(!activeProject||!activeProject.vocalAlignment||
+      isAlignmentStale(activeProject,activeProject.vocalAlignment))
+    throw Error('원곡 한국어 가사와 MIDI의 최신 싱크가 필요합니다.');
+   const source=projectVocalSources(activeProject)[0];
+   if(!source)throw Error('원곡 DAW에 실제 보컬 WAV를 먼저 생성해 저장하세요.');
+   const blob=await getFile(source.assetId);
+   if(!(blob instanceof Blob)||blob.size<44||blob.size>90*1024*1024)
+    throw Error('등록한 보컬 WAV 파일이 없거나 손상됐습니다.');
+   const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+   if(!AudioContextClass)throw Error('이 Windows WebView2는 보컬 WAV 디코딩을 지원하지 않습니다.');
+   const ctx=new AudioContextClass();
+   try{
+    const buffer=await ctx.decodeAudioData(await blob.arrayBuffer());
+    const lipSync=lipSyncFromSingingAudio(activeProject.vocalAlignment,buffer);
+    setAudioDrivenLipSync({projectId:activeProject.id,lipSync,assetId:source.assetId});
+    notify('실제 녹음된 한국어 보컬 WAV 발성구간 '+lipSync.cues.length+
+     '개를 MIDI 가사·VRM 입 모양에 연결했습니다. 기존 캐릭터 립싱크는 보존됩니다.');
+   }finally{await ctx.close().catch(()=>{});}
+  }catch(e){notify('VRM 실제 음성 립싱크 연결 실패: '+e.message);}
  };
  const loadProjectVocal=async()=>{
   try{
@@ -193,7 +219,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
  const stageFields=(label,key,min,max,step)=> <Field label={`${label}: ${settings[key]}`}><input type="range" style={{width:'100%'}} min={min} max={max} step={step} value={settings[key]} disabled={exporting} onChange={e=>patch(key,Number(e.target.value))}/></Field>;
  return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}>
   <Notice>**STEP84 · 3D 무대 연출** — 기존 VRM/GLB 캐릭터를 무대에 배치하고 카메라·조명·배경·본/모션을 실제 WebGL에서 재생합니다. 최대 360초 **WebM 공연 영상(가창 WAV 오디오 선택 가능)**을 로컬에서 녹화합니다. 저장된 STEP85 음소 Lip Sync와 STEP87 표정 계획은 미리보기와 녹화에 반영합니다. 기존 Windows EXE의 로컬 FFmpeg를 통한 실제 MP4 내보내기도 지원합니다.</Notice>
-  {eligibleProjects.length>0&&<><Field label="3D 공연에 연결할 한국어 Singing 프로젝트"><select disabled={exporting} value={activeProject?.id||''} onChange={e=>{setLinkedProjectId(e.target.value);setSingingWav(null);setProjectDancePlan(null);setFullSongPerformance(null);setMidiStageDirection(null);}}>{eligibleProjects.map(p=><option key={p.id} value={p.id}>{p.title||p.id}</option>)}</select></Field><div className="look-actions"><Button disabled={exporting} onClick={loadProjectVocal}>프로젝트 보컬 WAV·립싱크·곡 길이 연결</Button><Button disabled={exporting} onClick={loadProjectMusic}>프로젝트 전체 음악 WAV·립싱크 연결</Button><Button disabled={exporting} onClick={applyFullSongDance}>3~6분 전곡 BPM·구간 춤 적용</Button><Button disabled={exporting||!projectDancePlan||projectDancePlan.projectId!==activeProject?.id} onClick={saveFullSongDance}>전곡 춤 캐릭터에 저장</Button></div><Field label="MIDI 연주할 악기"><select value={instrumentRole} disabled={exporting} onChange={e=>setInstrumentRole(e.target.value)}><option value="all">전체 악기</option>{PERFORMANCE_ROLES.map(role=><option key={role} value={role}>{role}</option>)}</select></Field><Button disabled={exporting} onClick={applyInstrumentPerformance}>3~6분 MIDI 악기 연주 모션 연결</Button><Button disabled={exporting} onClick={applyMusicStageDirection}>원곡 MIDI 후렴·드럼 3D 카메라·조명 동기화</Button>{midiStageDirection?.projectId===activeProject?.id&&<Button disabled={exporting} onClick={()=>setMidiStageDirection(null)}>원곡 자동 조명 해제</Button>}</>}
+  {eligibleProjects.length>0&&<><Field label="3D 공연에 연결할 한국어 Singing 프로젝트"><select disabled={exporting} value={activeProject?.id||''} onChange={e=>{setLinkedProjectId(e.target.value);setSingingWav(null);setProjectDancePlan(null);setFullSongPerformance(null);setMidiStageDirection(null);setAudioDrivenLipSync(null);}}>{eligibleProjects.map(p=><option key={p.id} value={p.id}>{p.title||p.id}</option>)}</select></Field><div className="look-actions"><Button disabled={exporting} onClick={loadProjectVocal}>프로젝트 보컬 WAV·립싱크·곡 길이 연결</Button><Button disabled={exporting} onClick={loadProjectMusic}>프로젝트 전체 음악 WAV·립싱크 연결</Button><Button disabled={exporting} onClick={applyRealVocalLip}>실제 보컬 PCM 발성·한국어 MIDI VRM 입 모양 연결</Button>{audioDrivenLipSync?.projectId===activeProject?.id&&<Button disabled={exporting} onClick={()=>setAudioDrivenLipSync(null)}>실제 발성 보정 해제</Button>}<Button disabled={exporting} onClick={applyFullSongDance}>3~6분 전곡 BPM·구간 춤 적용</Button><Button disabled={exporting||!projectDancePlan||projectDancePlan.projectId!==activeProject?.id} onClick={saveFullSongDance}>전곡 춤 캐릭터에 저장</Button></div><Field label="MIDI 연주할 악기"><select value={instrumentRole} disabled={exporting} onChange={e=>setInstrumentRole(e.target.value)}><option value="all">전체 악기</option>{PERFORMANCE_ROLES.map(role=><option key={role} value={role}>{role}</option>)}</select></Field><Button disabled={exporting} onClick={applyInstrumentPerformance}>3~6분 MIDI 악기 연주 모션 연결</Button><Button disabled={exporting} onClick={applyMusicStageDirection}>원곡 MIDI 후렴·드럼 3D 카메라·조명 동기화</Button>{midiStageDirection?.projectId===activeProject?.id&&<Button disabled={exporting} onClick={()=>setMidiStageDirection(null)}>원곡 자동 조명 해제</Button>}</>}
   <Field label="등록된 3D 원본"><select value={settings.assetId} disabled={exporting} onChange={e=>selectAsset(e.target.value)}>{assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
   <p role="status" className="muted">{status}</p>
   <canvas ref={canvas} width="640" height="360" aria-label={`${character.name} 3D 무대 공연 화면`} style={{display:'block',width:'min(100%,640px)',height:'auto',background:'#0b1020',borderRadius:8}}/>
