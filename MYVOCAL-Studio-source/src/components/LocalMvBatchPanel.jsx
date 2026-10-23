@@ -14,6 +14,7 @@ import {putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb.js';
 import {extendMvToFullSong} from '../lib/fullSongMvScenes.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
+import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
 import {SINGING_STYLES} from '../lib/singingStyleControl.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
@@ -37,6 +38,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
  const [singingStyle,setSingingStyle]=useState(project.singingStyle||'Natural');
  const [makeHarmony,setMakeHarmony]=useState(false),[harmonyDirection,setHarmonyDirection]=useState('above');
+ const [makeNeuralAdlib,setMakeNeuralAdlib]=useState(false);
  const [alsoConvertRVC,setAlsoConvertRVC]=useState(false),[registeredRVCId,setRegisteredRVCId]=useState('');
  const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
  const [makeNeuralSceneDirection,setMakeNeuralSceneDirection]=useState(false);
@@ -188,6 +190,17 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       movieProject=harmonized.project;
       setMessage('원곡 메인 가창과 독립 신경망 3도 화음 WAV를 각각 편집 트랙에 저장했습니다.');
      }else setMessage('실제 신경망 한국어 가창 '+sung.vocalAssets+'개 저장 → 노래·장면 동기화 MV 제작 중');
+     if(makeNeuralAdlib){
+      const adlib=await generateAndStoreMvAdlib(current(),{
+       voice:singer,port:Number(singingPort),modelId:sung.modelId,
+       session:base.session,confirmed:singingRights,singingStyle,
+       signal:controller.signal,onProgress:setMessage,
+       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
+        createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
+      });
+      movieProject=adlib.project;
+      setMessage('원곡 한국어 가사와 MIDI 휴지의 실제 신경망 Ad-lib '+adlib.notes+'음표를 신규 보컬 트랙에 저장했습니다.');
+     }
     }
     // Extend only unrendered tail scenes to the actual WAV length.
     const finalSource=current();
@@ -329,6 +342,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    {makeHarmony&&<label>3도 화음 음역<select disabled={busy} value={harmonyDirection} onChange={e=>setHarmonyDirection(e.target.value)}>
     <option value="above">메인 선율 위의 3도</option><option value="below">메인 선율 아래의 3도</option>
    </select></label>}
+   <label><input type="checkbox" checked={makeNeuralAdlib} disabled={busy} onChange={e=>setMakeNeuralAdlib(e.target.checked)}/> 원곡 가사·MIDI 휴지에 실제 신경망 Ad-lib(추임새) WAV 추가 → 독립 편집 보컬 트랙</label>
    <label><input type="checkbox" checked={alsoConvertRVC} disabled={busy} onChange={e=>setAlsoConvertRVC(e.target.checked)}/> 등록한 RVC 모델로 본인 음색까지 변환</label>
    {alsoConvertRVC&&<label>실제 RVC 모델 선택<select disabled={busy} value={registeredRVCId} onChange={e=>setRegisteredRVCId(e.target.value)}>
      <option value="">기존 로컬 경로의 모델 사용</option>
