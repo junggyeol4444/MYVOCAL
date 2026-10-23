@@ -39,6 +39,22 @@ function pcmWavSlice(layout,startFrame,endFrame){
  out.set(pcm.subarray(startFrame*align,endFrame*align),44);
  return out;
 }
+// MIDI 휴지 후보가 실제 WAV에서 유성/잔향인지 확인해 가창 중간 분할을 줄인다.
+// 사용자 녹음 PCM 데이터는 읽기만 한다.
+function rvcBoundaryEnergy(layout,frame){
+ const span=Math.max(1,Math.round(layout.info.sampleRate*.035));
+ const stride=Math.max(1,Math.floor(layout.info.sampleRate/2000));
+ const sampleBytes=layout.info.bits/8;
+ let sum=0,count=0;
+ for(let at=Math.max(0,frame-span);at<Math.min(layout.frames,frame+span);at+=stride){
+  for(let channel=0;channel<layout.info.channels;channel++){
+   const value=readSample(layout.pcm,at*layout.align+channel*sampleBytes,layout.info);
+   if(!Number.isFinite(value))throw Error('RVC 원본 PCM에 유효하지 않은 음성 샘플이 있습니다.');
+   sum+=value*value;count++;
+  }
+ }
+ return Math.sqrt(sum/Math.max(1,count));
+}
 // Neural conversion at a hard chunk edge can click or change timbre. Send
 // a short shared region to both inferences and crossfade their PCM results.
 // Every chunk is still a real WAV passed to the existing installed RVC CLI.
@@ -71,9 +87,12 @@ export function planRVCWavChunks(input,{maxBytes=RVC_SOURCE_LIMIT,overlapSeconds
   const nominal=Math.max(minimum,Math.min(maximum,Math.round(i*layout.frames/count)));
   const maxDeviation=Math.floor(layout.info.sampleRate*.9);
   const preferred=candidates.filter(frame=>frame>=minimum&&frame<=maximum&&
-   Math.abs(frame-nominal)<=maxDeviation);
-  preferred.sort((a,b)=>Math.abs(a-nominal)-Math.abs(b-nominal)||a-b);
-  boundaries.push(preferred[0]??nominal);
+   Math.abs(frame-nominal)<=maxDeviation)
+   .map(frame=>({frame,rms:rvcBoundaryEnergy(layout,frame)}))
+   .filter(candidate=>candidate.rms<=.08);
+  preferred.sort((a,b)=>Math.abs(a.frame-nominal)-Math.abs(b.frame-nominal)||
+   a.rms-b.rms);
+  boundaries.push(preferred.length?preferred[0].frame:nominal);
  }
  boundaries.push(layout.frames);
  const chunks=[];
