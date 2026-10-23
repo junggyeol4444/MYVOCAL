@@ -1,4 +1,5 @@
 import {isPhonemePlanStale,validatePhonemePlan} from './phonemePlan.js';
+import {normalizeSingingStyle} from './singingStyleControl.js';
 // v1.3: Engine capability checks and OPTIONAL Hangul jamo hints.
 // Jamo hints are not phoneme duration prediction or neural Singing synthesis.
 const ONSETS=['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
@@ -28,7 +29,9 @@ export function buildSingingRequest(port,p,alignment,voice,model,phonemePlan=nul
  if(!voice||!['self','owned','licensed'].includes(voice.rights))throw Error('사용 허가된 목소리가 필요합니다.');
  if(!alignment||!Array.isArray(alignment.cues)||!alignment.cues.length)throw Error('가사·MIDI 싱크가 필요합니다.');
  if(phonemePlan){validatePhonemePlan(phonemePlan,alignment);}
+ const style=normalizeSingingStyle(p?.singingStyle);
  return {port,format:'MYVOCAL_SINGING_REQUEST',version:1,project:p.title,voice:{id:voice.id,name:voice.name,rights:voice.rights},checkpoint:model?{id:model.id,name:model.name,engineId:model.engineId}:null,bpm:alignment.bpm,
+   ...(style==='Natural'?{}:{singingStyle:style}),
    cues:alignment.cues.map(c=>({lyric:c.lyric,pitch:c.pitch,startSec:c.startSec,endSec:c.endSec,velocity:c.velocity,hangul:hangulHint(c.lyric)})),
    ...(phonemePlan?{phonemes:phonemePlan.segments.map(s=>({cueIndex:s.cueIndex,token:s.token,kind:s.kind,pitch:s.pitch,startSec:s.startSec,endSec:s.endSec}))}:{})};
 }
