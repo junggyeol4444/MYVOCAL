@@ -42,6 +42,7 @@ type rvcTrainingOptions struct {
 	Epochs int
 	BatchSize int
 	GPU string
+	InferenceF0 string
 }
 type rvcTrainingRunner func(context.Context, rvcTrainingOptions, string, string, io.Writer) error
 
@@ -93,6 +94,14 @@ func validateTrainingOptions(o rvcTrainingOptions) error {
 	}
 	if o.Mode != "" && o.Mode != "custom" && o.Mode != "official" { return errors.New("지원하지 않는 RVC 학습 방식입니다") }
 	if o.Mode == "official" {
+		if o.InferenceF0!=""&&o.InferenceF0!="pm"&&o.InferenceF0!="rmvpe" {
+			return errors.New("공식 RVC 추론 음정 추적 방식은 pm 또는 rmvpe여야 합니다")
+		}
+		if o.InferenceF0=="rmvpe" {
+			if err:=ensureRegular(filepath.Join(o.Root,"assets","rmvpe","rmvpe.pt"));err!=nil {
+				return fmt.Errorf("RMVPE 추론 모델 설치 확인: %w",err)
+			}
+		}
 		if len(o.Root)>1024 || len(o.Python)>1024 || !filepath.IsAbs(o.Root) || !filepath.IsAbs(o.Python) || strings.ContainsAny(o.Root+o.Python,"\x00\r\n") { return errors.New("공식 RVC 및 Python 절대 경로가 필요합니다") }
 		if err := ensureRegular(o.Python);err!=nil{return fmt.Errorf("Python 실행 파일: %w",err)}
 		gpu,err:=strconv.Atoi(o.GPU);if err!=nil||gpu<0||gpu>15||o.Epochs<1||o.Epochs>1000||o.BatchSize<1||o.BatchSize>64 { return errors.New("공식 RVC 에포크·배치·GPU 값이 올바르지 않습니다") }
@@ -313,7 +322,8 @@ func runRVCTraining(ctx context.Context, o rvcTrainingOptions, dataset, output s
 			proof,readErr:=os.ReadFile(marker)
 			if readErr==nil&&string(proof)==expName{_ = os.RemoveAll(expDir)}
 		}()
-		cmd:=exec.CommandContext(ctx,o.Python,script,"--root",o.Root,"--dataset",dataset,"--output",output,"--epochs",strconv.Itoa(o.Epochs),"--batch-size",strconv.Itoa(o.BatchSize),"--gpu",o.GPU,"--experiment-name",expName)
+		f0:=o.InferenceF0;if f0=="" {f0="pm"}
+		cmd:=exec.CommandContext(ctx,o.Python,script,"--root",o.Root,"--dataset",dataset,"--output",output,"--epochs",strconv.Itoa(o.Epochs),"--batch-size",strconv.Itoa(o.BatchSize),"--gpu",o.GPU,"--experiment-name",expName,"--inference-f0-method",f0)
 		cmd.Dir=o.Root;cmd.Stdin=nil;cmd.Stdout=log;cmd.Stderr=log
 		if runtime.GOOS=="windows" {
 			cmd.Cancel=func()error{if cmd.Process==nil{return os.ErrProcessDone};kill:=exec.Command("taskkill","/PID",strconv.Itoa(cmd.Process.Pid),"/T","/F");if err:=kill.Run();err!=nil{return cmd.Process.Kill()};return nil}
@@ -385,7 +395,7 @@ func (a *appServer) rvcTrainingStartWith(w http.ResponseWriter, r *http.Request,
 	}
 	epochs,_:=strconv.Atoi(r.FormValue("epochs"))
 	batch,_:=strconv.Atoi(r.FormValue("batchSize"))
-	o := rvcTrainingOptions{Root:r.FormValue("root"),Python:r.FormValue("python"),Script:r.FormValue("script"),Args:args,VoiceID:r.FormValue("voiceId"),Mode:r.FormValue("mode"),Epochs:epochs,BatchSize:batch,GPU:r.FormValue("gpu")}
+	o := rvcTrainingOptions{Root:r.FormValue("root"),Python:r.FormValue("python"),Script:r.FormValue("script"),Args:args,VoiceID:r.FormValue("voiceId"),Mode:r.FormValue("mode"),Epochs:epochs,BatchSize:batch,GPU:r.FormValue("gpu"),InferenceF0:r.FormValue("inferenceF0")}
 	if err := validateTrainingOptions(o); err != nil {
 		jsonError(w, 400, err.Error())
 		return
