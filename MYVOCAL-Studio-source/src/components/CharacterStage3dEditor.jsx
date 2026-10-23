@@ -136,9 +136,32 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
    if(asMp4&&!window.__MYVOCAL_SESSION_KEY)throw Error('MP4 출력에는 기존 Windows EXE 로컬 세션이 필요합니다.');
    busy.current=true;setPlaying(false);setExporting(true);setProgress(0);
    const controller=new AbortController();abort.current=controller;
-   const clip=await recordStageWebM({canvas:canvas.current,duration:settings.duration,fps:settings.fps,draw,onProgress:setProgress,signal:controller.signal,audioBlob:singingWav});
+   // 기존 음악 편집 프로젝트의 실제 가창+반주 PCM WAV를
+   // VRM 녹화 버튼에서도 바로 사용한다. 사용자 원본/트랙은 불변.
+   let audioBlob=singingWav;
+   if(!audioBlob&&activeProject&&audioEnd(activeProject)>0){
+    audioBlob=await mixdownWav(activeProject,{bitDepth:16,channels:2,sampleRate:44100});
+    if(!(audioBlob instanceof Blob)||audioBlob.size<44)
+     throw Error('현재 프로젝트의 가창·반주 PCM WAV를 생성할 수 없습니다.');
+   }
+   let recordDuration=settings.duration;
+   if(audioBlob){
+    const audioInfo=inspectSingingWav(await audioBlob.arrayBuffer());
+    if(!audioInfo.valid||audioInfo.peak<.001||audioInfo.durationSec<2||audioInfo.durationSec>360)
+     throw Error('3D 공연의 실제 음악 WAV 길이·형식을 확인하세요.');
+    recordDuration=audioInfo.durationSec;
+    if(activeLipSync?.cues?.some(c=>c.endMs>recordDuration*1000+50))
+     throw Error('한국어 VRM 입 모양의 끝이 실제 음악 WAV를 벗어났습니다.');
+   }
+   const recordSettings={...settings,duration:recordDuration};
+   const drawRecordedFrame=t=>engine.current.render(stageRigSettings(recordSettings),
+    Math.min(t,recordDuration),recordSettings,activeLipSync,directedPlan,
+    character,activeDancePlan,activePerformancePlan);
+   const clip=await recordStageWebM({canvas:canvas.current,duration:recordDuration,
+    fps:settings.fps,draw:drawRecordedFrame,onProgress:setProgress,
+    signal:controller.signal,audioBlob});
    downloadBlob(clip,`MYVOCAL-Step84-${safeFilename(character.id)}-stage.webm`);
-   notify(`STEP84 3D 공연 WebM (${(clip.size/1048576).toFixed(2)}MiB) 출력 완료 · ${singingWav?'가창 WAV 포함':'무음 영상'}`);
+   notify(`STEP84 3D 공연 WebM (${(clip.size/1048576).toFixed(2)}MiB) 출력 완료 · ${audioBlob?'실제 음악·가창 WAV 포함':'무음 영상'}`);
    if(asMp4){
     const mp4=await convertRecordedWebMToMP4(clip,{session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal});
     downloadBlob(mp4,`MYVOCAL-Step84-${safeFilename(character.id)}-stage.mp4`);
