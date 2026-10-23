@@ -42,5 +42,16 @@ export async function trimMusicGenWavToScore(blob,targetSec){
  const header=new DataView(out.buffer);
  header.setUint32(4,out.byteLength-8,true);
  header.setUint32(40,out.byteLength-44,true);
+ // 실제 3~6분 MIDI 길이로 PCM을 재단할 때 음표 중간에서 발생하는
+ // 최종 클릭을 방지한다. 원본 WAV는 수정하지 않고 새 출력의 마지막 20ms만 감쇠.
+ const fadeFrames=Math.min(frames,Math.max(1,Math.round(rate*.02)));
+ for(let i=0;i<fadeFrames;i++){
+  const factor=fadeFrames===1?0:(fadeFrames-1-i)/(fadeFrames-1);
+  const frame=frames-fadeFrames+i;
+  for(let channel=0;channel<channels;channel++){
+   const p=44+(frame*channels+channel)*2;
+   header.setInt16(p,Math.round(header.getInt16(p,true)*factor),true);
+  }
+ }
  return new File([out],'MYVOCAL-신경망-6악기-MIDI동기화.wav',{type:'audio/wav'});
 }
