@@ -5,6 +5,7 @@ import {generateMusicGenAudio} from './musicGenClient.js';
 import {generateMusicGenSequence} from './musicGenSequence.js';
 import {splitMusicGenStems} from './musicStemsClient.js';
 import {renderStemRemixMaster} from './stemRemixMaster.js';
+import {inspectDemucsMusicAlignment,inspectRemixedMusicAlignment} from './musicProductionPcmSync.js';
 
 function requireLive(signal){
  if(signal?.aborted)throw new DOMException('원클릭 제작이 취소됐습니다. 기존 프로젝트는 그대로 유지됩니다.','AbortError');
@@ -23,9 +24,13 @@ export async function runMusicProductionPipeline({settings,sequence=false,segmen
  const stems=await split(wav,demucs,{signal});
  requireLive(signal);
  if(!stems||![4,6].includes(stems.stems?.length))throw Error('Demucs가 유효한 분리 트랙을 생성하지 않았습니다.');
+ const pcmAlignment=await inspectDemucsMusicAlignment(wav,stems.stems,{signal});
  onProgress('분리 WAV 실제 PCM 믹싱·마스터링 중');
  const master=await remix(stems.stems,stemMix,{signal,onProgress:(done,total)=>onProgress(`PCM 믹싱 ${done}/${total}프레임`)});
  requireLive(signal);
  if(!(master instanceof Blob)||master.size<44)throw Error('마스터 WAV가 생성되지 않았습니다.');
- return {wav,stems,master};
+ requireLive(signal);
+ const finalPcm=await inspectRemixedMusicAlignment(master,pcmAlignment);
+ requireLive(signal);
+ return {wav,stems,master,pcmTiming:{durationSec:finalPcm.durationSec,frames:finalPcm.frames,rate:finalPcm.rate,channels:finalPcm.channels}};
 }
