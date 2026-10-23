@@ -60,7 +60,7 @@ export async function renderAndStoreNeuralAudioStems(project,{
  if(!latestCompleteNeuralScore(project))throw Error('실제 로컬 AI가 생성한 동일 회차의 6악기 MIDI가 필요합니다.');
  const scoreSec=Number(project.neuralAutoScore.durationSec)||
   Number(project.neuralAutoScore.bars)*4*60/Number(project.bpm);
- const timing=planScoreMatchedMusicGenSegments(scoreSec,segments,{fadeSec:crossfadeSec});
+ const timing=planScoreMatchedMusicGenSegments(scoreSec,segments,{fadeSec:crossfadeSec,bpm:Number(project.bpm)});
  const entries=[],tracks=[],integrity=[],allocated=new Set(project.tracks.map(t=>t.id));
  let baseline=0;
  const allocate=prefix=>{
