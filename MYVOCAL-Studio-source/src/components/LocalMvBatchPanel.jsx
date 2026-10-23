@@ -17,6 +17,7 @@ import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {SINGING_STYLES} from '../lib/singingStyleControl.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
+import {directAutoMvScenesWithLocalAI} from '../lib/autoMvNeuralSceneDirection.js';
 import {buildNeuralMusicPrompts} from '../lib/neuralMusicPromptTimeline.js';
 import {planScoreMatchedMusicGenSegments} from '../lib/neuralStemScoreTiming.js';
 import {renderAndStoreNeuralMidiStems} from '../lib/autoMvSourceStems.js';
@@ -38,6 +39,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeHarmony,setMakeHarmony]=useState(false),[harmonyDirection,setHarmonyDirection]=useState('above');
  const [alsoConvertRVC,setAlsoConvertRVC]=useState(false),[registeredRVCId,setRegisteredRVCId]=useState('');
  const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
+ const [makeNeuralSceneDirection,setMakeNeuralSceneDirection]=useState(false);
  const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(''),[soundfontFile,setSoundfontFile]=useState('');
  const [makeNeuralAudioStems,setMakeNeuralAudioStems]=useState(false);
  const [scoreModels,setScoreModels]=useState([]),[scorePrompt,setScorePrompt]=useState(project.title||'');
@@ -194,6 +196,15 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      const filled=extendMvToFullSong(finalSource,finalDuration,{newId:genId});
      if(filled.added)await Promise.resolve(commit(filled.project));
     }
+    if(makeAutoScore&&makeNeuralSceneDirection){
+     const source=current();
+     if(!source||source.id!==project.id)throw Error('MV 신경망 연출 중 프로젝트 전환');
+     const directed=await directAutoMvScenesWithLocalAI(source,{
+      model:scoreModel,session:base.session,signal:controller.signal,
+      current,onChange:commit,onProgress:setMessage
+     });
+     if(directed.updated)setMessage('실제 Ollama AI로 '+directed.updated+'개 신규 SD/SVD 장면의 원곡 가사·스토리 연출 완료');
+    }
     movieProject=current();
     if(!lipPlacement){
      const chars=dataRef.current?.characters||[];
@@ -280,6 +291,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    {scoreModelError&&<p role="alert">{scoreModelError}</p>}
    <Notice>작사와 악기별 MIDI는 사용자가 설치한 로컬 신경망 모델이 생성합니다. 프로젝트에 이미 작성된 가사는 덮어쓰지 않습니다. 생성된 선율의 한국어 음소 타임라인으로 실제 Singing 엔진과 연결합니다.</Notice>
   </div>}
+  {saveFullMovie&&makeAutoScore&&<label><input type="checkbox" disabled={busy} checked={makeNeuralSceneDirection} onChange={e=>setMakeNeuralSceneDirection(e.target.checked)}/> 선택한 실제 로컬 Ollama 모델로 원곡 가사·구간에 맞춘 신규 3초 SD/SVD 장면 AI 연출</label>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeSourceStems} onChange={e=>setMakeSourceStems(e.target.checked)}/> 신경망 MIDI 6악기를 SoundFont PCM WAV 편집 트랙으로 추가</label>}
   {saveFullMovie&&makeSourceStems&&<div className="mv7-item">
    <label>SoundFont용 Python.exe<input disabled={busy} value={musicPython} onChange={e=>setMusicPython(e.target.value)} placeholder="C:/AI/Python/python.exe"/></label>
