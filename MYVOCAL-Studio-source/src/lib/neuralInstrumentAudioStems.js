@@ -95,10 +95,18 @@ export async function renderAndStoreNeuralAudioStems(project,{
   const assetId=allocate('neural-audio-asset'),trackId=allocate('neural-audio-track');
   const file=new File([rendered],'MYVOCAL-독립신경망-'+role+'.wav',{type:'audio/wav'});
   const track=createTrack(project,file,assetId,duration);
-  if(!track||!Array.isArray(track.clips)||!track.clips.some(c=>c.assetId===assetId))
-   throw Error('독립 신경망 악기 WAV를 편집 트랙에 연결하지 못했습니다.');
+  if(!track||!Array.isArray(track.clips)||track.clips.length!==1||
+     track.clips[0]?.assetId!==assetId)
+   throw Error('독립 신경망 악기 WAV를 하나의 편집 가능한 클립으로 연결하지 못했습니다.');
+  // 원곡 6악기는 모두 한 마디 첫 위치에서 시작해야 실제 PCM 녹음 및
+  // 가사·보컬과 드리프트 없이 편집할 수 있다. 새 트랙만 수정한다.
+  const syncedClip={...track.clips[0],startBar:1,durationSec:duration};
+  if(!Number.isFinite(syncedClip.durationSec)||syncedClip.durationSec<150||
+     Math.abs(syncedClip.durationSec-baseline)>.1)
+   throw Error('독립 신경망 MIDI 악기 WAV 길이와 DAW 편집 클립이 일치하지 않습니다.');
   entries.push([assetId,file]);
-  tracks.push({...track,id:trackId,name:'MusicGen 개별 신경망 악기 · '+INSTRUMENT[role][1],
+  tracks.push({...track,id:trackId,clips:[syncedClip],
+   name:'MusicGen 개별 신경망 악기 · '+INSTRUMENT[role][1],
    type:'instrument',mute:!audible,solo:false,volume:audible?35:70,generatedBy:'musicgen-independent-audio',
    sourceRole:role,sourceMidiTrackId:latestCompleteNeuralScore(project).get(role).id});
  }
