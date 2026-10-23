@@ -120,6 +120,14 @@ export async function generateAndStoreMvHarmony(project,{
    throw Error('실제 RVC CUDA 음색 변환용 Python·모델 경로를 확인하세요.');
   const conversion={session,signal,onProgress:(done,total)=>
    onProgress('독립 화음 RVC 음색 변환 '+done+'/'+total+' 구간')};
+  // 기존 한국어 가창 MIDI 휴지 구간을 RVC 실제 PCM 분할 후보로 전달한다.
+  // 후보는 원본 WAV RMS로 재검사하며 보컬·Voice 자산은 변경하지 않는다.
+  const harmonyCues=harmony.cues||[];
+  conversion.preferredSplitSeconds=harmonyCues.slice(1).flatMap((cue,i)=>{
+   const previous=harmonyCues[i],pause=Number(cue.startSec)-Number(previous.endSec);
+   return Number.isFinite(pause)&&pause>=.18?
+    [(Number(cue.startSec)+Number(previous.endSec))/2]:[];
+  });
   if(registeredRVCModel){
    const record=registeredRVCModel;
    if(record.engineId!=='rvc'||record.voiceId!==voice.id||!record.assetId||
