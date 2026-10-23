@@ -78,6 +78,36 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   try{draw(timeRef.current);}catch(e){setStatus(e.message);setPlaying(false);return;}
   setTime(timeRef.current);if(timeRef.current>=plan.durationSec){setPlaying(false);return;}frameRef.current=requestAnimationFrame(tick);};frameRef.current=requestAnimationFrame(tick);return ()=>cancelAnimationFrame(frameRef.current);},[playing,busy,plan]);
  const seek=t=>{timeRef.current=t;setTime(t);draw(t);};
+ const arrangeDuetSingerStage=()=>{
+  try{
+   const mapping=project.duetSingers;
+   if(mapping?.version!==1||!mapping.lead?.characterId||!mapping.harmony?.characterId||
+      mapping.lead.characterId===mapping.harmony.characterId)
+    throw Error('Singing Workbench 또는 Music+MV에서 먼저 두 명의 실제 신경망 듀엣을 생성하세요.');
+   const duration=audioEnd(project);
+   const full=createFullSongBand90(project,characters,duration,{existing:plan});
+   const assignments=[
+    {id:mapping.lead.characterId,role:'lead',position:'left'},
+    {id:mapping.harmony.characterId,role:'harmony',position:'right'}
+   ];
+   let members=full.members.map(m=>{
+    const match=assignments.find(a=>a.id===m.characterId);
+    return match?{...m,role:match.role}:m;
+   });
+   for(const match of assignments){
+    if(!available.some(c=>c.id===match.id))
+     throw Error('듀엣에 저장한 캐릭터가 삭제됐거나 사용 허가가 없습니다.');
+    if(!members.some(m=>m.characterId===match.id)){
+     if(members.length>=6)throw Error('기존 가상 밴드 6명은 덮어쓰지 않습니다. 먼저 별도 빈 슬롯을 마련하세요.');
+     members=[...members,{characterId:match.id,role:match.role,
+      position:match.position,startSec:0,endSec:duration}];
+    }
+   }
+   const next=saveBand90(project,characters,{...full,members});
+   setPlan(next.band90);setDuetLipSyncs(null);
+   notify('원본 악기·보컬을 보존하고 두 등록 가수를 lead/harmony 3~6분 공연에 배치했습니다. 듀엣 별도 WAV 발성 립싱크 연결 버튼으로 이어가세요.');
+  }catch(e){notify('가상 밴드 두 가수 배치 실패: '+e.message);}
+ };
  const prepareRealSingerDuet=async()=>{
   if(busy)return;
   const mapping=project.duetSingers;
@@ -180,6 +210,7 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
  <Button disabled={plan.members.length>=6||available.length<=plan.members.length} onClick={()=>patch('members',[...plan.members,{characterId:available.find(c=>!plan.members.some(m=>m.characterId===c.id))?.id||'',role:'harmony',position:'center',startSec:0,endSec:plan.durationSec}])}>멤버 추가</Button>
  <div className="look-actions"><Button disabled={busy} onClick={prepareFullSong}>3~6분 전체 음악·밴드 연결</Button><Button disabled={busy} onClick={prepareCurrentMusic}>현재 밴드 음악 WAV 연결</Button></div>
  {project.duetSingers?.version===1&&<div className="look-actions">
+  <Button disabled={busy} onClick={arrangeDuetSingerStage}>두 가수 실제 보컬·캐릭터를 전곡 밴드 lead/harmony로 배치</Button>
   <Button disabled={busy} onClick={prepareRealSingerDuet}>실제 서로 다른 두 가수 WAV 발성 → 2D/VRM 듀엣 립싱크</Button>
   {duetLipSyncs?.projectId===project.id&&<Button disabled={busy} onClick={()=>setDuetLipSyncs(null)}>듀엣 보컬 립싱크 해제</Button>}
  </div>}
