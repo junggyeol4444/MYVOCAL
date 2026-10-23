@@ -33,6 +33,7 @@ export function extendMvToFullSong(project,duration,{newId,sceneLimit=120}={}){
    added.push({id,start,end,title:direction.title,
     generatedBy:'full-song-auto-scene',
     description:direction.description,action:direction.action,
+    expression:direction.expression,camera:direction.camera,lighting:direction.lighting,
     ...(reference?.characterId?{characterId:reference.characterId}:{}),
     ...(reference?.location?{location:reference.location}:{}),
     ...(reference?.outfit?{outfit:reference.outfit}:{}),
