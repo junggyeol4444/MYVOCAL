@@ -2,6 +2,7 @@
 // 장면별 이미지/SVD 입력을 구체화한다. 신경망 모델을 가장하지 않는다.
 // 사용자가 작성한 장면/가사/캐릭터/의상은 절대 수정하지 않는다.
 import {latestCompleteNeuralScore} from './neuralScoreBatch.js';
+import {detectLyricEmotion} from './characterExpressionDirector.js';
 
 const clean=(value,max=180)=>[...String(value??'')
  .replace(/[\u0000-\u001f\u007f]/g,' ').trim()].slice(0,max).join('');
@@ -40,12 +41,25 @@ export function describeOriginalSongMvScene(project,startSec,endSec,{index=0}={}
  const strength=active.length?
   active.reduce((sum,n)=>sum+Number(n.velocity||0),0)/active.length:65;
  const energy=strength>=95?'강한 리듬':strength<=55?'차분한 리듬':'균형 잡힌 리듬';
+ // 자동 생성 장면에 한하여 실제 한국어 가사와 MIDI 강약을 반영한다.
+ // 별도 표정 학습이 실행된 것처럼 표시하지 않고, 기존 표정 규칙을 사용한다.
+ const emotion=detectLyricEmotion(lyrics);
+ const expression=emotion==='sad'?'슬픔·눈물 머금은 눈':
+  emotion==='happy'?'환한 미소':emotion==='angry'?'분노와 강한 시선':
+  emotion==='surprised'?'놀라움':emotion==='relaxed'?'차분한 미소':
+  performance&&strength>=95?'강렬한 가창 감정':'담담한 표정';
+ const lighting=performance&&strength>=95?'후렴 강한 스테이지 조명':
+  emotion==='sad'?'부드러운 우울한 역광':
+  emotion==='happy'?'따뜻한 감정 조명':'기존 스토리 공간을 유지하는 조명';
+ const camera=performance?'보컬 얼굴과 악기를 번갈아 보여주는 연주 클로즈업':
+  '등록된 동일 인물을 유지하는 영화형 트래킹 샷';
  const action=performance?'실제 음악의 음표·박자에 맞춘 가창과 악기 연주 장면':
   '기존 프로젝트 줄거리를 이어가는 자연스러운 인물·배경 스토리 장면';
  const description=[
   '원본 한국어 노래의 '+clean(section.name,75)+' 구간',
   section.genre&&'편곡 장르 '+section.genre,
   'BPM '+bpm+', '+energy,
+  '가사와 음표 강약 기반 얼굴 표정: '+expression,
   action,
   lyrics&&'원곡 이 시점의 가사: '+lyrics,
   '같은 등록 인물·캐릭터의 얼굴·의상·헤어·색상·소품이 전 장면 일관되도록 유지',
@@ -53,6 +67,7 @@ export function describeOriginalSongMvScene(project,startSec,endSec,{index=0}={}
  ].filter(Boolean).join('; ');
  return {title:clean(section.name,75)+' · '+String(index+1)+'장면',
   description:clean(description,600),
-  action:clean(action,250),
+  action:clean(action,250),expression:clean(expression,160),
+  lighting:clean(lighting,200),camera:clean(camera,200),
   role:performance?'performance':'story'};
 }
