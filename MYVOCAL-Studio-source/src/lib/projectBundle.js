@@ -122,6 +122,21 @@ export async function importProjectBundle(file){
    ...(t.singerCharacterId?{singerCharacterId:mapping[t.singerCharacterId]||t.singerCharacterId}:{})
   }));
  }
+ // 원본 #11·#62: 구간별 MIDI 쉼표 편집의 원본 음표 복원 자료도
+ // 백업에서 새 트랙 ID로 연결한다. 이전 트랙 ID는 복원 프로젝트에 남기지 않는다.
+ if(Array.isArray(original.producerSectionRests)){
+  if(original.producerSectionRests.length>256)
+   throw Error('MIDI 구간 복원 자료가 허용 범위를 초과했습니다.');
+  project.producerSectionRests=original.producerSectionRests.map(entry=>{
+   const index=oldTrackIds.indexOf(entry.trackId);
+   if(index<0||!project.tracks[index]?.id||!Array.isArray(entry.removed)||
+      !Array.isArray(entry.windows)||entry.removed.length>4096)
+    throw Error('백업의 MIDI 구간 복원 자료에 연결되지 않은 악기 트랙이 있습니다.');
+   return {...entry,trackId:project.tracks[index].id,
+    removed:entry.removed.map(note=>({...note})),
+    windows:entry.windows.map(w=>({...w}))};
+  });
+ }
  if(project.videoEdits93?.history){const sceneIdMap=Object.fromEntries(original.scenes.map((scene,i)=>[scene.id,project.scenes[i]?.id]));project.videoEdits93={...project.videoEdits93,history:project.videoEdits93.history.map(entry=>({...entry,sceneId:sceneIdMap[entry.sceneId]||entry.sceneId}))};}
  if(project.band90)project.band90={...project.band90,members:(project.band90.members||[]).map(m=>({...m,characterId:mapping[m.characterId]||m.characterId}))};
  if(wasAligned){
