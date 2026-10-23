@@ -12,6 +12,7 @@ import {hangulHint,singingCapabilitiesView,engineModelCompatibility,buildSinging
 import {SINGING_STYLES,assertSingingStyleSupported} from '../lib/singingStyleControl.js';
 import {renderLongSinging} from '../lib/longSingingRender.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
+import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
 import EngineManager from './EngineManager';
 import RvcVoiceConversion from './RvcVoiceConversion.jsx';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
@@ -173,6 +174,21 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   setStatus('신경망 3도 화음 '+result.assets+'개 독립 WAV 트랙 저장 완료 · 원본 보존');
   notify('실제 3도 화음 신경망 Singing WAV를 기존 음악 프로젝트에 추가했습니다.');
  });
+ const renderRealAdlib=()=>run(async()=>{
+  if(!alignment||!voice)throw Error('실제 신경망 Ad-lib에는 원곡 한국어 가사·MIDI와 등록 목소리가 필요합니다.');
+  const number=safePort(port),model=capability?.models?.find(m=>m.id===engineModelId);
+  if(!model)throw Error('실제 신경망 Singing 모델을 먼저 조회하고 선택하세요.');
+  const result=await generateAndStoreMvAdlib(p,{
+   voice,port:number,modelId:model.id,session:window.__MYVOCAL_SESSION_KEY,
+   confirmed:true,singingStyle,
+   saveOptions:{current:()=>latestProject.current,onChange,newId:genId,
+    readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
+    store:putFilesAtomic,rollback:deleteFilesAtomic},
+   onProgress:setStatus
+  });
+  setStatus('원곡 MIDI의 실제 신경망 Ad-lib '+result.notes+'음표 신규 WAV 저장');
+  notify('실제 신경망 Ad-lib 추임새를 독립 편집 보컬 트랙에 추가했습니다.');
+ });
  const validCount=alignment?.cues?.filter(c=>c.lyric&&c.lyric!=='—').length||0;
  return <>
   <Panel title="Singing Workbench · v1.6" description="가사와 MIDI를 오프라인 가창 가이드 또는 녹음 샘플 기반 WAV로 렌더링합니다. 별도 호환 엔진은 선택 사항이며 신경망 AI 모델은 내장되지 않았습니다.">
@@ -217,6 +233,9 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    </Field>
    <Button disabled={!alignment||!voice||busy||!capability?.inferenceReady} onClick={renderRealHarmony}>
     실제 신경망 3도 화음 WAV 생성 → 신규 DAW 트랙
+   </Button>
+   <Button disabled={!alignment||!voice||busy||!capability?.inferenceReady} onClick={renderRealAdlib}>
+    원곡 MIDI 휴지의 신경망 Ad-lib 추임새 실제 WAV 생성 → 신규 DAW 트랙
    </Button>
    <label className="check-item"><input type="checkbox" checked={autoRvc} disabled={busy} onChange={e=>{setAutoRvc(e.target.checked);setAutoRvcRights(false)}}/>실제 신경망 Singing WAV 생성 후 저장된 RVC 모델로 음색 변환</label>
    {autoRvc&&<label className="check-item"><input type="checkbox" checked={autoRvcRights} disabled={busy} onChange={e=>setAutoRvcRights(e.target.checked)}/>목소리·모델·가창 원본에 대한 사용 권한이 있습니다.</label>}
