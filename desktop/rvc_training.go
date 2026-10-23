@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-//go:embed rvc_official_worker.py
+//go:embed rvc_official_worker.py rvc_pitch_coverage.py rvc_training_dataset_quality.py rvc_inference_audio_quality.py
 var embeddedRVCOfficialWorker embed.FS
 
 const maxRVCTrainingBundle = 151 << 20
@@ -283,10 +283,26 @@ func plausibleTorchCheckpoint(path string) bool {
 }
 func runRVCTraining(ctx context.Context, o rvcTrainingOptions, dataset, output string, log io.Writer) error {
 	if o.Mode=="official" {
-		raw,err:=embeddedRVCOfficialWorker.ReadFile("rvc_official_worker.py");if err!=nil{return err}
-		script:=filepath.Join(filepath.Dir(dataset),"rvc_official_worker.py")
-		if err=os.WriteFile(script,raw,0600);err!=nil{return err}
-		defer os.Remove(script)
+		// Windows EXE 자체에서 기존 공식 RVC worker의 실제 F0·학습녹음·
+		// 추론 오디오 품질 검사 모듈을 Python import 경로로 함께 제공한다.
+		// 원본 설치 폴더를 수정하지 않고 신규 격리 학습 작업에만 생성한다.
+		jobDir:=filepath.Dir(dataset)
+		names:=[]string{"rvc_official_worker.py","rvc_pitch_coverage.py","rvc_training_dataset_quality.py","rvc_inference_audio_quality.py"}
+		created:=make([]string,0,len(names))
+		defer func(){for _,path:=range created{_ = os.Remove(path)}}()
+		for _,name:=range names{
+			raw,readErr:=embeddedRVCOfficialWorker.ReadFile(name)
+			if readErr!=nil{return fmt.Errorf("내장 RVC Python 모듈 %s: %w",name,readErr)}
+			path:=filepath.Join(jobDir,name)
+			file,openErr:=os.OpenFile(path,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600)
+			if openErr!=nil{return fmt.Errorf("RVC 격리 작업에 이미 파일이 있어 보존합니다: %s: %w",name,openErr)}
+			created=append(created,path)
+			_,writeErr:=file.Write(raw)
+			closeErr:=file.Close()
+			if writeErr!=nil{return fmt.Errorf("RVC 내장 모듈 파일 기록 실패: %w",writeErr)}
+			if closeErr!=nil{return fmt.Errorf("RVC 내장 모듈 파일 닫기 실패: %w",closeErr)}
+		}
+		script:=filepath.Join(jobDir,"rvc_official_worker.py")
 		var id [16]byte;if _,err=rand.Read(id[:]);err!=nil{return err}
 		expName:="myvocal_"+hex.EncodeToString(id[:])
 		expDir:=filepath.Join(o.Root,"logs",expName)
