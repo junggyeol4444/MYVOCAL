@@ -27,7 +27,7 @@ export async function applyNeuralFaceLipToMv(movie,project,characters,{
  const renderAudio=mix||(await import('./audioEngine.js')).mixdownWav;
  const isolated=isolatedPersonSingingMix(project,personId);
  // 입 모양은 지정한 사람의 진짜 보컬로, 최종 MP4 오디오는 기존 완성 반주+보컬 믹스로 유지한다.
- const soundtrack=await renderAudio(project,{bitDepth:16,sampleRate:44100,channels:1});
+ const soundtrack=await renderAudio(project,{bitDepth:16,sampleRate:44100,channels:2});
  if(!(soundtrack instanceof Blob))throw Error('원곡 전체 오디오 믹스 WAV가 없습니다.');
  const fullInfo=assertUsableSingingWav(await soundtrack.arrayBuffer(),{maxDurationSec:360});
  if(signal?.aborted)throw Error('실제 사람 립싱크를 취소했습니다.');
