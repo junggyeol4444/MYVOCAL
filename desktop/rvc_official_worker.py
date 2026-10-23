@@ -176,8 +176,14 @@ def execute(args):
         if not samples_for_check:
             raise RuntimeError('추론 검증에 사용할 전처리된 WAV가 없습니다')
         check_wav = expdir / 'myvocal-inference-check.wav'
+        # 원본 추론 WAV 품질을 실제 모델에서 확인한다. 기존 pm 기본값은 보존.
+        # RMVPE는 사용자가 공식 설치에 해당 F0 체크포인트를 넣은 경우에만 허용.
+        f0_method = args.inference_f0_method
+        if f0_method == 'rmvpe':
+            require_file(root / 'assets/rmvpe/rmvpe.pt', 'RVC RMVPE 음정 추적 모델')
+            print('[MYVOCAL RVC] CUDA 가창 F0 RMVPE 모델로 학습 후 실추론 품질 확인', flush=True)
         command = ['infer/cli.py', '--model', trained, '--input', samples_for_check[0],
-                   '--output', check_wav, '--f0-method', 'pm',
+                   '--output', check_wav, '--f0-method', f0_method,
                    '--index-rate', '0.5' if index_path else '0']
         if index_path:
             command.extend(['--index', index_path])
@@ -225,6 +231,8 @@ def main(argv=None):
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--experiment-name', default='')
     parser.add_argument('--no-index', action='store_true', help='검색 인덱스 생성 없이 학습')
+    parser.add_argument('--inference-f0-method', default='pm', choices=['pm', 'rmvpe'],
+                        help='학습 종료 후 실제 로컬 RVC 가창 추론 확인용 F0 분석 방법')
     args = parser.parse_args(argv)
     if not 1 <= args.epochs <= 1000 or not 1 <= args.batch_size <= 64 or not 0 <= args.gpu <= 15:
         parser.error('에포크·배치·GPU 범위가 올바르지 않습니다')
