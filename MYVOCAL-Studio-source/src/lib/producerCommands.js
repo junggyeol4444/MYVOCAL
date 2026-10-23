@@ -185,12 +185,102 @@ function applyChorusArrangement11(project,windows,selected){
   kind:'chorus-arrangement-11',changed:Object.values(counts).reduce((a,b)=>a+b,0),counts};
 }
 
-export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
+
+// 원본 66항 #11·#62: 자연어로 구간별 악기를 쉬게 하거나 되돌린다.
+// 변경은 새 프로젝트 객체에만 적용한다. 삭제한 MIDI 음표는 복원 자료로 보존한다.
+const SECTION_REST_INSTRUMENTS83=Object.freeze({
+ drums:['drums','drum','rhythm','드럼'],bass:['bass','베이스'],
+ guitar:['guitar','기타'],piano:['piano','keys','keyboard','피아노'],
+ strings:['strings','string','스트링'],synth:['synth','synthesizer','신스'],
+ pad:['pad','패드']
+});
+const SECTION_REST_LABELS83=Object.freeze({
+ drums:'드럼',bass:'베이스',guitar:'기타',piano:'피아노',
+ strings:'스트링',synth:'신스',pad:'패드'
+});
+function sectionRestWindows83(project,sectionLabel){
+ const windows=songWindows(project);
+ const named=(w)=>String(w.name||'').trim();
+ const verse=windows.filter(w=>/verse|절/u.test(named(w)));
+ let selected=[];
+ if(sectionLabel==='1절'||sectionLabel==='2절'){
+  const number=sectionLabel==='1절'?1:2;
+  selected=verse.filter(w=>new RegExp('(?:verse\\s*|^)' +number+'(?:\\b|절)','i').test(named(w)));
+  if(!selected.length&&verse.length>=number)selected=[verse[number-1]];
+ }else if(sectionLabel==='후렴')selected=windows.filter(w=>isChorus(w.name));
+ else if(sectionLabel==='마지막 후렴'){
+  const choruses=windows.filter(w=>isChorus(w.name));
+  const final=windows.filter(w=>isFinal(w.name)).at(-1)||choruses.at(-1);
+  selected=final?[final]:[];
+ }else{
+  const pattern=sectionLabel==='인트로'||sectionLabel==='전주'?/intro|전주|인트로/i:
+   sectionLabel==='브리지'?/bridge|브리지/i:/outro|엔딩|아웃트로/i;
+  selected=windows.filter(w=>pattern.test(named(w)));
+ }
+ if(!selected.length)throw Error(sectionLabel+' 구간이 프로젝트에 없습니다.');
+ if(selected.length>1&&sectionLabel!=='후렴')
+  throw Error(sectionLabel+' 구간이 중복됩니다. 구간 이름을 구별해 주세요.');
+ return selected;
+}
+function sectionRestTrack83(project,role){
+ const aliases=SECTION_REST_INSTRUMENTS83[role];
+ const tracks=project.tracks.filter(t=>{
+  if(!Array.isArray(t.midiNotes)||!t.midiNotes.length)return false;
+  const fields=[t.instrument,t.composerRole,t.name].map(x=>String(x||'').toLowerCase());
+  return fields.some(f=>aliases.some(a=>f===a||new RegExp('(^|[\\s·_/-])'+a+'($|[\\s·_/-])','i').test(f)));
+ });
+ if(tracks.length!==1)throw Error(SECTION_REST_LABELS83[role]+' MIDI 트랙을 하나로 확정할 수 없습니다. 현재 '+tracks.length+'개입니다.');
+ if(!tracks[0].id)throw Error('악기 MIDI 트랙 ID가 없습니다.');
+ return tracks[0];
+}
+function applyProducerSectionRest83(project,cmd){
+ const m=/^(마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(드럼|베이스|기타|피아노|스트링|신스|패드)(?:을|를)?\s*(빼\s*줘|빼\s*주세요|쉬게\s*해\s*줘|쉬게\s*해주세요|다시\s*넣어\s*줘|다시\s*넣어\s*주세요|복원해\s*줘|복원해\s*주세요)$/u.exec(cmd);
+ if(!m)return null;
+ const sectionLabel=m[1].replace(/\s+/gu,' '),instrument=m[2],action=m[3];
+ const role=Object.keys(SECTION_REST_LABELS83).find(k=>SECTION_REST_LABELS83[k]===instrument);
+ const windows=sectionRestWindows83(project,sectionLabel),track=sectionRestTrack83(project,role);
+ const saved=Array.isArray(project.producerSectionRests)?project.producerSectionRests:[];
+ const overlapping=entry=>entry.trackId===track.id&&
+  entry.windows.some(a=>windows.some(b=>a.fromBeat<b.toBeat&&b.fromBeat<a.toBeat));
+ const matches=saved.filter(overlapping);
+ const restoring=/다시|복원/u.test(action);
+ if(restoring){
+  if(matches.length!==1||matches[0].sectionLabel!==sectionLabel||matches[0].role!==role)
+   throw Error('해당 구간과 악기의 복원 자료를 하나로 확정할 수 없습니다.');
+  const record=matches[0];
+  const current=track.midiNotes;
+  const ids=new Set(current.map(n=>n.id).filter(Boolean));
+  if(record.removed.some(n=>n.id&&ids.has(n.id)))
+   throw Error('복원할 MIDI 음표 ID가 이미 존재합니다. 프로젝트를 변경하지 않았습니다.');
+  const restored=[...current,...record.removed.map(n=>({...n}))].sort((a,b)=>a.startBeat-b.startBeat);
+  const tracks=project.tracks.map(t=>t.id===track.id?{...t,midiNotes:restored}:t);
+  return {project:{...project,tracks,producerSectionRests:saved.filter(e=>e!==record)},
+   response:sectionLabel+'의 '+instrument+' MIDI 음표 '+record.removed.length+'개를 복원했습니다.',
+   kind:'section-midi-rest-restore',changed:record.removed.length};
+ }
+ if(matches.length)throw Error('이 구간의 악기 쉼표 편집이 이미 있습니다. 먼저 복원해 주세요.');
+ const removed=track.midiNotes.filter(n=>playableNote(n)&&
+  windows.some(w=>n.startBeat>=w.fromBeat&&n.startBeat<w.toBeat));
+ if(!removed.length)throw Error(sectionLabel+'에서 '+instrument+' MIDI 음표를 찾지 못했습니다.');
+ if(removed.length>4096)throw Error('한 번에 보존할 수 있는 MIDI 음표 수를 초과했습니다.');
+ const remaining=track.midiNotes.filter(n=>!removed.includes(n));
+ const tracks=project.tracks.map(t=>t.id===track.id?{...t,midiNotes:remaining}:t);
+ const record={version:1,trackId:track.id,sectionLabel,role,
+  windows:windows.map(w=>({fromBeat:w.fromBeat,toBeat:w.toBeat})),
+  removed:removed.map(n=>({...n}))};
+ return {project:{...project,tracks,producerSectionRests:[...saved,record]},
+  response:sectionLabel+'에서 '+instrument+' MIDI 음표 '+removed.length+'개를 쉬게 했습니다. 같은 구간에 다시 넣어줘 명령으로 복원할 수 있습니다.',
+  kind:'section-midi-rest',changed:removed.length};
+}
+
+export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴이 심심해','멜로디 변경,'드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
 export function applyProducerCommand(project,rawCommand){
  if(!project?.id||!Array.isArray(project.tracks))throw Error('편집할 음악 프로젝트가 없습니다.');
  if(typeof rawCommand!=='string'||rawCommand.length>300)throw Error('300자 이하의 수정 요청을 입력하세요.');
  const cmd=trimCommand(rawCommand);
  if(!cmd||/[\u0000-\u001f\u007f]/u.test(cmd))throw Error('수정 요청을 확인해 주세요.');
+ const sectionRest=applyProducerSectionRest83(project,cmd);
+ if(sectionRest)return sectionRest;
  const windows=songWindows(project);
  const choruses=windows.filter(w=>isChorus(w.name));
  if(!choruses.length)throw Error('후렴 구간이 없습니다. 곡 구조에서 후렴을 추가해 주세요.');
