@@ -1,0 +1,140 @@
+// 원본 66항 #51: 검토한 한국어 장면 수정 → 실제 설치된 SD/SVD 이미지·영상.
+// 기존 장면·원본 사진·녹음·미디어는 덮어쓰지 않으며 새 자산만 추가한다.
+import {applyMvInstruction93} from './mvNaturalEdit93.js';
+import {buildSceneImageRequest,applySceneImage,validateGeneratedImage,generateComfyImage} from './mvSceneImages.js';
+import {videoSourceKey,applySceneVideo,generateLocalVideoClip,readSourceFrame} from './mvSceneVideos.js';
+import {validatePersonSource,generatePersonMvImage} from './imageToMv.js';
+import {validateCharacterArtwork,generateCharacterMvImage} from './characterToMv.js';
+import {buildMvDirectionPlan} from './mvDirection.js';
+import {inspectSvdClipDuration,assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
+import {getFile,putFilesAtomic} from './assetDb.js';
+import {genId} from './schema.js';
+const RIGHTS=new Set(['self','owned','licensed']);
+function sourceReference(scene,character){
+ if(scene.personMv&&scene.characterMv)throw Error('한 장면에 실제 사람과 캐릭터 원본을 함께 연결할 수 없습니다.');
+ if(scene.personMv){
+  if(scene.characterId!==character?.id||scene.personMv.personId!==character.id)throw Error('등록된 실제 사람 연결이 일치하지 않습니다.');
+  validatePersonSource(character,scene.personMv.referenceAssetId);
+  return {kind:'person',assetId:scene.personMv.referenceAssetId,denoise:scene.personMv.denoise};
+ }
+ if(scene.characterMv){
+  if(scene.characterId!==character?.id||scene.characterMv.characterId!==character.id)throw Error('등록된 2D 캐릭터 연결이 일치하지 않습니다.');
+  validateCharacterArtwork(character,scene.characterMv.referenceAssetId);
+  return {kind:'character',assetId:scene.characterMv.referenceAssetId,denoise:scene.characterMv.denoise};
+ }
+ if(character)throw Error('등록 인물·캐릭터는 장면에 원본 사진 또는 원화를 먼저 연결해야 합니다.');
+ return null;
+}
+function validateSettings(o){
+ if(!Number.isInteger(o.port)||o.port<1024||o.port>65535||o.port===58319||
+ typeof o.session!=='string'||o.session.length<8||!o.checkpoint||!o.videoModel)
+  throw Error('Windows EXE와 실제 설치된 SD/SVD 모델을 확인하세요.');
+ if(!Number.isInteger(o.width)||!Number.isInteger(o.height)||o.width<256||o.height<256||
+ o.width>1024||o.height>1024||o.width%64||o.height%64||o.width*o.height>1024*1024||
+ !Number.isInteger(o.imageSteps)||o.imageSteps<1||o.imageSteps>50||
+ !Number.isInteger(o.videoSteps)||o.videoSteps<1||o.videoSteps>40||
+ ![14,25].includes(o.frames)||![6,8].includes(o.fps)||
+ !Number.isInteger(o.motion)||o.motion<1||o.motion>255)
+  throw Error('SD/SVD 생성 해상도·프레임·스텝 설정 오류');
+}
+export async function regenerateNaturalMvScene(project,plan,characters,{
+ port,session,checkpoint,videoModel,width=768,height=448,imageSteps=20,
+ frames=25,fps=8,videoSteps=20,motion=127,signal,current,
+ currentCharacters=()=>characters,commit,loadFile=getFile,saveFiles=putFilesAtomic,
+ newId=genId,generateImage=generateComfyImage,generatePerson=generatePersonMvImage,
+ generateCharacter=generateCharacterMvImage,generateVideo=generateLocalVideoClip,
+ sourceFrame=readSourceFrame,onProgress=()=>{}
+}={}){
+ if(!project?.id||!Array.isArray(project.scenes)||!Array.isArray(characters)||
+ typeof current!=='function'||typeof commit!=='function'||
+ [loadFile,saveFiles,newId,generateImage,generatePerson,generateCharacter,generateVideo,sourceFrame].some(f=>typeof f!=='function'))
+  throw Error('기존 프로젝트와 자산·저장 연결이 필요합니다.');
+ validateSettings({port,session,checkpoint,videoModel,width,height,imageSteps,frames,fps,videoSteps,motion});
+ const draft=applyMvInstruction93(project,plan);
+ const scene=draft.scenes.find(s=>s.id===plan.sceneId),before=project.scenes.find(s=>s.id===plan.sceneId);
+ const characterId=scene.characterId||draft.characterId||'';
+ const character=characters.find(c=>c.id===characterId);
+ if(characterId&&(!character||!RIGHTS.has(character.rights)||
+ (character.rights==='licensed'&&!String(character.rightsNote||'').trim())))
+  throw Error('등록 인물·캐릭터 사용 권한이 확인되지 않았습니다.');
+ const reference=sourceReference(scene,character);
+ if(reference&&(!Number.isFinite(reference.denoise)||reference.denoise<.15||reference.denoise>.75))
+  throw Error('등록 사진·원화 변환 강도 오류');
+ const scenesSnapshot=JSON.stringify(project.scenes),charactersSnapshot=JSON.stringify(characters);
+ const guard=()=>{
+  if(signal?.aborted)throw Error('실제 AI 영상 생성 취소 · 원본 보존');
+  if(current()!==project||JSON.stringify(project.scenes)!==scenesSnapshot||
+  JSON.stringify(currentCharacters())!==charactersSnapshot)
+   throw Error('생성 중 원본 프로젝트·캐릭터 변경 · 기존 영상 보존');
+ };
+ guard();
+ const direction=buildMvDirectionPlan(draft,characters).scenes.find(s=>s.id===scene.id);
+ const request=buildSceneImageRequest(draft,scene,character,direction);
+ const seed=Math.floor(Math.random()*1999999000)+1;
+ const imageSettings={port,checkpoint,prompt:request.prompt,negative:request.negative,width,height,steps:imageSteps,seed};
+ let image;
+ if(reference){
+  const original=await loadFile(reference.assetId);guard();
+  const imageData=await sourceFrame(original);guard();
+  onProgress('사용 허가 원본으로 실제 로컬 SD img2img 생성 중');
+  image=await (reference.kind==='person'?generatePerson:generateCharacter)(
+   {...imageSettings,imageData,denoise:reference.denoise},session,signal);
+ }else{
+  onProgress('실제 로컬 SD 장면 이미지 생성 중');
+  image=await generateImage(imageSettings,session,signal);
+ }
+ guard();validateGeneratedImage(image);
+ const imageId=newId('img');
+ if(!/^img_[A-Za-z0-9_-]{1,80}$/.test(imageId)||imageId===before.imageAssetId)
+  throw Error('새 이미지 ID 오류');
+ const withImage=applySceneImage(draft,scene.id,imageId,request,{
+  seed,checkpoint,source:reference?.kind==='person'?'person-img2img':
+  reference?.kind==='character'?'character-img2img':'plain'});
+ const imageScene=withImage.scenes.find(s=>s.id===scene.id);
+ const sourceKey=videoSourceKey(withImage,imageScene,request);
+ const fullSong=scene.generatedBy==='full-song-auto-scene';
+ const renderFrames=fullSong?25:frames,renderFps=fullSong?8:fps;
+ onProgress('수정된 SD 장면을 실제 로컬 SVD 영상으로 생성 중');
+ const imageData=await sourceFrame(image);guard();
+ const video=await generateVideo({port,checkpoint:videoModel,imageData,frames:renderFrames,
+  fps:renderFps,steps:videoSteps,motion,seed:seed+1},session,signal);
+ guard();
+ const info=fullSong?
+  await assertSvdAutoSceneClipDuration(video,Number(scene.end)-Number(scene.start),{signal}):
+  await inspectSvdClipDuration(video,{signal});
+ guard();
+ if(!['video/mp4','image/webp'].includes(video.type)||info.durationSec<=0)
+  throw Error('SVD가 실제 움직이는 영상 파일을 반환하지 않았습니다.');
+ const videoId=newId('vid');
+ if(!/^vid_[A-Za-z0-9_-]{1,80}$/.test(videoId)||videoId===before.videoClipAssetId)
+  throw Error('새 영상 ID 오류');
+ const withVideo=applySceneVideo(withImage,scene.id,videoId,sourceKey,{
+  checkpoint:videoModel,frames:renderFrames,fps:renderFps,seed:seed+1,
+  mime:video.type,actualDurationSec:info.durationSec,actualFrames:info.frames});
+ const after=withVideo.scenes.find(s=>s.id===scene.id);
+ const history=[...(project.mvNeuralNaturalEdits?.history||[]),{
+  sceneId:scene.id,before,after:JSON.stringify(after),summary:plan.summary,
+  at:new Date().toISOString()}].slice(-8);
+ const result={...withVideo,videoEdits93:project.videoEdits93,
+  mvNeuralNaturalEdits:{version:1,history}};
+ const imageExt=image.type==='image/jpeg'?'jpg':'png',videoExt=video.type==='video/mp4'?'mp4':'webp';
+ guard();
+ onProgress('기존 자산과 별도로 실제 이미지·영상 2개 저장 중');
+ await saveFiles([
+  [imageId,new File([image],'MYVOCAL-자연어-장면-'+scene.id+'-'+seed+'.'+imageExt,{type:image.type})],
+  [videoId,new File([video],'MYVOCAL-자연어-영상-'+scene.id+'-'+(seed+1)+'.'+videoExt,{type:video.type})]
+ ]);
+ guard();await Promise.resolve(commit(result));
+ onProgress('실제 영상 수정 완료 · 이전 이미지·영상 연결 복원 가능');
+ return {project:result,sceneId:scene.id,imageId,videoId,videoSeconds:info.durationSec,
+  engine:'installed-local-SD-SVD'};
+}
+export function undoNeuralNaturalMvScene(project){
+ const history=project?.mvNeuralNaturalEdits?.history||[],last=history.at(-1);
+ if(!last)throw Error('복원할 실제 AI 장면 수정이 없습니다.');
+ const scene=project.scenes?.find(s=>s.id===last.sceneId);
+ if(!scene||JSON.stringify(scene)!==last.after)
+  throw Error('이후 장면이 변경되어 이전 미디어를 안전하게 복원할 수 없습니다.');
+ return {...project,scenes:project.scenes.map(s=>s.id===last.sceneId?last.before:s),
+  mvNeuralNaturalEdits:{version:1,history:history.slice(0,-1)}};
+}

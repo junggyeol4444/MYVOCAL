@@ -5,6 +5,7 @@ import LocalAiStoryboardPanel from '../components/LocalAiStoryboardPanel.jsx';
 import LocalMvBatchPanel from '../components/LocalMvBatchPanel.jsx';
 import Pv95Editor from '../components/Pv95Editor.jsx';
 import {interpretMvInstruction93,applyMvInstruction93,undoMvInstruction93} from '../lib/mvNaturalEdit93.js';
+import {regenerateNaturalMvScene,undoNeuralNaturalMvScene} from '../lib/mvNaturalMediaRegeneration.js';
 import {prepareCharacterReplace94,applyCharacterReplace94,undoCharacterReplace94} from '../lib/characterReplace94.js';
 import {eligibleBandCharacters} from '../lib/virtualBand90.js';
 import {prepareRegeneration92,verifyRegeneration92,applyRegeneration92,undoRegeneration92} from '../lib/identityRegeneration92.js';
@@ -48,7 +49,7 @@ function SceneVideoClip({assetId,mime,title}){
 export default function Video({data,project,onChange,navigate,notify,mode='video',embedded=false}){
  const p=project||data.projects[0];const [selected,setSelected]=useState('');const [pendingImport,setPendingImport]=useState(null);const [animaticPosition,setAnimaticPosition]=useState(0);const [animaticPlaying,setAnimaticPlaying]=useState(false);const [animaticSpeed,setAnimaticSpeed]=useState(1);const [shotSheetPage,setShotSheetPage]=useState(1);const animaticLastTick=useRef(null);
  const [imagePort,setImagePort]=useState('8188');const [checkpoints,setCheckpoints]=useState([]);const [checkpoint,setCheckpoint]=useState('');
- const [natural93,setNatural93]=useState(''),[review93,setReview93]=useState(null),[replace94Id,setReplace94Id]=useState(''),[review94,setReview94]=useState(null),[replace94All,setReplace94All]=useState(false);
+ const [natural93,setNatural93]=useState(''),[review93,setReview93]=useState(null),[natural93Busy,setNatural93Busy]=useState(false),[natural93Status,setNatural93Status]=useState(''),[replace94Id,setReplace94Id]=useState(''),[review94,setReview94]=useState(null),[replace94All,setReplace94All]=useState(false);
  const [band90Open,setBand90Open]=useState(false),[regen92Busy,setRegen92Busy]=useState(false),[regen92Status,setRegen92Status]=useState('로컬 이미지 모델·기존 장면 이미지 필요'),[regen92Patch,setRegen92Patch]=useState('');
  const [imageBusy,setImageBusy]=useState(false);const [imageStatus,setImageStatus]=useState('로컬 ComfyUI 확인 필요');
  const [imageSteps,setImageSteps]=useState(20);const [imageSeed,setImageSeed]=useState('');const [imageSize,setImageSize]=useState('768x448');
@@ -60,6 +61,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  const [pvCharacterId,setPvCharacterId]=useState(''),[pvArtworkId,setPvArtworkId]=useState(''),[pvDenoise,setPvDenoise]=useState(0.3),[pvSeed,setPvSeed]=useState('');
  const [pvBusy,setPvBusy]=useState(false),[pvStatus,setPvStatus]=useState('2D 캐릭터 그림 선택 필요');
  const pvAbort=useRef(null);
+ const natural93Abort=useRef(null);
  const latestProject=useRef(null);latestProject.current=p;
  const latestCharacters=useRef([]);latestCharacters.current=data.characters;
  const readSession=()=>typeof window==='undefined'?'':window.__MYVOCAL_SESSION_KEY||'';
@@ -347,6 +349,29 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  const applyImportedScenes=()=>{if(!pendingImport)return;try{if(p.id!==pendingImport.projectId||p.bpm!==pendingImport.bpm||JSON.stringify(p.scenes)!==pendingImport.sceneSnapshot)throw Error('미리보기 이후 프로젝트 장면이 변경됐습니다. 파일을 다시 확인하세요.');const updated=restoreMvStoryboard(p,pendingImport.content,data.characters);onChange(updated);setSelected('');setPendingImport(null);notify('장면 목록을 로컬 프로젝트에 복원했습니다. 기존 미디어·트랙은 변경하지 않았습니다.');}catch(e){notify('스토리보드 복원 실패: '+e.message);setPendingImport(null);}};
  const reviewNatural93=()=>{try{if(!current)throw Error('장면을 선택하세요.');setReview93(interpretMvInstruction93(p,current.id,natural93));}catch(e){setReview93(null);notify('STEP93: '+e.message);}};
  const applyNatural93=()=>{try{if(!review93)throw Error('검토할 지시가 없습니다.');onChange(applyMvInstruction93(p,review93));setReview93(null);notify('자연어 장면 수정 적용. 이미지·영상 원본은 보존되며 필요하면 재생성하세요.');}catch(e){setReview93(null);notify('STEP93 적용 실패: '+e.message);}};
+ const regenerateNatural93=async()=>{
+  if(!review93||natural93Busy||imageBusy||videoBusy||personBusy||pvBusy||regen92Busy)return;
+  const controller=new AbortController();natural93Abort.current=controller;
+  setNatural93Busy(true);setNatural93Status('실제 SD/SVD 생성 준비 중');
+  try{
+   if(!checkpoint||!checkpoints.includes(checkpoint)||!videoModel||!videoModels.includes(videoModel))
+    throw Error('로컬 이미지 SD와 영상 SVD 모델을 먼저 확인하세요.');
+   const [width,height]=imageSize.split('x').map(Number);
+   const result=await regenerateNaturalMvScene(p,review93,data.characters,{
+    port:Number(imagePort),session:readSession(),checkpoint,videoModel,width,height,
+    imageSteps:Number(imageSteps),frames:Number(videoFrames),fps:Number(videoFps),
+    videoSteps:Number(videoSteps),motion:Number(videoMotion),signal:controller.signal,
+    current:()=>latestProject.current,currentCharacters:()=>latestCharacters.current,
+    commit:next=>{latestProject.current=next;onChange(next)},onProgress:setNatural93Status
+   });
+   setReview93(null);notify('실제 SD 이미지·SVD 영상 '+result.sceneId+' 장면 수정 완료 · 원본 보존');
+  }catch(e){setNatural93Status('생성 중단: '+e.message);notify('자연어 실제 영상 수정: '+e.message);}
+  finally{natural93Abort.current=null;setNatural93Busy(false);}
+ };
+ const undoNaturalMedia93=()=>{try{
+  const next=undoNeuralNaturalMvScene(p);onChange(next);setReview93(null);
+  setNatural93Status('직전 장면과 이전 이미지·영상 연결 복원 완료');
+ }catch(e){notify('실제 영상 수정 복원: '+e.message);}};
  const reviewReplacement94=()=>{try{setReview94(prepareCharacterReplace94(p,replace94All?p.scenes.map(s=>s.id):[current.id],replace94Id,data.characters));}catch(e){setReview94(null);notify('STEP94: '+e.message);}};
  const applyReplacement94=()=>{try{if(!review94)throw Error('교체 내용을 먼저 확인하세요.');onChange(applyCharacterReplace94(p,review94,data.characters));setReview94(null);notify('캐릭터 링크 교체 완료. 이전 미디어는 복원 이력에 보존되고 새 인물의 이미지 생성은 별도로 필요합니다.');}catch(e){setReview94(null);notify('STEP94 적용 실패: '+e.message);}};
  const change=(patch)=>onChange({...p,...patch});
@@ -360,7 +385,14 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  <Panel title="STEP93 · AI 영상 자연어 수정" description="로컬 명령 문법으로 선택한 장면의 속성 하나만 안전하게 편집합니다. 미리보기·확인 후 적용하며 AI 모델 추론이 아닙니다.">
  <Field label="장면 자연어 명령"><input aria-label="Step93 자연어 명령" maxLength={500} value={natural93} onChange={e=>{setNatural93(e.target.value);setReview93(null);}} placeholder="배경을 비 오는 밤거리로 바꿔"/></Field>
  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}><Button disabled={!current} onClick={reviewNatural93}>변경 내용 검토</Button><Button disabled={!review93} onClick={applyNatural93}>검토한 수정 적용</Button><Button disabled={!p.videoEdits93?.history?.length} onClick={()=>{try{onChange(undoMvInstruction93(p));notify('직전 장면 문구 복원 완료');}catch(e){notify(e.message);}}}>직전 수정 되돌리기</Button></div>
- {review93&&<p className="muted">적용 대기 · {review93.summary} · 다른 장면이나 원본 영상은 변경하지 않습니다.</p>}
+ <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
+   <Button variant="primary" disabled={!review93||natural93Busy||imageBusy||videoBusy||personBusy||pvBusy||regen92Busy||!checkpoint||!videoModel} onClick={regenerateNatural93}>{natural93Busy?'실제 SD/SVD 생성 중…':'검토한 자연어 수정으로 실제 장면 영상 재생성'}</Button>
+   <Button disabled={!p.mvNeuralNaturalEdits?.history?.length||natural93Busy} onClick={undoNaturalMedia93}>이전 실제 이미지·영상 복원</Button>
+   {natural93Busy&&<Button onClick={()=>natural93Abort.current?.abort()}>실제 생성 취소</Button>}
+  </div>
+  {natural93Status&&<p role="status" className="muted">{natural93Status}</p>}
+  <p className="muted">설치된 로컬 SD 모델로 수정된 장면 이미지를 새로 만들고 SVD 모델로 실제 움직이는 클립을 생성합니다. 등록된 인물·캐릭터는 먼저 허가된 사진·원화를 장면에 연결해야 합니다. 이전 이미지·영상은 덮어쓰지 않고 복원 이력에 남깁니다. GPU가 필요하며 짧은 SVD 클립은 장면 길이 동안 반복됩니다.</p>
+  {review93&&<p className="muted">적용 대기 · {review93.summary} · 다른 장면이나 원본 영상은 변경하지 않습니다.</p>}
  <p className="muted">지원: 배경/장소, 의상/옷, 카메라, 표정/감정, 동작/행동, 조명 변경. 장면 타임라인·원본 사진·영상은 보존합니다. 잠긴 속성과 지원하지 않는 지시는 거부됩니다.</p>
  </Panel>
  <Panel title="STEP94 · Character Replace" description="장면·카메라·시간을 유지하면서 출연 캐릭터만 교체합니다. 구 캐릭터 이미지·영상은 이력에 보존되고 새 이미지로 재사용하지 않습니다.">
