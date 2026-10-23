@@ -17,6 +17,7 @@ import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
 import {makeFullSongInstrumentPerformance} from '../lib/fullSongInstrumentPerformance.js';
 import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
+import {visemeAt} from '../lib/characterLipSync.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
 import {isAlignmentStale} from '../lib/lyricAlignment.js';
 const positions=['left','center','right'];
@@ -42,9 +43,18 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   const result=new Map();
   for(const member of plan.members){
    const c=byId.get(member.characterId);if(!c)continue;
-   try{result.set(c.id,duetLipSyncs?.projectId===project.id?
-     duetLipSyncs.lips.get(c.id)||resolveProjectVrmLipSync(project,c)?.lipSync||c.lipSync:
-     resolveProjectVrmLipSync(project,c)?.lipSync||c.lipSync);}
+   try{
+    const singerLip=duetLipSyncs?.projectId===project.id?duetLipSyncs.lips.get(c.id):null;
+    if(singerLip){
+     // 듀엣 실제 PCM 립싱크는 원곡 절대시각이므로 가수 등장 시작을 빼서
+     // 각 2D/VRM 렌더러가 사용하는 로컬 공연 시각으로 맞춘다.
+     const origin=Math.round(member.startSec*1000);
+     const sliced=origin?singerLip.cues.filter(cue=>cue.endMs>origin)
+      .map(cue=>({...cue,startMs:Math.max(0,cue.startMs-origin),
+       endMs:cue.endMs-origin})):singerLip.cues;
+     result.set(c.id,origin?{...singerLip,cues:sliced}:singerLip);
+    }else result.set(c.id,resolveProjectVrmLipSync(project,c)?.lipSync||c.lipSync);
+   }
    catch{result.set(c.id,c.lipSync);}
   }
   return result;
@@ -69,7 +79,7 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
     else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,usableExpressionPlan(c),c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='person'&&src.element.readyState>=2)ctx.drawImage(src.element,x,0,tileW,h-62);
    }catch{/* display fallback tile instead of failing the entire ensemble */}
-   ctx.fillStyle='#0a1022';ctx.fillRect(x,h-62,tileW,62);ctx.fillStyle='white';ctx.font='bold 21px sans-serif';ctx.fillText(String(member.name).slice(0,28),x+12,h-34);ctx.font='15px sans-serif';ctx.fillStyle='#b8d2ef';ctx.fillText(`${member.role} · ${member.viseme?.viseme||'-'} · ${member.kind}`,x+12,h-12);ctx.restore();});
+   ctx.fillStyle='#0a1022';ctx.fillRect(x,h-62,tileW,62);ctx.fillStyle='white';ctx.font='bold 21px sans-serif';ctx.fillText(String(member.name).slice(0,28),x+12,h-34);ctx.font='15px sans-serif';ctx.fillStyle='#b8d2ef';ctx.fillText(`${member.role} · ${visemeAt(lipByMember.get(c.id)||c.lipSync,t-member.startSec).viseme} · ${member.kind}`,x+12,h-12);ctx.restore();});
   ctx.fillStyle='white';ctx.font='17px sans-serif';ctx.fillText(`MYVOCAL 90 · ${t.toFixed(2)}s`,12,25);
  };
  useEffect(()=>{if(busy)return;draw(timeRef.current);},[plan,busy,status,duetLipSyncs]);
