@@ -155,11 +155,16 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const renderRealHarmony=()=>run(async()=>{
   if(!alignment||!voice)throw Error('등록된 본인 목소리 및 한국어 가사·MIDI가 필요합니다.');
   const number=safePort(port);
+  if(autoRvc&&!autoRvcRights)
+   throw Error('3도 화음에 사용할 본인 음색 RVC·가창 모델 권한을 확인하세요.');
+  const rvcOptions=autoRvc?readRVCPreferences(window.localStorage):null;
+  if(autoRvc&&!rvcOptions)throw Error('RVC 변환 패널에서 실제 체크포인트·Python 경로를 먼저 저장하세요.');
   const model=capability?.models?.find(m=>m.id===engineModelId);
   if(!model)throw Error('실제 신경망 Singing 엔진 모델을 먼저 조회하고 선택하세요.');
   const result=await generateAndStoreMvHarmony(p,{
    voice,port:number,modelId:model.id,session:window.__MYVOCAL_SESSION_KEY,
    confirmed:true,direction:harmonyDirection,singingStyle,
+   convertRVC:autoRvc,rvcOptions,
    saveOptions:{current:()=>latestProject.current,onChange,newId:genId,
     readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
     store:putFilesAtomic,rollback:deleteFilesAtomic},
