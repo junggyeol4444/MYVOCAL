@@ -2,6 +2,7 @@
 // Frames come from user-saved local stills/clips. Optional sound comes from
 // MYVOCAL's existing WAV mixdown. AI video generation is NOT performed here.
 import {drawMvVideoFrame,findMvVideoScene,MV_VIDEO_FPS,MV_VIDEO_WIDTH,MV_VIDEO_HEIGHT,MV_VIDEO_MAX_SEC} from './mvVideoRender.js';
+import {createMvWebpTimeline} from './mvWebpTimeline.js';
 
 export function selectMvWebmType(withAudio,supports){
  const choices=withAudio?
@@ -48,6 +49,8 @@ export async function recordMvWebm(plan,prepared,{
  let audioContext=null,audioSource=null,audioDestination=null,unattachedAudioTracks=[],stream=null,recorder=null,frameId=null;
  let activeVideoId='',lastSceneId='',lastProgress=-1;
  const allAssets=prepared?.assets||new Map();
+ const webpTimeline=createMvWebpTimeline(plan,allAssets,{signal,ImageDecoderClass:env.ImageDecoder});
+ const renderedAssets=webpTimeline.renderAssets;
  // Cleanup must be best-effort: a stale MP4 element or released track
  // must not keep the WebM recorder pending or leak remaining media resources.
  const stopVideos=()=>{
@@ -78,7 +81,9 @@ export async function recordMvWebm(plan,prepared,{
    await awaitMvAudioPreparation(()=>audioContext.resume(),signal); // initiated by the user's click
   }
   if(signal?.aborted)throw Error('영상 저장을 취소했습니다.');
-  drawMvVideoFrame(canvas,plan,allAssets,0,{captions,showCaptions,lipSyncOverlays});
+  await webpTimeline.prewarm(0);
+  if(signal?.aborted)throw Error('실제 SVD 애니메이션 준비가 취소됐습니다.');
+  drawMvVideoFrame(canvas,plan,renderedAssets,0,{captions,showCaptions,lipSyncOverlays});
   if(audioEnabled){
    const wav=await awaitMvAudioPreparation(renderAudio,signal);
    if(!wav?.size)throw Error('노래 WAV를 생성하지 못했습니다.');
@@ -161,6 +166,9 @@ export async function recordMvWebm(plan,prepared,{
        try{old.element.pause();}catch{}
       }
       lastSceneId=scene?.id||'';
+      // 현재 WebP 장면의 원본 프레임을 그대로 사용하면서 다음 장면만
+      // 백그라운드 프리디코딩한다. 늦거나 실패하면 가짜 정지 이미지로 대체하지 않는다.
+      webpTimeline.lookAhead(elapsed).catch(fail);
       const current=scene?.assetId&&allAssets.get(scene.assetId);
       if(current?.kind==='video'){
        activeVideoId=scene.id;
@@ -174,7 +182,7 @@ export async function recordMvWebm(plan,prepared,{
        }
       }else activeVideoId='';
      }
-     try{drawMvVideoFrame(canvas,plan,allAssets,elapsed,{captions,showCaptions,lipSyncOverlays});}catch(e){
+     try{drawMvVideoFrame(canvas,plan,renderedAssets,elapsed,{captions,showCaptions,lipSyncOverlays});}catch(e){
       fail(e);return;
      }
      if(settled||signal?.aborted)return;
@@ -198,6 +206,7 @@ export async function recordMvWebm(plan,prepared,{
   // Frame cancellation is best-effort: failure must not skip media cleanup.
   if(frameId!==null){try{env.cancelAnimationFrame?.(frameId);}catch{}}
   stopVideos();
+  webpTimeline.dispose();
   // Recorder may already be running when audio startup or frame setup fails.
   // Always release the encoder as well as its media stream on failure.
   if(recorder&&recorder.state!=='inactive'){
