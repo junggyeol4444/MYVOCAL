@@ -56,7 +56,7 @@ export async function generateNeuralScoreForMv(project,{
   ...cue,lyric:syllables[i%syllables.length]
  })),unfilled:0};
  const phonemePlan=buildPhonemePlan(alignment);
- const next={...candidate,vocalAlignment:alignment,phonemePlan,
+ const next={...candidate,key:project.key||key,vocalAlignment:alignment,phonemePlan,
   neuralAutoScore:{provider:'local-ollama',model,at:new Date().toISOString(),
    sourceLyrics:preservedLyrics?'user-original':'local-ollama',
    bars:music.bars,durationSec:music.durationSec,
