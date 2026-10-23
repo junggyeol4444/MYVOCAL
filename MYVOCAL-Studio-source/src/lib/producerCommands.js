@@ -222,10 +222,10 @@ function sectionRestWindows83(project,sectionLabel){
   throw Error(sectionLabel+' 구간이 중복됩니다. 구간 이름을 구별해 주세요.');
  return selected;
 }
-function sectionRestTrack83(project,role){
+function sectionRestTrack83(project,role,allowEmpty=false){
  const aliases=SECTION_REST_INSTRUMENTS83[role];
  const tracks=project.tracks.filter(t=>{
-  if(!Array.isArray(t.midiNotes)||!t.midiNotes.length)return false;
+  if(!Array.isArray(t.midiNotes)||(!allowEmpty&&!t.midiNotes.length))return false;
   const fields=[t.instrument,t.composerRole,t.name].map(x=>String(x||'').toLowerCase());
   return fields.some(f=>aliases.some(a=>f===a||new RegExp('(^|[\\s·_/-])'+a+'($|[\\s·_/-])','i').test(f)));
  });
@@ -238,7 +238,7 @@ function applyProducerSectionRest83(project,cmd){
  if(!m)return null;
  const sectionLabel=m[1].replace(/\s+/gu,' '),instrument=m[2],action=m[3];
  const role=Object.keys(SECTION_REST_LABELS83).find(k=>SECTION_REST_LABELS83[k]===instrument);
- const windows=sectionRestWindows83(project,sectionLabel),track=sectionRestTrack83(project,role);
+ const windows=sectionRestWindows83(project,sectionLabel),track=sectionRestTrack83(project,role,/다시|복원/u.test(action));
  const saved=Array.isArray(project.producerSectionRests)?project.producerSectionRests:[];
  const overlapping=entry=>entry.trackId===track.id&&
   entry.windows.some(a=>windows.some(b=>a.fromBeat<b.toBeat&&b.fromBeat<a.toBeat));
