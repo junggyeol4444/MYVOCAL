@@ -18,6 +18,7 @@ import {resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
 import {makeFullSongInstrumentPerformance} from '../lib/fullSongInstrumentPerformance.js';
 import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
 import {visemeAt} from '../lib/characterLipSync.js';
+import {stageSingerExpressionFromVocal} from '../lib/duetSingingExpression.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
 import {isAlignmentStale} from '../lib/lyricAlignment.js';
 const positions=['left','center','right'];
@@ -59,6 +60,20 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   }
   return result;
  },[project,characters,plan.members,duetLipSyncs]);
+ // 가수별 실제 PCM 보컬의 입 모양을 자기 2D/VRM 표정에도 반영한다.
+ // 직접 검토한 STEP87 표정은 건드리지 않는다.
+ const liveSingerExpression=useMemo(()=>{
+  const rows=new Map();
+  if(duetLipSyncs?.projectId!==project.id)return rows;
+  for(const member of plan.members){
+   const character=byId.get(member.characterId);
+   if(!character||usableExpressionPlan(character))continue;
+   const lip=lipByMember.get(character.id);
+   if(!lip?.cues?.length||!duetLipSyncs.lips.has(character.id))continue;
+   try{rows.set(character.id,stageSingerExpressionFromVocal(character,lip));}catch{/* 기존 표정 유지 */}
+  }
+  return rows;
+ },[project.id,plan.members,lipByMember,duetLipSyncs,characters]);
  const patch=(key,value)=>setPlan(p=>({...p,[key]:value}));
  const patchMember=(index,key,value)=>setPlan(p=>({...p,members:p.members.map((m,i)=>i===index?{...m,[key]:value}:m)}));
  useEffect(()=>{let stopped=false;const fresh=new Map();setStatus('로컬 미디어 불러오는 중…');
@@ -75,8 +90,8 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   const active=bandFrame90(project,characters,plan,Math.max(0,Math.min(plan.durationSec,t)));const tileW=Math.floor(w/Math.max(1,active.length));
   active.forEach((member,i)=>{const c=byId.get(member.characterId),src=sources.current.get(c.id),x=i*tileW;ctx.save();ctx.beginPath();ctx.rect(x,0,tileW,h);ctx.clip();
    ctx.fillStyle=i%2?'#252d48':'#182b43';ctx.fillRect(x,0,tileW,h);
-   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,c.stage3d||null,lipByMember.get(c.id)||c.lipSync,usableExpressionPlan(c),c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(src.element,x,0,tileW,h-62);}
-    else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,usableExpressionPlan(c),c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
+   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,c.stage3d||null,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(src.element,x,0,tileW,h-62);}
+    else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='person'&&src.element.readyState>=2)ctx.drawImage(src.element,x,0,tileW,h-62);
    }catch{/* display fallback tile instead of failing the entire ensemble */}
    ctx.fillStyle='#0a1022';ctx.fillRect(x,h-62,tileW,62);ctx.fillStyle='white';ctx.font='bold 21px sans-serif';ctx.fillText(String(member.name).slice(0,28),x+12,h-34);ctx.font='15px sans-serif';ctx.fillStyle='#b8d2ef';ctx.fillText(`${member.role} · ${visemeAt(lipByMember.get(c.id)||c.lipSync,t-member.startSec).viseme} · ${member.kind}`,x+12,h-12);ctx.restore();});
