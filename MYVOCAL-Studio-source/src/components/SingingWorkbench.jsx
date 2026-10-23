@@ -9,6 +9,7 @@ import {readAudioInfo} from '../lib/audioEngine';
 import {assertUsableSingingWav} from '../lib/singingOutputValidation.js';
 import {renderOfflineVocalGuide,renderOfflineVocalGuideSelection,guideSyllableSequence} from '../lib/offlineVocalGuide';
 import {hangulHint,singingCapabilitiesView,engineModelCompatibility,buildSingingRequest,appendRenderHistory} from '../lib/singingBridge';
+import {SINGING_STYLES,assertSingingStyleSupported} from '../lib/singingStyleControl.js';
 import {renderLongSinging} from '../lib/longSingingRender.js';
 import EngineManager from './EngineManager';
 import RvcVoiceConversion from './RvcVoiceConversion.jsx';
@@ -27,6 +28,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const [voiceId,setVoiceId]=useState(p.voiceId||''),[modelMap,setModelMap]=useState({a:'',eo:'',i:'',u:''}),[busy,setBusy]=useState(false),[result,setResult]=useState(null),[url,setUrl]=useState('');
  const [port,setPort]=useState(String(p.singingEngine?.port||7867)),[bridgeState,setBridgeState]=useState('연결 확인 전'),[externalModelId,setExternalModelId]=useState(p.singingEngine?.modelId||''),[status,setStatus]=useState('');
  const [capability,setCapability]=useState(null),[engineModelId,setEngineModelId]=useState(p.singingEngine?.modelId||'');
+ const [singingStyle,setSingingStyle]=useState(p.singingStyle||'Natural');
  const [cueStart,setCueStart]=useState(1),[cueEnd,setCueEnd]=useState(4);
  const [autoRvc,setAutoRvc]=useState(false),[autoRvcRights,setAutoRvcRights]=useState(false),[sourceVocal,setSourceVocal]=useState(null),[saveNeuralTracks,setSaveNeuralTracks]=useState(false);
  const latestUrl=useRef('');
@@ -38,7 +40,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const voice=usable.find(v=>v.id===voiceId)||usable[0];
  const samples=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId==='sampler'&&m.status==='sample-preview-ready');
  const externalModels=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId!=='sampler');
- useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setSourceVocal(null);},[p.id]);
+ useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setSingingStyle(p.singingStyle||'Natural');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setSourceVocal(null);},[p.id]);
  useEffect(()=>{const suggested=guessVowelModels(samples);if(!Object.values(suggested).some(Boolean)&&samples.length)suggested.a=samples[0].id;setModelMap(suggested);setExternalModelId('')},[voice?.id,data.voiceModels]);
  useEffect(()=>()=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current)},[]);
  const changeResult=(blob,kind,count,fileKind=kind,placement=null)=>{if(kind!=='rvc-neural')setSourceVocal(null);if(latestUrl.current)URL.revokeObjectURL(latestUrl.current);const u=URL.createObjectURL(blob);latestUrl.current=u;setUrl(u);setResult({file:new File([blob],outputName(p.title,fileKind),{type:'audio/wav'}),kind,count,placement});};
@@ -103,10 +105,12 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   if(capability?.mode==='neural'&&!capability.inferenceReady)throw Error('외부 엔진이 추론 준비 상태가 아니라고 보고했습니다. 모델과 실행 환경을 확인하세요.');
   const compatibility=engineModelCompatibility(capability,checkpoint);
   if(!compatibility.ok)throw Error(compatibility.warning);
+  assertSingingStyleSupported(singingStyle,capability,checkpoint);
+  const styledProject=singingStyle==='Natural'?p:{...p,singingStyle};
   const longForm=alignment.longForm===true;
   let blob,chunkCount=1,sourceForSave=null;
   if(longForm){
-   const combined=await renderLongSinging(alignment,{port:number,project:p,voice,model:checkpoint,
+   const combined=await renderLongSinging(alignment,{port:number,project:styledProject,voice,model:checkpoint,
     request:async body=>{const response=await requestBridge('/api/singing/render',body,controller.signal);return response.blob();},
     phonemePlan,
     signal:controller.signal,
@@ -114,7 +118,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    });
    blob=combined.wav;
   }else{
-   const req=buildSingingRequest(number,p,alignment,voice,checkpoint,phonemePlan);
+   const req=buildSingingRequest(number,styledProject,alignment,voice,checkpoint,phonemePlan);
    const res=await requestBridge('/api/singing/render',req,controller.signal);blob=await res.blob();
   }
   assertUsableSingingWav(await blob.arrayBuffer(),{maxDurationSec:longForm?360:90});
@@ -178,6 +182,11 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    <EngineManager port={port} onPort={setPort} requestBridge={requestBridge} notify={notify}/>
    <div className="mv10-grid"><Field label="로컬 엔진 포트"><input aria-label="외부 엔진 포트" value={port} onChange={e=>{setPort(e.target.value);setBridgeState('연결 확인 전');setCapability(null)}} placeholder="7867" inputMode="numeric"/></Field>
     <Field label="외부 체크포인트 참조 (선택)"><select value={externalModelId} onChange={e=>setExternalModelId(e.target.value)}><option value="">모델 지정 없음</option>{externalModels.map(m=><option value={m.id} key={m.id}>{m.name} ({m.engineId})</option>)}</select></Field></div>
+   <Field label="Singing Style (음색 Voice와 별도)">
+    <select disabled={busy} value={singingStyle} onChange={e=>{setSingingStyle(e.target.value);onChange({...p,singingStyle:e.target.value});}}>
+     {SINGING_STYLES.map(style=><option value={style} key={style}>{style}</option>)}
+    </select>
+   </Field>
    <label className="check-item"><input type="checkbox" checked={autoRvc} disabled={busy} onChange={e=>{setAutoRvc(e.target.checked);setAutoRvcRights(false)}}/>실제 신경망 Singing WAV 생성 후 저장된 RVC 모델로 음색 변환</label>
    {autoRvc&&<label className="check-item"><input type="checkbox" checked={autoRvcRights} disabled={busy} onChange={e=>setAutoRvcRights(e.target.checked)}/>목소리·모델·가창 원본에 대한 사용 권한이 있습니다.</label>}
    <label className="check-item"><input type="checkbox" checked={saveNeuralTracks} disabled={busy} onChange={e=>setSaveNeuralTracks(e.target.checked)}/>신경망 Singing 생성→RVC 음색 변환 결과까지 기존 프로젝트에 실제 WAV 트랙으로 자동 일괄 저장 (RVC 원본은 음소거 참고 트랙)</label>
