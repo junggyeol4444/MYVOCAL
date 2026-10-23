@@ -3,7 +3,7 @@
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 import {assertRealPersonLipAudioSync} from './realPersonMp4Integrity.js';
 const checkFile=(file,limit,label)=>{if(!(file instanceof Blob)||file.size<128||file.size>limit)throw Error(label+'의 원본 파일 크기를 확인하세요.');};
-export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,resize=1,rightsConfirmed=false,modelRights=false}={},
+export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,resize=1,rightsConfirmed=false,modelRights=false,soundtrack=null}={},
  {session=globalThis.window?.__MYVOCAL_SESSION_KEY,signal,request=fetch}={}){
  if(rightsConfirmed!==true||modelRights!==true)throw Error('실제 사람·가창·체크포인트 사용 권한을 각각 확인하세요.');
  if(typeof session!=='string'||!session)throw Error('Windows MYVOCAL EXE 세션에서 실행해 주세요.');
@@ -15,10 +15,19 @@ export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,r
  checkFile(audio,80*1024*1024,'가창 WAV');
  if(audio.type!=='audio/wav'&&audio.type!=='audio/x-wav')throw Error('신경망 립싱크는 실제 WAV 파일이 필요합니다.');
  const audioInfo=assertUsableSingingWav(await audio.arrayBuffer(),{maxDurationSec:360});
+ let finalAudioInfo=audioInfo;
+ if(soundtrack!==null){
+  checkFile(soundtrack,80*1024*1024,'완성 음악 믹스');
+  if(!['audio/wav','audio/x-wav'].includes(soundtrack.type))throw Error('완성 음악은 실제 WAV여야 합니다.');
+  finalAudioInfo=assertUsableSingingWav(await soundtrack.arrayBuffer(),{maxDurationSec:360});
+  if(Math.abs(finalAudioInfo.durationSec-audioInfo.durationSec)>.35)
+   throw Error('입 모양용 보컬과 최종 음악 길이가 다릅니다.');
+ }
  if(signal?.aborted)throw Error('립싱크 영상을 취소했습니다.');
  const body=new FormData();
  body.set('face',face,face.type==='video/webm'?'MYVOCAL-original-person.webm':'MYVOCAL-original-person.mp4');
  body.set('audio',audio,'MYVOCAL-original-singing.wav');
+ if(soundtrack!==null)body.set('soundtrack',soundtrack,'MYVOCAL-original-full-song.wav');
  for(const [key,value] of Object.entries({python,root,checkpoint,resize}))body.set(key,String(value));
  body.set('rights','confirmed');body.set('modelRights','confirmed');
  const result=await request('/api/mv/person/neural-lipsync',{method:'POST',headers:{'X-MYVOCAL-Session':session},body,signal,cache:'no-store'});
@@ -29,7 +38,7 @@ export async function renderNeuralPersonLip(face,audio,{python,root,checkpoint,r
  const prefix=new Uint8Array(await movie.slice(0,8).arrayBuffer());
  if(String.fromCharCode(...prefix.slice(4,8))!=='ftyp')throw Error('실제 MP4 컨테이너가 아닌 출력입니다.');
  if(signal?.aborted)throw Error('립싱크 영상 생성이 취소됐습니다.');
- await assertRealPersonLipAudioSync(movie,audioInfo,{signal});
+ await assertRealPersonLipAudioSync(movie,finalAudioInfo,{signal});
  if(signal?.aborted)throw Error('립싱크 영상 생성이 취소됐습니다.');
  return new File([movie],'MYVOCAL-실제사람-신경망립싱크.mp4',{type:'video/mp4'});
 }

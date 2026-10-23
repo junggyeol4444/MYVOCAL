@@ -21,7 +21,7 @@ import(
 const maxNeuralFaceVideo=int64(200<<20)
 const maxNeuralLipAudio=int64(80<<20)
 const maxNeuralLipVideo=int64(220<<20)
-const maxNeuralLipUpload=maxNeuralFaceVideo+maxNeuralLipAudio+int64(2<<20)
+const maxNeuralLipUpload=maxNeuralFaceVideo+2*maxNeuralLipAudio+int64(2<<20)
 var neuralLipSlot=make(chan struct{},1)
 type neuralLipOptions struct{Python,Root,Checkpoint string;Resize int}
 type neuralLipRunner func(context.Context,neuralLipOptions,string,string,string)error
@@ -100,8 +100,23 @@ func (a *appServer) neuralPersonLipWith(w http.ResponseWriter,r *http.Request,ru
  if err=stageNeuralLipInput(video[0],facePath,maxNeuralFaceVideo);err!=nil{jsonError(w,422,err.Error());return}
  if err=stageNeuralLipInput(audio[0],audioPath,maxNeuralLipAudio);err!=nil{jsonError(w,422,err.Error());return}
  f,err:=os.ReadFile(audioPath);if err!=nil||!validSingingWAV(f){jsonError(w,422,"실제 가창 파일은 완전한 PCM/float WAV여야 합니다");return}
+ // 보컬용 영상 생성 후 최종 원곡 전체 음악을 재합성한다. 기존 입력을 절대 덮어쓰지 않는다.
+ var soundtrackPath string
+ soundtrackFiles:=r.MultipartForm.File["soundtrack"]
+ if len(soundtrackFiles)>1{jsonError(w,400,"최종 음악 WAV는 하나만 허용됩니다");return}
+ if len(soundtrackFiles)==1{
+  soundtrackPath=filepath.Join(dir,"full-song.wav")
+  if err=stageNeuralLipInput(soundtrackFiles[0],soundtrackPath,maxNeuralLipAudio);err!=nil{jsonError(w,422,err.Error());return}
+  music,readErr:=os.ReadFile(soundtrackPath)
+  if readErr!=nil||!validSingingWAV(music){jsonError(w,422,"최종 원곡 전체 믹스 WAV 형식 오류");return}
+ }
  ctx,cancel:=context.WithTimeout(r.Context(),60*time.Minute);defer cancel()
  if err=runner(ctx,o,facePath,audioPath,out);err!=nil{jsonError(w,502,err.Error());return}
+ if soundtrackPath!=""{
+  muxed:=filepath.Join(dir,"full-song-lipsync.mp4")
+  if err=runNeuralLipSoundtrackMux(ctx,out,soundtrackPath,muxed);err!=nil{jsonError(w,502,err.Error());return}
+  out=muxed
+ }
  result,err:=os.Open(out);if err!=nil{jsonError(w,502,"Wav2Lip가 MP4 영상을 생성하지 않았습니다");return}
  defer result.Close()
  b,err:=io.ReadAll(io.LimitReader(result,maxNeuralLipVideo+1))
