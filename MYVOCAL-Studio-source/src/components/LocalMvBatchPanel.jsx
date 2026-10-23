@@ -180,6 +180,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       const harmonized=await generateAndStoreMvHarmony(current(),{
        voice:singer,port:Number(singingPort),modelId:sung.modelId,
        session:base.session,confirmed:singingRights,singingStyle,
+       convertRVC:alsoConvertRVC,rvcOptions,registeredRVCModel,
        direction:harmonyDirection,signal:controller.signal,onProgress:setMessage,
        saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
         createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
