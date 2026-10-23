@@ -33,8 +33,14 @@ export function instrumentNeuralPrompts(project,role,{segments,seconds=18,crossf
   const phrase=notes.filter(n=>Number.isInteger(n.pitch)&&Number.isFinite(n.startBeat)&&
    Number.isFinite(n.length)&&n.length>0&&n.startBeat<to&&n.startBeat+n.length>from)
    .sort((a,b)=>a.startBeat-b.startBeat).slice(0,16)
-   .map(n=>String(n.pitch)+'@'+Number(n.startBeat-from).toFixed(1)+
-    'b/'+Number(n.length).toFixed(1)+'b/'+Math.round(Number(n.velocity)||80)).join(' ');
+   .map(n=>{
+    // 이전 구간부터 이어지는 음표는 현 구간의 0박부터 이어지는
+    // 실제 겹침 부분만 전달한다. 음수 시작 박자·구간 밖 길이 금지.
+    const localStart=Math.max(from,n.startBeat);
+    const localEnd=Math.min(to,n.startBeat+n.length);
+    return String(n.pitch)+'@'+(localStart-from).toFixed(2)+
+     'b/'+(localEnd-localStart).toFixed(2)+'b/'+Math.round(Number(n.velocity)||80);
+   }).join(' ');
   const cue='solo '+musicalRole+' only, instrumental, no singing, no other instruments; '+
    bpm+' BPM; actual MIDI pitches/relative beat/length/velocity '+(phrase||'continue previous original phrase')+'; ';
   const compact=text.replace(/continuous original arrangement with drums, bass, guitar, keys and pads; /,
