@@ -10,7 +10,8 @@ import {persistNeuralMusicTracks} from '../lib/musicProductionCommit.js';
 import {readMusicGenPreferences} from '../lib/musicGenPreferences.js';
 import {makeImportedVocalTrack} from '../lib/lyricAlignment.js';
 import {genId} from '../lib/schema.js';
-import {putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb.js';
+import {putFilesAtomic,deleteFilesAtomic,getFile} from '../lib/assetDb.js';
+import {exportOriginalNeuralWav,NEURAL_STEM_EXPORT_LABELS} from '../lib/neuralStemWavExport.js';
 import {extendMvToFullSong} from '../lib/fullSongMvScenes.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
@@ -28,7 +29,7 @@ import {applyNeuralFaceLipToMv} from '../lib/autoMvRealPersonLip.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {persistProductionDeliverables} from '../lib/productionOutputPersist.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
- const cancelRef=useRef(null);
+ const cancelRef=useRef(null),stemExportCancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
  const [includeReferences,setIncludeReferences]=useState(false);
  const [saveFullMovie,setSaveFullMovie]=useState(false),[fullMouth,setFullMouth]=useState(false);
@@ -44,6 +45,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeNeuralSceneDirection,setMakeNeuralSceneDirection]=useState(false);
  const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(''),[soundfontFile,setSoundfontFile]=useState('');
  const [makeNeuralAudioStems,setMakeNeuralAudioStems]=useState(false);
+ const [stemExportRole,setStemExportRole]=useState('melody'),[stemExportBusy,setStemExportBusy]=useState(false),[stemExportStatus,setStemExportStatus]=useState('');
  const [scoreModels,setScoreModels]=useState([]),[scorePrompt,setScorePrompt]=useState(project.title||'');
  const [scoreModelError,setScoreModelError]=useState('');
  const [faceNeuralSync,setFaceNeuralSync]=useState(false),[personId,setPersonId]=useState('');
@@ -61,6 +63,26 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [demucsRoot,setDemucsRoot]=useState('');
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
  let info;try{info=planMvBatch(project,{includeReferences})}catch(e){info={total:0,already:0,linked:0,error:e.message}}
+ const exportSelectedStem=async()=>{
+  if(busy||stemExportBusy)return;
+  const source=current();
+  if(!source||source.id!==project.id){setStemExportStatus('원곡 프로젝트가 변경됐습니다.');return;}
+  const controller=new AbortController();stemExportCancelRef.current=controller;
+  setStemExportBusy(true);setStemExportStatus('6악기 실제 PCM 시간축 확인 중');
+  try{
+   const result=await exportOriginalNeuralWav(source,{
+    role:stemExportRole,current,loadFile:getFile,signal:controller.signal,
+    onProgress:(done,total)=>setStemExportStatus('실제 원천 악기 확인 '+done+'/'+total)
+   });
+   const url=URL.createObjectURL(result.file),a=document.createElement('a');
+   try{a.href=url;a.download=result.file.name;document.body.append(a);a.click();a.remove();}
+   finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
+   setStemExportStatus(NEURAL_STEM_EXPORT_LABELS[result.role]+
+    ' 실제 MusicGen WAV '+result.durationSec.toFixed(2)+'초 / '+
+    result.sampleRate+'Hz / '+result.frames+'프레임 다운로드 시작');
+  }catch(e){setStemExportStatus('원본 보존 · 악기 내보내기 중단: '+e.message);}
+  finally{stemExportCancelRef.current=null;setStemExportBusy(false);}
+ };
  const create=async()=>{
   if(busy||(!info.total&&!saveFullMovie))return;
   const controller=new AbortController();cancelRef.current=controller;setBusy(true);setMessage('시작 중…');setError('');
@@ -288,6 +310,18 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  };
  return <Panel title="실제 로컬 AI 이미지 → SVD 영상 일괄 생성" description="사용자가 설치한 ComfyUI SD 이미지 모델과 SVD 동영상 모델을 사용합니다. 각 빈 장면에서 실제 이미지와 짧은 영상 파일을 생성하고 기존 프로젝트에 저장합니다.">
   <p className="muted">생성 대상 {info.total}개 · 이미 영상이 있는 장면 {info.already}개 · 등록된 사람·캐릭터 연결 장면 {info.linked}개</p>
+  <div className="mv7-item">
+   <strong>원천 MusicGen 신경망 6악기 · 편집 가능한 WAV 개별 저장</strong>
+   <label>악기 선택<select disabled={busy||stemExportBusy} value={stemExportRole} onChange={e=>setStemExportRole(e.target.value)}>
+    {Object.entries(NEURAL_STEM_EXPORT_LABELS).map(([role,name])=><option value={role} key={role}>{name}</option>)}
+   </select></label>
+   <div className="mv7-actions">
+    <Button disabled={busy||stemExportBusy} onClick={exportSelectedStem}>선택한 악기 MusicGen 원본 WAV 저장</Button>
+    {stemExportBusy&&<Button onClick={()=>stemExportCancelRef.current?.abort()}>원천 악기 저장 취소</Button>}
+   </div>
+   {stemExportStatus&&<p role="status" className="muted">{stemExportStatus}</p>}
+   <Notice>동일 회차 신경망 MIDI 6악기가 모두 있어야 하며 WAV의 실제 PCM 길이·프레임·샘플레이트가 같아야 합니다. 대용량 3~6분 원천 WAV를 인코딩·잘라내지 않고 개별 보존합니다.</Notice>
+  </div>
   <label><input type="checkbox" disabled={busy} checked={includeReferences} onChange={e=>setIncludeReferences(e.target.checked)}/> 등록된 본인·허가받은 사람 사진·2D 캐릭터 원화 장면도 일괄 이미지·영상 생성에 포함</label>
   <label><input type="checkbox" disabled={busy} checked={saveFullMovie} onChange={e=>setSaveFullMovie(e.target.checked)}/> 생성 후 음악·보컬·가사 포함 완성 MV WebM까지 한 번에 저장 (Windows WebView2 사용)</label>
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={exportWav} onChange={e=>setExportWav(e.target.checked)}/> 완성 음악·가창 믹스를 편집 가능한 16비트 스테레오 WAV로 함께 저장</label>}
