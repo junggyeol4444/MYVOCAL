@@ -47,7 +47,7 @@ export function fullSong2dKoreanLipSync(project,character){
  throw Error('실제 한국어 가사·MIDI 음소 시간표 또는 검토해 저장한 캐릭터 립싱크가 필요합니다.');
 }
 export async function recordFullSong2dCharacter({
- project,character,canvas,image,settings,audioBlob,
+ project,character,canvas,image,settings,audioBlob,prewarmedAudioContext=null,
  signal,onProgress=()=>{},record=recordStageWebM
 }={}){
  if(!project?.id||!character?.id||!canvas||typeof canvas.getContext!=='function'||
@@ -80,7 +80,7 @@ export async function recordFullSong2dCharacter({
  const draw=time=>drawAnimationFrame(ctx,image,character.layerPlan,config,
   Math.min(time,duration),canvas.width,canvas.height,lipSync,expressionPlan,
   character,dancePlan,performancePlan);
- const webm=await record({canvas,duration,fps:settings.fps,draw,onProgress,signal,audioBlob});
+ const webm=await record({canvas,duration,fps:settings.fps,draw,onProgress,signal,audioBlob,prewarmedAudioContext});
  if(signal?.aborted)throw Error('2D 공연 녹화 완료 전 취소됐습니다.');
  if(!(webm instanceof Blob)||webm.size<1000||webm.type!=='video/webm')
   throw Error('실제 음악·2D 한국어 립싱크 공연 WebM 파일이 생성되지 않았습니다.');
