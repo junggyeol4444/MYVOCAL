@@ -122,7 +122,8 @@ export async function loadMvVideoAssets(plan,{loadFile,signal,createUrl=URL.crea
     if(!(element.naturalWidth>0&&element.naturalHeight>0))throw Error('이미지 크기를 읽을 수 없습니다.');
    }
    assertNotAborted(signal);
-   assets.set(scene.assetId,{kind:scene.kind,element,url});
+   assets.set(scene.assetId,{kind:scene.kind,element,url,
+    ...(type==='image/webp'?{animatedWebpFile:file}:{})});
    pending=null;
   }
   assertNotAborted(signal);
@@ -162,7 +163,8 @@ export function syncMvPreviewClips(scenes,assets,activeScene,playing,positionSec
 }
 const frameTitle=(s)=>String(s||'장면').replace(/[\u0000-\u001f\u007f]+/g,' ').slice(0,75);
 function cover(ctx,source,width,height){
- const sw=source.videoWidth||source.naturalWidth||0,sh=source.videoHeight||source.naturalHeight||0;
+ const sw=source.videoWidth||source.naturalWidth||source.displayWidth||source.codedWidth||0,
+  sh=source.videoHeight||source.naturalHeight||source.displayHeight||source.codedHeight||0;
  if(!(sw>0&&sh>0))return false;
  const ratio=Math.max(width/sw,height/sh),outW=sw*ratio,outH=sh*ratio;
  ctx.drawImage(source,(width-outW)/2,(height-outH)/2,outW,outH);
@@ -176,7 +178,8 @@ export function drawMvVideoFrame(canvas,plan,assets,seconds,{captions=[],showCap
  const record=scene?.assetId?assets?.get(scene.assetId):null;
  let imageReady=false;
  if(record){
-  if(record.kind==='video')imageReady=record.element.readyState>=2&&cover(ctx,record.element,width,height);
+  if(record.kind==='frame-sequence')imageReady=cover(ctx,record.frameAt(scene,seconds),width,height);
+  else if(record.kind==='video')imageReady=record.element.readyState>=2&&cover(ctx,record.element,width,height);
   else imageReady=cover(ctx,record.element,width,height);
  }
  if(!imageReady){
