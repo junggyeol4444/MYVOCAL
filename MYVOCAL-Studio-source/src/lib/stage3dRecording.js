@@ -4,7 +4,7 @@ export function supportedStageWebM(MediaRecorderClass=globalThis.MediaRecorder){
  if(!MediaRecorderClass||typeof MediaRecorderClass.isTypeSupported!=='function')return '';
  return ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorderClass.isTypeSupported(t))||'';
 }
-export async function recordStageWebM({canvas,duration,fps,draw,onProgress=()=>{},signal,audioBlob=null,videoBitsPerSecond=3000000,AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext,MediaRecorderClass=globalThis.MediaRecorder}){
+export async function recordStageWebM({canvas,duration,fps,draw,onProgress=()=>{},signal,audioBlob=null,videoBitsPerSecond=3000000,AudioContextClass=globalThis.AudioContext||globalThis.webkitAudioContext,MediaRecorderClass=globalThis.MediaRecorder,prewarmedAudioContext=null}){
  if(!canvas||typeof canvas.captureStream!=='function')throw Error('현재 WebGL 캔버스는 영상 녹화를 지원하지 않습니다.');
  if(![24,30].includes(fps)||!Number.isFinite(duration)||duration<2||duration>360)throw Error('영상 길이 또는 FPS 설정 오류');
  if(!Number.isInteger(videoBitsPerSecond)||videoBitsPerSecond<500000||videoBitsPerSecond>3000000)
@@ -16,7 +16,8 @@ export async function recordStageWebM({canvas,duration,fps,draw,onProgress=()=>{
  if(audioBlob!==null){
   if(!(audioBlob instanceof Blob)||audioBlob.size<44||audioBlob.size>96*1024*1024)throw Error('실제 보컬 WAV는 96MiB 이하로 선택하세요.');
   if(typeof AudioContextClass!=='function')throw Error('Windows 오디오 캡처 기능을 사용할 수 없습니다.');
-  audioContext=new AudioContextClass();
+  // Windows WebView2의 버튼 클릭 시 준비된 오디오 컨텍스트를 장편 믹싱 뒤에도 재사용.
+  audioContext=prewarmedAudioContext||new AudioContextClass();
   try{
    const decoded=await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
    if(decoded.duration+0.08<duration)throw Error('음악 WAV가 3D 공연 영상 길이보다 짧습니다.');
@@ -26,12 +27,12 @@ export async function recordStageWebM({canvas,duration,fps,draw,onProgress=()=>{
    const track=destination.stream.getAudioTracks()[0];
    if(!track)throw Error('오디오 캡처 트랙 생성에 실패했습니다.');
    stream.addTrack(track);await audioContext.resume();
-  }catch(e){stream.getTracks().forEach(track=>track.stop());await audioContext.close().catch(()=>{});throw e;}
+  }catch(e){stream.getTracks().forEach(track=>track.stop());if(!prewarmedAudioContext)await audioContext.close().catch(()=>{});throw e;}
  }
  try{
   recorder=new MediaRecorderClass(stream,{mimeType,videoBitsPerSecond});
   return await new Promise((resolve,reject)=>{
-   const cleanup=()=>{cancelAnimationFrame(raf);signal?.removeEventListener('abort',abort);stream.getTracks().forEach(track=>track.stop());if(audioSource)try{audioSource.stop()}catch{};if(audioContext)void audioContext.close().catch(()=>{});};
+   const cleanup=()=>{cancelAnimationFrame(raf);signal?.removeEventListener('abort',abort);stream.getTracks().forEach(track=>track.stop());if(audioSource)try{audioSource.stop()}catch{};if(audioContext&&!prewarmedAudioContext)void audioContext.close().catch(()=>{});};
    const fail=(e)=>{if(done)return;done=true;try{if(recorder.state!=='inactive')recorder.stop();}catch{}cleanup();reject(e instanceof Error?e:Error('영상 인코딩에 실패했습니다.'));};
    const abort=()=>fail(Error('영상 제작이 취소됐습니다.'));
    recorder.ondataavailable=e=>{if(e.data?.size>0){chunks.push(e.data);if(chunks.reduce((n,p)=>n+p.size,0)>220*1024*1024)fail(Error('3D 공연 영상이 220MiB 용량 제한을 초과했습니다.'));}};
@@ -46,5 +47,5 @@ export async function recordStageWebM({canvas,duration,fps,draw,onProgress=()=>{
    };
    raf=requestAnimationFrame(frame);
   });
- }catch(e){stream.getTracks().forEach(track=>track.stop());if(audioSource)try{audioSource.stop()}catch{};if(audioContext)void audioContext.close().catch(()=>{});throw e;}
+ }catch(e){stream.getTracks().forEach(track=>track.stop());if(audioSource)try{audioSource.stop()}catch{};if(audioContext&&!prewarmedAudioContext)void audioContext.close().catch(()=>{});throw e;}
 }
