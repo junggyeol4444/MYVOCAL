@@ -44,6 +44,7 @@ type singingRequest struct {
 		EngineID string `json:"engineId"`
 	} `json:"checkpoint"`
 	BPM      float64      `json:"bpm"`
+	SingingStyle string `json:"singingStyle,omitempty"`
 	Cues     []singingCue `json:"cues"`
 	Phonemes []struct {
 		CueIndex int     `json:"cueIndex"`
@@ -125,6 +126,13 @@ func (a *appServer) singingRender(w http.ResponseWriter, r *http.Request) {
 	if !safeSingingPort(input.Port) || input.Format != "MYVOCAL_SINGING_REQUEST" || input.Version != 1 || input.Voice.Rights != "self" && input.Voice.Rights != "owned" && input.Voice.Rights != "licensed" {
 		jsonError(w, 400, "엔진 포트 또는 목소리 권한이 잘못됐습니다.")
 		return
+	}
+	if input.SingingStyle != "" {
+		allowedStyle := map[string]bool{"Natural":true,"Ballad":true,"Soft":true,"Power":true,"Rock":true,"Whisper":true,"Falsetto":true,"Emotional":true}
+		if !allowedStyle[input.SingingStyle] {
+			jsonError(w, 400, "지원하지 않는 Singing Style입니다.")
+			return
+		}
 	}
 	if len(input.Cues) < 1 || len(input.Cues) > 128 || input.BPM < 40 || input.BPM > 240 || len(input.Voice.ID) > 150 || len(input.Project) > 300 || len(input.Voice.Name) > 300 {
 		jsonError(w, 400, "보컬 요청이 허용된 범위를 벗어났습니다.")
