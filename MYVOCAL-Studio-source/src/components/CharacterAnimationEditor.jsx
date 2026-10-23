@@ -7,6 +7,8 @@ import {usablePerformance89} from '../lib/characterPerformance89.js';
 import {downloadText} from '../lib/store.js';
 import {audioEnd,mixdownWav} from '../lib/audioEngine.js';
 import {recordFullSong2dCharacter} from '../lib/fullSong2dSinging.js';
+import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
+import {isAlignmentStale} from '../lib/lyricAlignment.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {layerPlanStatus} from '../lib/characterLayers.js';
 import {ANIMATION_PRESETS,ANIMATION_FIELDS,EXPRESSIONS,animationStatus,createAnimationSettings,validateAnimationSettings,changeAnimationSettings,saveAnimationSettings,animationManifest,animationCanvasSize,drawAnimationFrame} from '../lib/characterAnimation2d.js';
@@ -17,7 +19,7 @@ function downloadBlob(blob,name){const url=URL.createObjectURL(blob);const a=doc
 export default function CharacterAnimationEditor({character,onSave,notify,projects=[]}){
  const canvasRef=useRef(null),imageRef=useRef(null),rafRef=useRef(0),playingRef=useRef(false),tRef=useRef(0),configRef=useRef(null),durationRef=useRef(6),activeRef=useRef(true),songAbortRef=useRef(null);
  const [imageReady,setImageReady]=useState(false),[status,setStatus]=useState('원본 이미지 로딩 중'),[time,setTime]=useState(0),[playing,setPlaying]=useState(false),[busy,setBusy]=useState(false);
- const [songId,setSongId]=useState(''),[makeMp4,setMakeMp4]=useState(false);
+ const [songId,setSongId]=useState(''),[makeMp4,setMakeMp4]=useState(false),[useVoiceEnergy,setUseVoiceEnergy]=useState(false);
  const [settings,setSettings]=useState(()=>{try{const saved=character.animation2d;if(saved){validateAnimationSettings(character,saved);return {...saved};}return createAnimationSettings(character);}catch{return null;}});
  const plan=character.layerPlan;
  const fullSongs=(Array.isArray(projects)?projects:[]).filter(p=>p?.id&&
@@ -106,9 +108,22 @@ export default function CharacterAnimationEditor({character,onSave,notify,projec
    setStatus('한국어 신경망 Singing과 반주를 원곡 길이 PCM WAV로 믹싱 중');
    const wav=await mixdownWav(selectedSong,{bitDepth:16,channels:2,sampleRate:44100});
    if(controller.signal.aborted||!activeRef.current)throw Error('전곡 2D 공연이 중단됐습니다.');
+   let vocalAudioBuffer=null;
+   if(useVoiceEnergy){
+    if(!selectedSong.vocalAlignment||isAlignmentStale(selectedSong,selectedSong.vocalAlignment))
+     throw Error('실제 한국어 보컬 RMS 립싱크에는 현재 MIDI 가사·음표 싱크가 필요합니다.');
+    const source=projectVocalSources(selectedSong).find(x=>
+     selectedSong.tracks.some(t=>t.id===x.trackId&&!t.mute));
+    if(!source)throw Error('반주가 아닌 실제 보컬 WAV의 독립 편집 트랙이 필요합니다.');
+    const vocals=await getFile(source.assetId);
+    if(!(vocals instanceof Blob)||vocals.size<44||vocals.size>90*1024*1024)
+     throw Error('등록된 한국어 원곡 보컬 WAV를 불러올 수 없습니다.');
+    vocalAudioBuffer=await warm.decodeAudioData(await vocals.arrayBuffer());
+    if(controller.signal.aborted)throw Error('실제 2D 보컬 립싱크 제작이 취소됐습니다.');
+   }
    const produced=await recordFullSong2dCharacter({
     project:selectedSong,character,canvas:canvasRef.current,image:imageRef.current,settings,
-    audioBlob:wav,prewarmedAudioContext:warm,signal:controller.signal,
+    audioBlob:wav,vocalAudioBuffer,prewarmedAudioContext:warm,signal:controller.signal,
     onProgress:p=>setStatus('실제 2D 가창·립싱크 영상 녹화 '+Math.round(p*100)+'%')
    });
    downloadBlob(produced.file,'MYVOCAL-2D-'+character.id+'-전곡Singing.webm');
@@ -140,6 +155,7 @@ export default function CharacterAnimationEditor({character,onSave,notify,projec
    <option value="">등록한 2D 캐릭터와 연결된 원곡 선택</option>
    {fullSongs.map(p=><option key={p.id} value={p.id}>{p.title||p.id} · {audioEnd(p).toFixed(1)}초</option>)}
   </select></Field>
+  <label className="check-item"><input type="checkbox" disabled={busy} checked={useVoiceEnergy} onChange={e=>setUseVoiceEnergy(e.target.checked)}/> 실제 원본 보컬 WAV의 발성 PCM을 한국어 MIDI 가사·입 모양 시간표에 적용 (반주 제외)</label>
   <label className="check-item"><input type="checkbox" disabled={busy} checked={makeMp4} onChange={e=>setMakeMp4(e.target.checked)}/> 완성 2D 가창 WebM을 기존 FFmpeg로 MP4도 생성</label>
   <div className="hstack" style={{flexWrap:'wrap',gap:8}}>
    <Button variant="primary" disabled={!selectedSong||busy||!imageReady||!valid} onClick={exportEntireSong}>3~6분 원곡 보컬·2D 립싱크 전곡 공연 실제 녹화</Button>
