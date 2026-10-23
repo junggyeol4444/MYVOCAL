@@ -13,6 +13,7 @@ import {genId} from '../lib/schema.js';
 import {putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb.js';
 import {extendMvToFullSong} from '../lib/fullSongMvScenes.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
+import {SINGING_STYLES} from '../lib/singingStyleControl.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
 import {buildNeuralMusicPrompts} from '../lib/neuralMusicPromptTimeline.js';
@@ -32,6 +33,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(false),[musicDuration,setMusicDuration]=useState(180);
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(false),[singingPort,setSingingPort]=useState('7867');
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
+ const [singingStyle,setSingingStyle]=useState(project.singingStyle||'Natural');
  const [alsoConvertRVC,setAlsoConvertRVC]=useState(false),[registeredRVCId,setRegisteredRVCId]=useState('');
  const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
  const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(''),[soundfontFile,setSoundfontFile]=useState('');
@@ -161,7 +163,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      const rvcOptions=alsoConvertRVC?readRVCPreferences(window.localStorage):null;
      const registeredRVCModel=alsoConvertRVC?registeredRVCModels.find(m=>m.id===registeredRVCId)||null:null;
      const sung=await generateAndStoreMvSinging(vocalProject,{
-      voice:singer,port:Number(singingPort),modelId:vocalProject.singingEngine?.modelId||'',
+      voice:singer,port:Number(singingPort),singingStyle,modelId:vocalProject.singingEngine?.modelId||'',
       session:base.session,convertRVC:alsoConvertRVC,rvcOptions,registeredRVCModel,confirmed:singingRights,
       signal:controller.signal,onProgress:setMessage,
       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
@@ -293,6 +295,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <label>가창에 사용할 등록 목소리<select value={singingVoiceId} disabled={busy} onChange={e=>{setSingingVoiceId(e.target.value);setSingingRights(false);}}>
      <option value="">프로젝트 목소리 / 첫 번째 사용 허가 목소리</option>
      {voices.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+   </select></label>
+   <label>노래 스타일 (Voice 음색과 별도)<select disabled={busy} value={singingStyle} onChange={e=>setSingingStyle(e.target.value)}>
+    {SINGING_STYLES.map(style=><option key={style} value={style}>{style}</option>)}
    </select></label>
    <label><input type="checkbox" checked={alsoConvertRVC} disabled={busy} onChange={e=>setAlsoConvertRVC(e.target.checked)}/> 등록한 RVC 모델로 본인 음색까지 변환</label>
    {alsoConvertRVC&&<label>실제 RVC 모델 선택<select disabled={busy} value={registeredRVCId} onChange={e=>setRegisteredRVCId(e.target.value)}>
