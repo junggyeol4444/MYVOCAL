@@ -1,6 +1,7 @@
 // 기존 MYVOCAL의 Ollama MIDI 음표를 MusicGen 연속 구간 텍스트 조건으로 전달한다.
 // 오디오가 MIDI 음을 정확히 재현한다는 주장은 하지 않는다.
 import {latestCompleteNeuralScore,NEURAL_SCORE_ROLES} from './neuralScoreBatch.js';
+import {summarizeOriginalMidiTheme,prependSongTheme} from './neuralMusicMotifContinuity.js';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const pitchName=n=>NOTES[n%12]+Math.floor(n/12-1);
 const limited=(s,n)=>[...String(s??'').replace(/[\r\n\t]/g,' ').trim()].slice(0,n).join('');
@@ -39,6 +40,7 @@ export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSe
  const batch=latestCompleteNeuralScore(project);
  if(!batch)return [];
  const recent=new Map(NEURAL_SCORE_ROLES.map(role=>[role,batch.get(role).midiNotes]));
+ const globalTheme=summarizeOriginalMidiTheme(batch);
  const totalSections=Math.max(1,Math.ceil(Number(project.neuralAutoScore?.bars||0)/8));
  const base=limited(basePrompt||project.prompt||project.title||'오리지널 한국어 노래',220);
  const genre=limited(project.genre||'K-pop',40),key=limited(project.key||'C Major',30);
@@ -65,10 +67,10 @@ export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSe
   const drums=take('drums');
   const energy=drums.length?drums.reduce((s,n)=>s+Number(n.velocity||0),0)/drums.length:75;
   const intensity=energy>=95?'powerful':energy<=55?'gentle':'balanced';
-  return limited(base+'; '+sectionGenres+'; '+key+'; '+bpm+' BPM; '+sectionName+
+  return prependSongTheme(limited(base+'; '+sectionGenres+'; '+key+'; '+bpm+' BPM; '+sectionName+
    '; continuous original arrangement with drums, bass, guitar, keys and pads; '+
    intensity+' energy; MIDI lead pitches '+(melody||'carry preceding motif')+
    '; chord pitch classes '+(harmony||'follow established harmony')+
-   '; preserve the same song theme and transition smoothly from the previous audio.',600);
+   '; preserve the same song theme and transition smoothly from the previous audio.',520),globalTheme);
  });
 }
