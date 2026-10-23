@@ -17,8 +17,11 @@ function blobFromDataUrl(data){
 }
 
 export function linkedProfiles(project,data){
- const voice=(data.voices||[]).filter(v=>v.id===project.voiceId);
- const charIds=new Set([project.characterId,...(project.scenes||[]).flatMap(s=>[s.characterId,s.personMv?.personId,s.characterMv?.characterId]),...(project.band90?.members||[]).map(m=>m.characterId),...(project.scenes||[]).flatMap(s=>(s.characterReplace94?.history||[]).flatMap(h=>[h.scene?.characterId,h.scene?.personMv?.personId,h.scene?.characterMv?.characterId]))].filter(Boolean));
+ const linkedVoiceIds=new Set([project.voiceId,
+  project.duetSingers?.lead?.voiceId,project.duetSingers?.harmony?.voiceId,
+  ...(project.tracks||[]).map(t=>t.singerVoiceId)].filter(Boolean));
+ const voice=(data.voices||[]).filter(v=>linkedVoiceIds.has(v.id));
+ const charIds=new Set([project.characterId,project.duetSingers?.lead?.characterId,project.duetSingers?.harmony?.characterId,...(project.tracks||[]).map(t=>t.singerCharacterId),...(project.scenes||[]).flatMap(s=>[s.characterId,s.personMv?.personId,s.characterMv?.characterId]),...(project.band90?.members||[]).map(m=>m.characterId),...(project.scenes||[]).flatMap(s=>(s.characterReplace94?.history||[]).flatMap(h=>[h.scene?.characterId,h.scene?.personMv?.personId,h.scene?.characterMv?.characterId]))].filter(Boolean));
  const characters=(data.characters||[]).filter(c=>charIds.has(c.id));
  const voiceIds=new Set(voice.map(v=>v.id));
  // Preserve training history and imported checkpoint files for this project's voice.
@@ -99,6 +102,26 @@ export async function importProjectBundle(file){
  const hadValidPhonemes=wasAligned&&!!original.phonemePlan&&!isPhonemePlanStale(original.vocalAlignment,original.phonemePlan);
  project={...project,id:genId('prj'),title:project.title+' (복원)',createdAt:now(),updatedAt:now(),voiceId:mapping[project.voiceId]||project.voiceId||'',characterId:mapping[project.characterId]||project.characterId||'',...(project.singingEngine?.modelId&&modelIdMap[project.singingEngine.modelId]?{singingEngine:{...project.singingEngine,modelId:modelIdMap[project.singingEngine.modelId]}}:{}),tracks:project.tracks.map(t=>({...t,id:genId('trk'),clips:(t.clips||[]).map(c=>({...c,id:genId('clip'),assetId:assetMap[c.assetId]||c.assetId}))})),scenes:(project.scenes||[]).map(s=>({...s,id:genId('scn'),characterId:mapping[s.characterId]||s.characterId||'',...(s.personMv?{personMv:{...s.personMv,personId:mapping[s.personMv.personId]||s.personMv.personId,referenceAssetId:assetMap[s.personMv.referenceAssetId]||s.personMv.referenceAssetId}}:{}),...(s.characterMv?{characterMv:{...s.characterMv,characterId:mapping[s.characterMv.characterId]||s.characterMv.characterId,referenceAssetId:assetMap[s.characterMv.referenceAssetId]||s.characterMv.referenceAssetId}}:{}),...(s.imageAssetId?{imageAssetId:assetMap[s.imageAssetId]||s.imageAssetId}:{}),...(s.videoClipAssetId?{videoClipAssetId:assetMap[s.videoClipAssetId]||s.videoClipAssetId}:{}),...(s.videoGeneration?{videoGeneration:{...s.videoGeneration,sourceKey:""}}:{}),...(s.characterReplace94?{characterReplace94:{...s.characterReplace94,history:(s.characterReplace94.history||[]).map(h=>({...h,scene:patchHistoricalScene(h.scene||{})}))}}:{}),...(s.regeneration92?{regeneration92:{...s.regeneration92,sourceAssetId:assetMap[s.regeneration92.sourceAssetId]||s.regeneration92.sourceAssetId,history:(s.regeneration92.history||[]).map(h=>({...h,imageAssetId:assetMap[h.imageAssetId]||h.imageAssetId,videoClipAssetId:assetMap[h.videoClipAssetId]||h.videoClipAssetId}))}}:{}),...(s.imageGeneration?{imageGeneration:{...s.imageGeneration,key:''}}:{})}))};
  if(Array.isArray(original.deliverables))project.deliverables=original.deliverables.map(o=>({...o,assetId:assetMap[o.assetId]||o.assetId}));
+ // 실제 두 Voice·캐릭터와 기존 독립 WAV 트랙 연결을 복원 후 신규 ID로 갱신.
+ // 다른 사람의 백업 원본·기존 라이브러리 파일을 덮어쓰거나 교체하지 않는다.
+ if(original.duetSingers?.version===1){
+  const translateSinger=part=>{
+   const previous=original.duetSingers[part]||{},index=oldTrackIds.indexOf(previous.trackId);
+   if(index<0||!mapping[previous.voiceId]||!mapping[previous.characterId]||
+      !project.tracks[index]?.id)
+    throw Error('듀엣 백업에 가수 둘의 Voice·캐릭터·원곡 WAV 연결 자료가 누락됐습니다.');
+   return {...previous,voiceId:mapping[previous.voiceId],
+    characterId:mapping[previous.characterId],trackId:project.tracks[index].id};
+  };
+  project.duetSingers={...original.duetSingers,
+   lead:translateSinger('lead'),harmony:translateSinger('harmony')};
+ }
+ if(project.tracks.some(t=>t.singerVoiceId||t.singerCharacterId)){
+  project.tracks=project.tracks.map(t=>({
+   ...t,...(t.singerVoiceId?{singerVoiceId:mapping[t.singerVoiceId]||t.singerVoiceId}:{}),
+   ...(t.singerCharacterId?{singerCharacterId:mapping[t.singerCharacterId]||t.singerCharacterId}:{})
+  }));
+ }
  if(project.videoEdits93?.history){const sceneIdMap=Object.fromEntries(original.scenes.map((scene,i)=>[scene.id,project.scenes[i]?.id]));project.videoEdits93={...project.videoEdits93,history:project.videoEdits93.history.map(entry=>({...entry,sceneId:sceneIdMap[entry.sceneId]||entry.sceneId}))};}
  if(project.band90)project.band90={...project.band90,members:(project.band90.members||[]).map(m=>({...m,characterId:mapping[m.characterId]||m.characterId}))};
  if(wasAligned){
