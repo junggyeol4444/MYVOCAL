@@ -30,15 +30,26 @@ export function extendMvToFullSong(project,duration,{newId,sceneLimit=120}={}){
     throw Error('자동 MV 장면 ID가 중복되거나 누락됐습니다.');
    used.add(id);
    const direction=describeOriginalSongMvScene(project,start,end,{index:added.length});
+   // 원곡의 실제 두 독립 Singing WAV가 연결된 경우 새 자동 장면만
+   // 주보컬↔화음 캐릭터로 번갈아 캐스팅한다. 기존 장면은 일절 변경하지 않는다.
+   const duet=project.duetSingers?.version===1?project.duetSingers:null;
+   const bpm=Number(project.bpm),bar=Number.isFinite(bpm)&&bpm>=40&&bpm<=240?
+    Math.floor(start*bpm/240):added.length;
+   const assigned=duet?(bar%2===0?duet.lead?.characterId:duet.harmony?.characterId):null;
+   if(duet&&(typeof assigned!=='string'||!assigned||assigned.length>120))
+    throw Error('등록된 듀엣 가수 캐릭터가 누락됐습니다. 원본 MV 장면은 보존합니다.');
+   const sameSource=!!assigned&&reference?.characterId===assigned;
+   const inherited=!assigned||sameSource;
    added.push({id,start,end,title:direction.title,
     generatedBy:'full-song-auto-scene',
     description:direction.description,action:direction.action,
     expression:direction.expression,camera:direction.camera,lighting:direction.lighting,
-    ...(reference?.characterId?{characterId:reference.characterId}:{}),
+    ...(assigned?{characterId:assigned,duetSingerRole:bar%2===0?'lead':'harmony'}:
+     reference?.characterId?{characterId:reference.characterId}:{}),
     ...(reference?.location?{location:reference.location}:{}),
-    ...(reference?.outfit?{outfit:reference.outfit}:{}),
-    ...(reference?.personMv?{personMv:{...reference.personMv}}:{}),
-    ...(reference?.characterMv?{characterMv:{...reference.characterMv}}:{})});
+    ...(inherited&&reference?.outfit?{outfit:reference.outfit}:{}),
+    ...(inherited&&reference?.personMv?{personMv:{...reference.personMv}}:{}),
+    ...(inherited&&reference?.characterMv?{characterMv:{...reference.characterMv}}:{})});
    start=end;
   }
  }
