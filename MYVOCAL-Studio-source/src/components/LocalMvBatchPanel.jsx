@@ -151,7 +151,10 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      if(!source||source.id!==project.id)throw Error('독립 신경망 악기 생성 중 프로젝트가 변경됐습니다.');
      const result=await renderAndStoreNeuralAudioStems(source,{
       python:musicPython,modelDir:musicModelDir,
-      segments:musicDuration===360?20:11,audible:!makeNeuralMusic,session:base.session,signal:controller.signal,
+      // 실제 저장된 MIDI 곡 길이를 기준으로 구간 수를 선택한다.
+      // UI 선택 길이와 원본 AI 작곡 길이가 달라도 3~6분 WAV가 잘리지 않는다.
+      segments:Number(source.neuralAutoScore?.durationSec)>210?20:11,
+      audible:!makeNeuralMusic,session:base.session,signal:controller.signal,
       current,onChange:commit,newId:genId,
       readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
       save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setMessage
@@ -171,7 +174,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      const targetSec=Number.isFinite(scoreDuration)&&scoreDuration>=150&&scoreDuration<=360?
       scoreDuration:musicDuration;
      const sections=targetSec>210?20:11;
-     const timing=planScoreMatchedMusicGenSegments(targetSec,sections,{fadeSec:.5});
+     const timing=planScoreMatchedMusicGenSegments(targetSec,sections,{fadeSec:.5,bpm:Number(source.bpm)});
      const prompts=buildNeuralMusicPrompts(source,{segments:sections,seconds:18,crossfadeSec:.5,
       segmentSeconds:timing.segmentSeconds,
       basePrompt:source.prompt||source.title||'오리지널 한국어 노래'});
