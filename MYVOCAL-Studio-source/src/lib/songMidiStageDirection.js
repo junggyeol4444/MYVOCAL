@@ -5,10 +5,14 @@ import {latestCompleteNeuralScore} from './neuralScoreBatch.js';
 
 const within=(v,a,b)=>Math.min(b,Math.max(a,v));
 const energyAt=(events,t)=>{
- let intensity=0;for(const n of events){
-  if(n.sec>t)break;
-  if(t-n.sec<=.32)intensity=Math.max(intensity,n.velocity*(1-(t-n.sec)/.32));
- }return intensity;
+ // 30FPS×6분 동안 매 프레임 전체 MIDI를 재주사하지 않는다.
+ // 생성 시 정렬된 실제 원곡 MIDI를 이진 탐색한 뒤 최근 320ms만 읽는다.
+ let lo=0,hi=events.length;
+ while(lo<hi){const mid=(lo+hi)>>1;if(events[mid].sec<=t)lo=mid+1;else hi=mid;}
+ let intensity=0;
+ for(let i=lo-1;i>=0&&t-events[i].sec<=.32;i--)
+  intensity=Math.max(intensity,events[i].velocity*(1-(t-events[i].sec)/.32));
+ return intensity;
 };
 export function makeOriginalMidiStageDirection(project,{durationSec}={}){
  const bpm=Number(project?.bpm),duration=Number(durationSec);
@@ -77,11 +81,15 @@ export function stageSettingsAtMusicBeat(settings,plan,time){
  const nearby=plan.perSecond[Math.min(plan.perSecond.length-1,Math.floor(sec))]||0;
  const pulse=energyAt(plan.events,sec);
  const chorus=plan.sections.find(s=>s.start<=sec&&sec<s.end)?.isChorus||false;
- // 모든 값은 기존 유효한 stage3D 설정 범위에 속하고 사용자 저장 설정은 불변.
+ const bar=Math.floor(sec*plan.bpm/240),shots=[-17,22,-8,13];
+ // 실제 MIDI 4박의 마디 경계에서만 후렴 카메라를 바꾼다.
+ // 전체 6분을 단순 4등분한 가짜 박자 전환을 사용하지 않는다.
  const intensity=within(Number(settings.lightIntensity)||1,.2,2);
  const lightIntensity=within(intensity*(.8+.15*nearby+.23*pulse),.2,2);
  return {...settings,duration:plan.durationSec,
-  camera:chorus?'cuts':settings.camera,
+  camera:chorus?'fixed':settings.camera,
+  yaw:chorus?within((Number(settings.yaw)||0)+shots[bar%shots.length],-180,180):settings.yaw,
+  pitch:chorus?within((Number(settings.pitch)||0)+[2,-5,4,0][bar%4],-60,60):settings.pitch,
   lights:chorus?'pulse':settings.lights,
   cameraMotion:within((Number(settings.cameraMotion)||1)*(chorus?1.2:1),0,2),
   lightIntensity,lightMotion:within((Number(settings.lightMotion)||1)*(1+.25*nearby),0,2)};
