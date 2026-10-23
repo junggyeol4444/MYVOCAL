@@ -33,6 +33,9 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const [capability,setCapability]=useState(null),[engineModelId,setEngineModelId]=useState(p.singingEngine?.modelId||'');
  const [singingStyle,setSingingStyle]=useState(p.singingStyle||'Natural');
  const [harmonyDirection,setHarmonyDirection]=useState('above');
+ const [duetVoiceId,setDuetVoiceId]=useState(''),[duetLeadTrackId,setDuetLeadTrackId]=useState('');
+ const [duetLeadCharacterId,setDuetLeadCharacterId]=useState(''),[duetSecondCharacterId,setDuetSecondCharacterId]=useState('');
+ const [duetConsent,setDuetConsent]=useState(false);
  const [replacementVoiceId,setReplacementVoiceId]=useState(''),[replacementTrackId,setReplacementTrackId]=useState(''),[replacementConsent,setReplacementConsent]=useState(false);
  const [cueStart,setCueStart]=useState(1),[cueEnd,setCueEnd]=useState(4);
  const [autoRvc,setAutoRvc]=useState(false),[autoRvcRights,setAutoRvcRights]=useState(false),[sourceVocal,setSourceVocal]=useState(null),[saveNeuralTracks,setSaveNeuralTracks]=useState(false);
@@ -44,9 +47,12 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const phonemePlan=alignment&&p.phonemePlan&&!isPhonemePlanStale(alignment,p.phonemePlan)?p.phonemePlan:null;
  const voice=usable.find(v=>v.id===voiceId)||usable[0];
  const replaceableVocalTracks=(p.tracks||[]).filter(t=>t.type==='vocal'&&!t.mute&&Array.isArray(t.clips)&&t.clips.length);
+ const duetCharacters=(data.characters||[]).filter(c=>['self','owned','licensed'].includes(c.rights)&&
+  (c.rights!=='licensed'||String(c.rightsNote||'').trim())&&
+  (c.kind==='character'||c.kind==='person'));
  const samples=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId==='sampler'&&m.status==='sample-preview-ready');
  const externalModels=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId!=='sampler');
- useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setSingingStyle(p.singingStyle||'Natural');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setSourceVocal(null);setReplacementVoiceId('');setReplacementTrackId('');setReplacementConsent(false);},[p.id]);
+ useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setSingingStyle(p.singingStyle||'Natural');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setSourceVocal(null);setReplacementVoiceId('');setReplacementTrackId('');setReplacementConsent(false);setDuetVoiceId('');setDuetLeadTrackId('');setDuetLeadCharacterId('');setDuetSecondCharacterId('');setDuetConsent(false);},[p.id]);
  useEffect(()=>{const suggested=guessVowelModels(samples);if(!Object.values(suggested).some(Boolean)&&samples.length)suggested.a=samples[0].id;setModelMap(suggested);setExternalModelId('')},[voice?.id,data.voiceModels]);
  useEffect(()=>()=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current)},[]);
  const changeResult=(blob,kind,count,fileKind=kind,placement=null)=>{if(kind!=='rvc-neural')setSourceVocal(null);if(latestUrl.current)URL.revokeObjectURL(latestUrl.current);const u=URL.createObjectURL(blob);latestUrl.current=u;setUrl(u);setResult({file:new File([blob],outputName(p.title,fileKind),{type:'audio/wav'}),kind,count,placement});};
@@ -177,6 +183,32 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   setStatus('신경망 3도 화음 '+result.assets+'개 독립 WAV 트랙 저장 완료 · 원본 보존');
   notify('실제 3도 화음 신경망 Singing WAV를 기존 음악 프로젝트에 추가했습니다.');
  });
+ const renderRealDuet=()=>run(async()=>{
+  if(!alignment||!voice||!duetConsent)throw Error('원곡 가사·MIDI와 듀엣 목소리 사용 동의를 확인하세요.');
+  const second=usable.find(v=>v.id===duetVoiceId);
+  const leadCharacter=duetCharacters.find(c=>c.id===duetLeadCharacterId);
+  const harmonyCharacter=duetCharacters.find(c=>c.id===duetSecondCharacterId);
+  if(!second||second.id===voice.id||!leadCharacter||!harmonyCharacter||
+     leadCharacter.id===harmonyCharacter.id)
+   throw Error('서로 다른 허가된 두 Voice와 캐릭터를 각각 선택하세요.');
+  const lead=replaceableVocalTracks.find(t=>t.id===duetLeadTrackId);
+  if(!lead||lead.singerVoiceId&&lead.singerVoiceId!==voice.id)
+   throw Error('현재 주보컬 Voice에 대응하는 원곡의 실제 보컬 WAV 트랙을 선택하세요.');
+  const model=capability?.models?.find(m=>m.id===engineModelId);
+  if(!model||capability?.inferenceReady!==true)throw Error('두 번째 가수의 실제 신경망 Singing 모델을 먼저 확인하세요.');
+  const result=await generateAndStoreMvHarmony(p,{
+   voice:second,port:safePort(port),modelId:model.id,
+   session:window.__MYVOCAL_SESSION_KEY,confirmed:true,
+   direction:harmonyDirection,singingStyle,
+   duet:{leadVoice:voice,leadCharacter,harmonyCharacter,leadTrackId:lead.id},
+   saveOptions:{current:()=>latestProject.current,onChange,newId:genId,
+    readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
+    store:putFilesAtomic,rollback:deleteFilesAtomic},onProgress:setStatus
+  });
+  setDuetConsent(false);
+  setStatus('실제 신경망 듀엣 두 Voice와 캐릭터 매핑 · 독립 WAV '+result.assets+'개 저장 완료');
+  notify('두 명의 권한 있는 서로 다른 가수: 기존 원곡 WAV 보존, 두 번째 신경망 3도 화음 생성·프로젝트에 연결 완료');
+ });
  const renderRealAdlib=()=>run(async()=>{
   if(!alignment||!voice)throw Error('실제 신경망 Ad-lib에는 원곡 한국어 가사·MIDI와 등록 목소리가 필요합니다.');
   const number=safePort(port),model=capability?.models?.find(m=>m.id===engineModelId);
@@ -259,6 +291,29 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    <Button disabled={!alignment||!voice||busy||!capability?.inferenceReady} onClick={renderRealAdlib}>
     원곡 MIDI 휴지의 신경망 Ad-lib 추임새 실제 WAV 생성 → 신규 DAW 트랙
    </Button>
+   <Panel title="실제 신경망 듀엣 · 원본 20·21항" description="이미 생성한 첫 번째 목소리 WAV에 다른 사용 권한 있는 가수의 실제 3도 화음 WAV를 추가합니다. 두 캐릭터의 구분과 음성 트랙 연결을 저장하며 원본 삭제·재합성은 하지 않습니다.">
+    <Field label="주보컬 Voice"><input readOnly value={voice?.name||'사용 권한 있는 가수 미선택'}/></Field>
+    <Field label="실제 원곡 주보컬 WAV"><select disabled={busy} value={duetLeadTrackId} onChange={e=>{setDuetLeadTrackId(e.target.value);setDuetConsent(false);}}>
+     <option value="">첫 번째 가수가 부른 기존 WAV 트랙 선택</option>
+     {replaceableVocalTracks.filter(t=>!t.singerVoiceId||t.singerVoiceId===voice?.id).map(t=><option key={t.id} value={t.id}>{t.name||t.id}</option>)}
+    </select></Field>
+    <Field label="두 번째 신경망 가창 Voice"><select disabled={busy} value={duetVoiceId} onChange={e=>{setDuetVoiceId(e.target.value);setDuetConsent(false);}}>
+     <option value="">원곡과 다른 사용자 허가 목소리 선택</option>
+     {usable.filter(v=>v.id!==voice?.id&&(v.rights!=='licensed'||String(v.rightsNote||'').trim())).map(v=><option key={v.id} value={v.id}>{v.name||v.id}</option>)}
+    </select></Field>
+    <Field label="첫 번째 가수 캐릭터"><select disabled={busy} value={duetLeadCharacterId} onChange={e=>{setDuetLeadCharacterId(e.target.value);setDuetConsent(false);}}>
+     <option value="">원곡 가수 캐릭터 선택</option>
+     {duetCharacters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+    </select></Field>
+    <Field label="두 번째 가수 캐릭터"><select disabled={busy} value={duetSecondCharacterId} onChange={e=>{setDuetSecondCharacterId(e.target.value);setDuetConsent(false);}}>
+     <option value="">두 번째 가수 캐릭터 선택</option>
+     {duetCharacters.filter(c=>c.id!==duetLeadCharacterId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+    </select></Field>
+    <label className="check-item"><input type="checkbox" disabled={busy} checked={duetConsent} onChange={e=>setDuetConsent(e.target.checked)}/> 두 목소리·캐릭터·신경망 가창 모델에 사용 권한이 있고, 두 번째 실제 WAV를 추가하는 것에 동의합니다.</label>
+    <Button disabled={busy||!alignment||!voice||!capability?.inferenceReady||!duetLeadTrackId||!duetVoiceId||!duetLeadCharacterId||!duetSecondCharacterId||!duetConsent} onClick={renderRealDuet}>
+     두 번째 Voice 신경망 3도 가창 → 실제 듀엣 독립 WAV·캐릭터 연결
+    </Button>
+   </Panel>
    <Panel title="VOICE REPLACE · 원본 54항" description="실제 새 Singing 음색 WAV가 생성·저장된 뒤에만 선택한 보컬 트랙을 음소거합니다. 이전 WAV·사진·캐릭터·MV 장면은 삭제하지 않습니다.">
     <Field label="교체 대상 기존 보컬 트랙"><select disabled={busy} value={replacementTrackId} onChange={e=>{setReplacementTrackId(e.target.value);setReplacementConsent(false);}}>
      <option value="">음소거할 기존 트랙 선택</option>
