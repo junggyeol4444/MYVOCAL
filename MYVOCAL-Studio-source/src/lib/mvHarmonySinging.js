@@ -41,7 +41,7 @@ export function makeDiatonicHarmonyAlignment(project,{direction='above'}={}){
 export async function generateAndStoreMvHarmony(project,{
  voice,port,modelId='',session,confirmed=false,direction='above',singingStyle='Natural',
  convertRVC=false,rvcOptions=null,registeredRVCModel=null,convert=convertLongSingingWithRVC,
- signal,request=fetch,saveOptions,onProgress=()=>{}
+ signal,request=fetch,saveOptions,onProgress=()=>{},duet=null
 }={}){
  if(!project?.id||!voice||!['self','owned','licensed'].includes(voice.rights)||confirmed!==true)
   throw Error('허가된 가창 목소리와 명시적인 사용 동의가 필요합니다.');
@@ -50,6 +50,22 @@ export async function generateAndStoreMvHarmony(project,{
   throw Error('Windows EXE 인증 세션과 실제 Singing 엔진이 필요합니다.');
  if(!saveOptions||typeof saveOptions.current!=='function'||typeof saveOptions.onChange!=='function')
   throw Error('기존 프로젝트와 실제 신규 화음 트랙 저장 연결이 필요합니다.');
+ if(duet!==null){
+  const allowed=c=>c&&typeof c.id==='string'&&c.id.length>0&&
+   ['self','owned','licensed'].includes(c.rights)&&
+   (c.rights!=='licensed'||String(c.rightsNote||'').trim().length>0);
+  if(!duet||typeof duet!=='object'||!allowed(duet.leadCharacter)||
+     !allowed(duet.harmonyCharacter)||!allowed(duet.leadVoice)||
+     duet.leadVoice.id===voice.id||
+     duet.leadCharacter.id===duet.harmonyCharacter.id||
+     typeof duet.leadTrackId!=='string'||!duet.leadTrackId||
+     !Array.isArray(project.tracks)||!project.tracks.some(t=>
+       t.id===duet.leadTrackId&&t.type==='vocal'&&!t.mute&&
+       Array.isArray(t.clips)&&t.clips.some(c=>c.assetId)))
+    throw Error('듀엣에는 실제 원본 보컬 WAV와 서로 다른 두 명의 사용 허가 Voice·캐릭터가 필요합니다.');
+  if(project.duetSingers?.lead?.trackId&&project.duetSingers.lead.trackId!==duet.leadTrackId)
+   throw Error('기존 듀엣의 원곡과 다른 보컬입니다. 먼저 원곡 프로젝트를 선택하세요.');
+ }
  const guard=()=>{if(signal?.aborted||saveOptions.current()!==project)
   throw Error('화음 가창이 취소되었거나 프로젝트가 변경됐습니다. 원본을 보존합니다.');};
  guard();
@@ -147,13 +163,26 @@ export async function generateAndStoreMvHarmony(project,{
     name:'한국어 신경망 · '+label+(convertRVC&&index===0?' 원본 화음 참조':' 독립 화음')+
      (convertRVC&&index===1?' · 실제 RVC 본인음색':''),
     source:convertRVC&&index===1?'neural-rvc-harmony':'neural-harmony-singing',
-    harmonyDirection:direction,volume:convertRVC&&index===0?25:48,
+    harmonyDirection:direction,
+    ...(duet?{singerVoiceId:voice.id,singerCharacterId:duet.harmonyCharacter.id,
+     duetRole:index===total-1?'harmony':'reference'}:{}),
+    volume:convertRVC&&index===0?25:48,
     mute:convertRVC&&index===0
    }));
    named={...next,tracks:[...head,...appended]};
+   if(duet){
+    const audible=appended.at(-1);
+    named={...named,duetSingers:{
+     version:1,
+     lead:{voiceId:duet.leadVoice.id,characterId:duet.leadCharacter.id,trackId:duet.leadTrackId},
+     harmony:{voiceId:voice.id,characterId:duet.harmonyCharacter.id,trackId:audible.id},
+     source:'real-neural-duet-harmony-wav',durationSec:info.durationSec,
+     originalAudioPreserved:true
+    }};
+   }
    return saveOptions.onChange(named);
   }
  });
  return {project:named||saved.project,assets:saved.assets,direction,voiceId:voice.id,
-  modelId:model.id,neuralHarmony:true,convertedWithRVC:convertRVC};
+  modelId:model.id,neuralHarmony:true,convertedWithRVC:convertRVC,neuralDuet:!!duet};
 }
