@@ -3,6 +3,8 @@ import {Button,Notice,Panel} from './UI';
 import {planMvBatch,runMvBatch} from '../lib/mvBatchProduction.js';
 import {runFullLocalMv} from '../lib/fullMvProduction.js';
 import {readMvLipPlacement} from '../lib/mvLipPlacement.js';
+import {personPhotoAssets} from '../lib/imageToMv.js';
+import {characterArtworkAssets} from '../lib/characterToMv.js';
 import {automaticSingingVisemes,reviewedCharacterMouthPlacement} from '../lib/autoMvPhonemeLip.js';
 import {audioEnd,readAudioInfo,mixdownWav} from '../lib/audioEngine.js';
 import {runMusicProductionPipeline} from '../lib/musicProductionPipeline.js';
@@ -92,6 +94,16 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   const controller=new AbortController();cancelRef.current=controller;setBusy(true);setMessage('시작 중…');setError('');
   let warmed=null;
   try{
+   if(makeNeuralSinging&&makeHarmony&&makeDuet){
+    if(!includeReferences)
+     throw Error('동일한 두 가수의 외형을 유지하려면 등록 사진·캐릭터 참조 이미지 사용을 선택하세요.');
+    const lead=duetCharacters.find(c=>c.id===duetLeadCharacterId);
+    const second=duetCharacters.find(c=>c.id===duetHarmonyCharacterId);
+    const hasImage=c=>c&&(c.kind==='person'?personPhotoAssets(c):
+       c.kind==='character'?characterArtworkAssets(c):[]).some(a=>a?.id);
+    if(!hasImage(lead)||!hasImage(second))
+     throw Error('실제 두 가수 각각에 등록된 본인·허가 원화 또는 사진이 필요합니다.');
+   }
    const [width,height]=String(imageSize).split('x').map(Number);
    const base={project,data,checkpoint,videoModel,port:Number(imagePort),session:session(),
      imageSteps:Number(imageSteps),width,height,frames:Number(videoFrames),fps:Number(videoFps),videoSteps:Number(videoSteps),
@@ -403,7 +415,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      <option value="">두 번째 가수 캐릭터</option>
      {duetCharacters.filter(c=>c.id!==duetLeadCharacterId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
     </select></label>
-    <Notice>실제 설치된 Singing 모델로 2개의 독립 보컬 WAV를 생성합니다. 두 가수의 사용 권한을 확인해야 하며 첫 번째 가수의 RVC 체크포인트를 다른 가수에 적용하지 않습니다.</Notice>
+    <Notice>실제 신경망 Singing 모델에서 두 Voice의 독립 보컬 WAV를 생성합니다. 위의 **등록 사람·캐릭터 원본 참조 이미지 포함**을 켜고 두 가수의 원화/사진을 각각 등록하세요. 두 가수의 참조 이미지를 교차 사용하지 않습니다. 첫 가수의 RVC 모델을 두 번째에 적용하지 않습니다.</Notice>
    </div>}
    {makeHarmony&&<label>3도 화음 음역<select disabled={busy} value={harmonyDirection} onChange={e=>setHarmonyDirection(e.target.value)}>
     <option value="above">메인 선율 위의 3도</option><option value="below">메인 선율 아래의 3도</option>
