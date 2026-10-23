@@ -1,6 +1,6 @@
 // 3~6분 한국어 신경망 MIDI 작곡 길이에 실제 MusicGen WAV 길이를 맞춘다.
 // 6악기는 동일 시간표를 사용하며 원래 모델 응답은 절대 수정하지 않는다.
-export function planScoreMatchedMusicGenSegments(scoreSec,segments,{fadeSec=.5}={}){
+export function planScoreMatchedMusicGenSegments(scoreSec,segments,{fadeSec=.5,bpm=null}={}){
  if(!Number.isFinite(scoreSec)||scoreSec<150||scoreSec>360||
     !Number.isInteger(segments)||![11,20].includes(segments)||
     !Number.isFinite(fadeSec)||fadeSec<.1||fadeSec>1.5)
@@ -9,13 +9,52 @@ export function planScoreMatchedMusicGenSegments(scoreSec,segments,{fadeSec=.5}=
  if(expected<segments*3||expected>segments*20)
   throw Error('현재 MusicGen 구간 수로 실제 MIDI 곡 길이를 재생할 수 없습니다.');
  const base=Math.floor(expected/segments),extra=expected-base*segments;
- const segmentSeconds=Array.from({length:segments},(_,i)=>base+(i*extra%segments<extra?1:0));
+ let segmentSeconds=Array.from({length:segments},(_,i)=>base+(i*extra%segments<extra?1:0));
+ // 실제 MIDI BPM이 있으면 크로스페이드 후의 경계를 마디·박자에
+ // 가깝게 배치한다. MusicGen 호출 길이는 정수 초, 전체 길이는 유지한다.
+ if(bpm!==null){
+  if(!Number.isFinite(bpm)||bpm<40||bpm>240)
+   throw Error('MIDI BPM은 40~240이어야 합니다.');
+  const ideal=expected/segments;
+  let states=new Map([[0,{cost:0,previous:null,duration:0}]]);
+  const layers=[states];
+  for(let part=1;part<=segments;part++){
+   const next=new Map(),left=segments-part;
+   for(const [sum,entry] of states){
+    for(let duration=3;duration<=20;duration++){
+     const total=sum+duration,remaining=expected-total;
+     if(remaining<left*3||remaining>left*20)continue;
+     let cost=entry.cost+.14*(duration-ideal)**2;
+     if(part<segments){
+      const seconds=total-part*fadeSec,beats=seconds*bpm/60;
+      const beatDistance=Math.abs(beats-Math.round(beats));
+      const barDistance=Math.abs(beats/4-Math.round(beats/4))*4;
+      cost+=3*beatDistance**2+.65*barDistance**2;
+     }
+     const best=next.get(total);
+     if(!best||cost<best.cost-1e-9)
+      next.set(total,{cost,previous:sum,duration});
+    }
+   }
+   if(!next.size)throw Error('MIDI 박자에 맞는 MusicGen 구간 시간표를 구성하지 못했습니다.');
+   layers.push(next);states=next;
+  }
+  if(!states.has(expected))throw Error('MusicGen MIDI 구간 길이 합계 오류');
+  const result=Array(segments);let sum=expected;
+  for(let part=segments;part>=1;part--){
+   const entry=layers[part].get(sum);
+   result[part-1]=entry.duration;sum=entry.previous;
+  }
+  segmentSeconds=result;
+ }
  // Above distribution is deterministic, bounded, and keeps all stems on one absolute clock.
  const audioSec=segmentSeconds.reduce((s,n)=>s+n,0)-(segments-1)*fadeSec;
  if(audioSec<scoreSec||audioSec-scoreSec>1.01||
     segmentSeconds.some(n=>n<3||n>20))
   throw Error('MusicGen 악기 생성 시간표가 6분 원본 MIDI를 벗어납니다.');
- return {segmentSeconds,targetSec:scoreSec,generatedSec:audioSec,excessSec:audioSec-scoreSec};
+ const boundariesSec=segmentSeconds.slice(0,-1).map((_,i)=>
+  segmentSeconds.slice(0,i+1).reduce((sum,n)=>sum+n,0)-(i+1)*fadeSec);
+ return {segmentSeconds,targetSec:scoreSec,generatedSec:audioSec,excessSec:audioSec-scoreSec,boundariesSec};
 }
 export async function trimMusicGenWavToScore(blob,targetSec){
  if(!(blob instanceof Blob)||blob.type!=='audio/wav'||
