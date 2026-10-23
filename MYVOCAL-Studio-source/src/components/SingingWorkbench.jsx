@@ -11,6 +11,7 @@ import {renderOfflineVocalGuide,renderOfflineVocalGuideSelection,guideSyllableSe
 import {hangulHint,singingCapabilitiesView,engineModelCompatibility,buildSingingRequest,appendRenderHistory} from '../lib/singingBridge';
 import {SINGING_STYLES,assertSingingStyleSupported} from '../lib/singingStyleControl.js';
 import {renderLongSinging} from '../lib/longSingingRender.js';
+import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import EngineManager from './EngineManager';
 import RvcVoiceConversion from './RvcVoiceConversion.jsx';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
@@ -29,6 +30,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const [port,setPort]=useState(String(p.singingEngine?.port||7867)),[bridgeState,setBridgeState]=useState('연결 확인 전'),[externalModelId,setExternalModelId]=useState(p.singingEngine?.modelId||''),[status,setStatus]=useState('');
  const [capability,setCapability]=useState(null),[engineModelId,setEngineModelId]=useState(p.singingEngine?.modelId||'');
  const [singingStyle,setSingingStyle]=useState(p.singingStyle||'Natural');
+ const [harmonyDirection,setHarmonyDirection]=useState('above');
  const [cueStart,setCueStart]=useState(1),[cueEnd,setCueEnd]=useState(4);
  const [autoRvc,setAutoRvc]=useState(false),[autoRvcRights,setAutoRvcRights]=useState(false),[sourceVocal,setSourceVocal]=useState(null),[saveNeuralTracks,setSaveNeuralTracks]=useState(false);
  const latestUrl=useRef('');
@@ -150,6 +152,22 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   setStatus(autoRvc?'실제 Singing WAV→RVC 음색 변환 WAV를 연속 생성했습니다. 가창 품질·모델 동일성은 별도 확인하세요.':capability?.mode==='demo'?'외부 데모 엔진에서 테스트 WAV를 받았습니다. 실제 AI 가창이 아닙니다.':longForm?`외부 엔진 ${chunkCount}개 구간 WAV를 타임라인에 맞게 결합했습니다. 모델·품질을 직접 확인하세요. 유효한 발음 타임라인이 있으면 긴 곡의 각 구간에도 음소 힌트를 전달합니다.`:'외부 엔진에서 WAV를 받아왔습니다. 품질과 모델 종류는 직접 검증해 주세요.');notify('외부 엔진 WAV 수신 성공.');
  }finally{externalAbortRef.current=null;}
  });
+ const renderRealHarmony=()=>run(async()=>{
+  if(!alignment||!voice)throw Error('등록된 본인 목소리 및 한국어 가사·MIDI가 필요합니다.');
+  const number=safePort(port);
+  const model=capability?.models?.find(m=>m.id===engineModelId);
+  if(!model)throw Error('실제 신경망 Singing 엔진 모델을 먼저 조회하고 선택하세요.');
+  const result=await generateAndStoreMvHarmony(p,{
+   voice,port:number,modelId:model.id,session:window.__MYVOCAL_SESSION_KEY,
+   confirmed:true,direction:harmonyDirection,singingStyle,
+   saveOptions:{current:()=>latestProject.current,onChange,newId:genId,
+    readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
+    store:putFilesAtomic,rollback:deleteFilesAtomic},
+   onProgress:setStatus
+  });
+  setStatus('신경망 3도 화음 '+result.assets+'개 독립 WAV 트랙 저장 완료 · 원본 보존');
+  notify('실제 3도 화음 신경망 Singing WAV를 기존 음악 프로젝트에 추가했습니다.');
+ });
  const validCount=alignment?.cues?.filter(c=>c.lyric&&c.lyric!=='—').length||0;
  return <>
   <Panel title="Singing Workbench · v1.6" description="가사와 MIDI를 오프라인 가창 가이드 또는 녹음 샘플 기반 WAV로 렌더링합니다. 별도 호환 엔진은 선택 사항이며 신경망 AI 모델은 내장되지 않았습니다.">
@@ -187,6 +205,14 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
      {SINGING_STYLES.map(style=><option value={style} key={style}>{style}</option>)}
     </select>
    </Field>
+   <Field label="원곡 가사·MIDI 3도 화음 음역">
+    <select disabled={busy} value={harmonyDirection} onChange={e=>setHarmonyDirection(e.target.value)}>
+     <option value="above">원곡보다 위 3도</option><option value="below">원곡보다 아래 3도</option>
+    </select>
+   </Field>
+   <Button disabled={!alignment||!voice||busy||!capability?.inferenceReady} onClick={renderRealHarmony}>
+    실제 신경망 3도 화음 WAV 생성 → 신규 DAW 트랙
+   </Button>
    <label className="check-item"><input type="checkbox" checked={autoRvc} disabled={busy} onChange={e=>{setAutoRvc(e.target.checked);setAutoRvcRights(false)}}/>실제 신경망 Singing WAV 생성 후 저장된 RVC 모델로 음색 변환</label>
    {autoRvc&&<label className="check-item"><input type="checkbox" checked={autoRvcRights} disabled={busy} onChange={e=>setAutoRvcRights(e.target.checked)}/>목소리·모델·가창 원본에 대한 사용 권한이 있습니다.</label>}
    <label className="check-item"><input type="checkbox" checked={saveNeuralTracks} disabled={busy} onChange={e=>setSaveNeuralTracks(e.target.checked)}/>신경망 Singing 생성→RVC 음색 변환 결과까지 기존 프로젝트에 실제 WAV 트랙으로 자동 일괄 저장 (RVC 원본은 음소거 참고 트랙)</label>
