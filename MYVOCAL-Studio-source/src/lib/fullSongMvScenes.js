@@ -1,5 +1,6 @@
 // 3~6분 원곡 MV의 빈 구간만 기존 SD/SVD 모델의 새 자동 장면으로 연결한다.
 // 사용자 작성 장면·기존 미디어·인물/의상 원본은 수정하지 않는다.
+import {describeOriginalSongMvScene} from './mvSongSectionDirection.js';
 const CLOCK=1000;
 const FRAME_SECONDS=3; // 실제 SVD 25프레임·8fps 출력 3.125초 이내
 const at=seconds=>Math.round(seconds*CLOCK)/CLOCK;
@@ -28,9 +29,10 @@ export function extendMvToFullSong(project,duration,{newId,sceneLimit=120}={}){
    if(typeof id!=='string'||!id||used.has(id))
     throw Error('자동 MV 장면 ID가 중복되거나 누락됐습니다.');
    used.add(id);
-   added.push({id,start,end,title:'음악 연속 장면 '+(added.length+1),
+   const direction=describeOriginalSongMvScene(project,start,end,{index:added.length});
+   added.push({id,start,end,title:direction.title,
     generatedBy:'full-song-auto-scene',
-    description:'기존 음악의 후렴·연주·장면 흐름을 이어가는 자동 공연/스토리 영상',
+    description:direction.description,action:direction.action,
     ...(reference?.characterId?{characterId:reference.characterId}:{}),
     ...(reference?.location?{location:reference.location}:{}),
     ...(reference?.outfit?{outfit:reference.outfit}:{}),
