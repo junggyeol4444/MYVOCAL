@@ -5,12 +5,13 @@ const headers=session=>{
  return {'X-MYVOCAL-Session':session};
 };
 export function validateTrainerSettings(settings){
- const {root,python,script,args,voiceId,rightsConfirmed,mode,epochs,batchSize,gpu}=settings||{};
+ const {root,python,script,args,voiceId,rightsConfirmed,mode,epochs,batchSize,gpu,inferenceF0='pm'}=settings||{};
  if(rightsConfirmed!==true)throw Error('학습 데이터 사용 권한을 확인하세요.');
  if(typeof voiceId!=='string'||!voiceId||voiceId.length>128)throw Error('학습할 목소리를 선택하세요.');
  if(mode==='official'){
   if([root,python].some(x=>typeof x!=='string'||!x.trim()||x.length>1024)||!/(?:^|[/\\])python\.exe$/i.test(python))throw Error('공식 RVC 설치 폴더와 Python.exe 경로를 입력하세요.');
   if(!Number.isInteger(epochs)||epochs<1||epochs>1000||!Number.isInteger(batchSize)||batchSize<1||batchSize>64||!/^([0-9]|1[0-5])$/.test(String(gpu)))throw Error('공식 RVC 에포크·배치·GPU 설정 오류');
+  if(!['pm','rmvpe'].includes(inferenceF0))throw Error('RVC 실제 추론 F0 분석 방식을 확인하세요.');
   return [];
  }
  if(mode&&mode!=='custom')throw Error('지원하지 않는 RVC 학습 방식입니다.');
@@ -27,7 +28,7 @@ export async function startLocalRVCTraining(bundle,settings,{session,request=fet
  const form=new FormData();form.set('bundle',bundle,'MYVOCAL-training.zip');
  for(const key of ['root','python','script','voiceId'])form.set(key,settings[key]);
  form.set('args',JSON.stringify(args));form.set('rights','confirmed');
- form.set('mode',settings.mode||'custom');if(settings.mode==='official'){form.set('epochs',String(settings.epochs));form.set('batchSize',String(settings.batchSize));form.set('gpu',String(settings.gpu));}
+ form.set('mode',settings.mode||'custom');if(settings.mode==='official'){form.set('epochs',String(settings.epochs));form.set('batchSize',String(settings.batchSize));form.set('gpu',String(settings.gpu));form.set('inferenceF0',settings.inferenceF0||'pm');}
  const res=await request('/api/training/rvc/start',{method:'POST',headers:headers(session),body:form,signal,cache:'no-store'});
  if(!res.ok){const e=await res.json().catch(()=>({error:`HTTP ${res.status}`}));throw Error(e.error||'외부 학습 시작 실패');}
  const data=await res.json();if(data?.state!=='running'||typeof data?.id!=='string'||!data.id)throw Error('학습 작업이 실제로 시작됐는지 확인할 수 없습니다.');
