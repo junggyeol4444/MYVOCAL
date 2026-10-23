@@ -3,6 +3,7 @@
 // RVC voice conversion -> two append-only editable WAV tracks.
 // This does not train a model or substitute sample/guide synthesis for singing.
 import {buildSingingRequest,singingCapabilitiesView,engineModelCompatibility} from './singingBridge.js';
+import {assertSingingStyleSupported} from './singingStyleControl.js';
 import {renderLongSinging} from './longSingingRender.js';
 import {convertLongSingingWithRVC} from './rvcLongConversion.js';
 import {convertRegisteredRVC} from './rvcStoredConversion.js';
@@ -14,7 +15,7 @@ import {assertUsableSingingWav} from './singingOutputValidation.js';
 import {persistNeuralVocalTake} from './neuralVocalPersist.js';
 
 export async function generateAndStoreMvSinging(project,{
- voice,port,modelId='',session,convertRVC=false,rvcOptions=null,registeredRVCModel=null,confirmed=false,signal,
+ voice,port,modelId='',singingStyle='Natural',session,convertRVC=false,rvcOptions=null,registeredRVCModel=null,confirmed=false,signal,
  request=fetch,convert=convertLongSingingWithRVC,saveOptions,onProgress=()=>{}
 }={}){
  if(!project?.id||typeof session!=='string'||session.length<8||!Number.isInteger(port)||port<1024||port>65535||port===58319)
@@ -48,6 +49,9 @@ export async function generateAndStoreMvSinging(project,{
  if(!model)throw Error('선택한 신경망 가창 모델이 실행 서버 목록에 없습니다.');
  const checked=engineModelCompatibility(capabilities,model);
  if(!checked.ok)throw Error(checked.warning);
+ const selectedStyle=assertSingingStyleSupported(singingStyle,capabilities,model);
+ // Voice ID/체크포인트는 원래대로 유지하고 엔진에서 지원하는 Singing Style만 분리해 전달.
+ const styledProject=selectedStyle==='Natural'?project:{...project,singingStyle:selectedStyle};
  onProgress('실제 한국어 신경망 Singing WAV 생성 중');
  const ask=async body=>{
   const res=await send('/api/singing/render',{method:'POST',body});
@@ -59,11 +63,11 @@ export async function generateAndStoreMvSinging(project,{
  };
  let singing;
  if(alignment.longForm===true){
-  const result=await renderLongSinging(alignment,{port,project,voice,model,phonemePlan,
+  const result=await renderLongSinging(alignment,{port,project:styledProject,voice,model,phonemePlan,
    request:ask,signal,onProgress:(done,total)=>onProgress('실제 Singing '+done+'/'+total+' 구간 생성 중')});
   singing=result.wav;
  }else{
-  singing=await ask(buildSingingRequest(port,project,alignment,voice,model,phonemePlan));
+  singing=await ask(buildSingingRequest(port,styledProject,alignment,voice,model,phonemePlan));
  }
  guard();
  assertUsableSingingWav(await singing.arrayBuffer(),{maxDurationSec:360});
