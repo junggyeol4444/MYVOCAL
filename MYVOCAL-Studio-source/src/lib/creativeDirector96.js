@@ -8,7 +8,7 @@ const sourceSnapshot96=project=>JSON.stringify({
  scenes:project.scenes,tracks:project.tracks,
  locks:[project.outfitLock,project.backgroundLock,project.cameraLock]
 });
-const producerMidi96=/^(?:(?:마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(?:드럼|베이스|기타|피아노|스트링|신스|패드)|후렴이\s*심심해|마지막\s*후렴(?:만|을|에서)?\s*(?:반키|반음)|드럼\s*(?:을\s*)?(?:더\s*)?강화|(?:후렴(?:의|에|에서)?\s*)?(?:멜로디|베이스|화음|스트링)\s*(?:변경|바꿔|강화|추가|넣어)|후렴(?:을|이)?\s*(?:더\s*)?웅장하게)/u;
+const producerMidi96=/^(?:(?:마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(?:멜로디|코드|드럼|베이스|기타|피아노|스트링|신스|패드)|후렴이\s*심심해|마지막\s*후렴(?:만|을|에서)?\s*(?:반키|반음)|드럼\s*(?:을\s*)?(?:더\s*)?강화|(?:후렴(?:의|에|에서)?\s*)?(?:멜로디|베이스|화음|스트링)\s*(?:변경|바꿔|강화|추가|넣어)|후렴(?:을|이)?\s*(?:더\s*)?웅장하게)/u;
 export function previewCreativeDirection96(project,command){
  if(!project?.id||!Array.isArray(project.scenes))throw Error('프로젝트가 필요합니다.');
  if(typeof command!=='string'||!command.trim()||command.length>500||/[\u0000-\u001f\u007f]/u.test(command))throw Error('500자 이하의 단일 명령을 입력하세요.');
