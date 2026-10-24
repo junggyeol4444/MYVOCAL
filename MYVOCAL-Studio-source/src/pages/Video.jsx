@@ -46,8 +46,8 @@ function SceneVideoClip({assetId,mime,title}){
  return mime==='video/mp4'?<video src={url} controls loop playsInline style={{width:'100%',maxHeight:410,background:'#111'}} aria-label={title||'생성된 영상 클립'}/>:
   <img src={url} alt={title||'SVD 애니메이션 WebP 영상'} style={{display:'block',width:'100%',maxHeight:410,objectFit:'contain',background:'#111'}}/>;
 }
-export default function Video({data,project,onChange,navigate,notify,mode='video',embedded=false}){
- const p=project||data.projects[0];const [selected,setSelected]=useState('');const [pendingImport,setPendingImport]=useState(null);const [animaticPosition,setAnimaticPosition]=useState(0);const [animaticPlaying,setAnimaticPlaying]=useState(false);const [animaticSpeed,setAnimaticSpeed]=useState(1);const [shotSheetPage,setShotSheetPage]=useState(1);const animaticLastTick=useRef(null);
+export default function Video({data,project,onChange,navigate,notify,mode='video',embedded=false,focusSceneId=''}){
+ const p=project||data.projects[0];const [selected,setSelected]=useState(focusSceneId||'');const [pendingImport,setPendingImport]=useState(null);const [animaticPosition,setAnimaticPosition]=useState(0);const [animaticPlaying,setAnimaticPlaying]=useState(false);const [animaticSpeed,setAnimaticSpeed]=useState(1);const [shotSheetPage,setShotSheetPage]=useState(1);const animaticLastTick=useRef(null);
  const [imagePort,setImagePort]=useState('8188');const [checkpoints,setCheckpoints]=useState([]);const [checkpoint,setCheckpoint]=useState('');
  const [natural93,setNatural93]=useState(''),[review93,setReview93]=useState(null),[natural93Busy,setNatural93Busy]=useState(false),[natural93Status,setNatural93Status]=useState(''),[replace94Id,setReplace94Id]=useState(''),[review94,setReview94]=useState(null),[replace94All,setReplace94All]=useState(false);
  const [band90Open,setBand90Open]=useState(false),[regen92Busy,setRegen92Busy]=useState(false),[regen92Status,setRegen92Status]=useState('로컬 이미지 모델·기존 장면 이미지 필요'),[regen92Patch,setRegen92Patch]=useState('');
