@@ -7,7 +7,8 @@ import {validateLayerPlan} from './characterLayers.js';
 import {validateLipSync,phonemeViseme} from './characterLipSync.js';
 import {usableExpressionPlan} from './characterExpressionDirector.js';
 import {usableDancePlan} from './characterDanceDirector.js';
-import {usablePerformance89} from './characterPerformance89.js';
+import {usablePerformance89,PERFORMANCE_ROLES} from './characterPerformance89.js';
+import {makeFullSongInstrumentPerformance} from './fullSongInstrumentPerformance.js';
 import {isAlignmentStale} from './lyricAlignment.js';
 import {isPhonemePlanStale,validatePhonemePlan} from './phonemePlan.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
@@ -78,8 +79,17 @@ export async function recordFullSong2dCharacter({
   fullSong2dKoreanLipSync(project,character);
  if(lipSync.cues.some(c=>c.endMs>duration*1000+65))
   throw Error('한국어 원곡 입 모양이 실제 완성 음악보다 깁니다.');
- const expressionPlan=usableExpressionPlan(character),dancePlan=usableDancePlan(character),
-   performancePlan=usablePerformance89(character);
+ const expressionPlan=usableExpressionPlan(character),dancePlan=usableDancePlan(character);
+ // STEP89에서 직접 검토·저장한 연기를 최우선으로 유지한다.
+ // 별도 연기가 없고 이 인물이 전곡 밴드의 악기 연주자로 지정된 경우에만
+ // 원곡 MIDI의 3~6분 실제 음표로 해당 악기 동작을 계산한다.
+ let performancePlan=usablePerformance89(character);
+ if(!performancePlan){
+  const member=project.band90?.members?.find(m=>m.characterId===character.id);
+  if(member&&PERFORMANCE_ROLES.includes(member.role)){
+   performancePlan=makeFullSongInstrumentPerformance(project,{durationSec:duration,role:member.role});
+  }
+ }
  const config={...settings,durationSec:duration},ctx=canvas.getContext('2d');
  if(!ctx)throw Error('현재 Windows WebView2가 2D 공연 Canvas를 지원하지 않습니다.');
  const draw=time=>drawAnimationFrame(ctx,image,character.layerPlan,config,
