@@ -341,8 +341,8 @@ const NEURAL_WAV_ROLES86=Object.freeze({
  '멜로디':'melody','코드':'chords','베이스':'bass','드럼':'drums','기타':'guitar','패드':'pad'
 });
 function applyProducerNeuralWav86(project,cmd){
- const mute=/^(멜로디|코드|베이스|드럼|기타|패드)\\s*(?:신경망\\s*)?(?:WAV|오디오)(?:를|을)?\\s*(음소거\\s*해\\s*줘|음소거\\s*해제해\\s*줘|소리\\s*켜\\s*줘)$/iu.exec(cmd);
- const volume=/^(멜로디|코드|베이스|드럼|기타|패드)\\s*(?:신경망\\s*)?(?:WAV|오디오)(?:의)?\\s*음량(?:을)?\\s*(\\d{1,3})\\s*%?(?:로)?\\s*(?:설정해\\s*줘|맞춰\\s*줘)$/iu.exec(cmd);
+ const mute=/^(멜로디|코드|베이스|드럼|기타|패드)\s*(?:신경망\s*)?(?:WAV|오디오)(?:를|을)?\s*(음소거\s*해\s*줘|음소거\s*해제해\s*줘|소리\s*켜\s*줘)$/iu.exec(cmd);
+ const volume=/^(멜로디|코드|베이스|드럼|기타|패드)\s*(?:신경망\s*)?(?:WAV|오디오)(?:의)?\s*음량(?:을)?\s*(\d{1,3})\s*%?(?:로)?\s*(?:설정해\s*줘|맞춰\s*줘)$/iu.exec(cmd);
  if(!mute&&!volume)return null;
  const label=(mute||volume)[1],role=NEURAL_WAV_ROLES86[label];
  const tracks=project.tracks.filter(t=>t?.generatedBy==='musicgen-independent-audio'&&
@@ -352,7 +352,7 @@ function applyProducerNeuralWav86(project,cmd){
  const target=tracks[0];
  let changed,description;
  if(mute){
-  const muted=/^음소거\\s*해\\s*줘$/u.test(mute[2]);
+  const muted=/^음소거\s*해\s*줘$/u.test(mute[2]);
   if(Boolean(target.mute)===muted)throw Error(label+' 신경망 WAV가 이미 해당 재생 상태입니다.');
   changed={...target,mute:muted,solo:false};
   description=muted?'음소거':'음소거 해제';
