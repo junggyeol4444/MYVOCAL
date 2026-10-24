@@ -7,7 +7,7 @@ import {modelAssets,parseCharacter3d} from '../lib/character3d.js';
 import {Character3dRenderer} from '../lib/character3dRenderer.js';
 import {createStageSettings,stageRigSettings} from '../lib/characterStage3d.js';
 import {drawAnimationFrame} from '../lib/characterAnimation2d.js';
-import {personVideoAssets} from '../lib/personLipSync.js';
+import {personVideoAssets,renderPersonLipFrame} from '../lib/personLipSync.js';
 import {usableDancePlan} from '../lib/characterDanceDirector.js';
 import {usableExpressionPlan} from '../lib/characterExpressionDirector.js';
 import {usablePerformance89} from '../lib/characterPerformance89.js';
@@ -80,7 +80,7 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   (async()=>{for(const m of plan.members){if(fresh.has(m.characterId))continue;const c=byId.get(m.characterId);if(!c)continue;
    try{if(modelAssets(c).length){const a=modelAssets(c)[0],f=await getFile(a.id);if(!f||f.size>40*1024*1024)throw Error('모델 파일 누락 또는 용량 초과');const model=parseCharacter3d(await f.arrayBuffer(),f.name||a.name);if(stopped)return;
     const el=document.createElement('canvas');el.width=320;el.height=360;const renderer=new Character3dRenderer(el,model);fresh.set(c.id,{kind:'3d',element:el,renderer,settings:c.stage3d||createStageSettings(c)});
-   }else if(personVideoAssets(c).length){const a=personVideoAssets(c)[0],f=await getFile(a.id);if(!f)throw Error('사람 영상 누락');const url=URL.createObjectURL(f),v=document.createElement('video');v.src=url;v.muted=true;v.playsInline=true;v.preload='auto';fresh.set(c.id,{kind:'person',element:v,url});
+   }else if(personVideoAssets(c).length){const a=personVideoAssets(c).find(a=>a.id===c.personLipSync?.videoAssetId)||personVideoAssets(c)[0],f=await getFile(a.id);if(!f)throw Error('사람 영상 누락');const url=URL.createObjectURL(f),v=document.createElement('video');v.src=url;v.muted=true;v.playsInline=true;v.preload='auto';const mouthCanvas=document.createElement('canvas');mouthCanvas.width=320;mouthCanvas.height=360;fresh.set(c.id,{kind:'person',element:v,url,mouthCanvas,videoAssetId:a.id});
    }else{const a=c.layerPlan?.sourceAssetId,blob=a&&await getFile(a);if(!blob)throw Error('2D 레이어 이미지 누락');const url=URL.createObjectURL(blob),img=new Image();await new Promise((ok,bad)=>{img.onload=ok;img.onerror=bad;img.src=url;});if(stopped){URL.revokeObjectURL(url);return;}fresh.set(c.id,{kind:'2d',element:img,url});}
    }catch(e){fresh.set(c.id,{kind:'error',message:e.message});}}
    if(stopped)return;sources.current=fresh;setStatus(`로컬 공연 소스 ${fresh.size}명 준비됨 · 3D는 WebGL, 2D는 Canvas, 사람은 등록 영상 프레임을 사용합니다.`);
@@ -92,7 +92,16 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
    ctx.fillStyle=i%2?'#252d48':'#182b43';ctx.fillRect(x,0,tileW,h);
    try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,c.stage3d||null,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
-    else if(src?.kind==='person'&&src.element.readyState>=2)ctx.drawImage(src.element,x,0,tileW,h-62);
+    else if(src?.kind==='person'&&src.element.readyState>=2){
+     const lip=lipByMember.get(c.id);
+     if(c.personLipSync&&lip?.cues?.length&&src.videoAssetId===c.personLipSync.videoAssetId){
+      // 사용자가 검토한 입 ROI에만 실제 PCM 발성 시간표를 적용한다. 원본 영상은 불변.
+      renderPersonLipFrame(src.mouthCanvas.getContext('2d'),src.element,
+       {...c,lipSync:lip},c.personLipSync,Math.max(0,t-member.startSec),
+       src.mouthCanvas.width,src.mouthCanvas.height);
+      ctx.drawImage(src.mouthCanvas,x,0,tileW,h-62);
+     }else ctx.drawImage(src.element,x,0,tileW,h-62);
+    }
    }catch{/* display fallback tile instead of failing the entire ensemble */}
    ctx.fillStyle='#0a1022';ctx.fillRect(x,h-62,tileW,62);ctx.fillStyle='white';ctx.font='bold 21px sans-serif';ctx.fillText(String(member.name).slice(0,28),x+12,h-34);ctx.font='15px sans-serif';ctx.fillStyle='#b8d2ef';ctx.fillText(`${member.role} · ${visemeAt(lipByMember.get(c.id)||c.lipSync,t-member.startSec).viseme} · ${member.kind}`,x+12,h-12);ctx.restore();});
   ctx.fillStyle='white';ctx.font='17px sans-serif';ctx.fillText(`MYVOCAL 90 · ${t.toFixed(2)}s`,12,25);
@@ -183,6 +192,42 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   }catch(e){notify('실제 듀엣 캐릭터별 립싱크 연결 실패: '+e.message);}
   finally{await context.close().catch(()=>{});setBusy(false);}
  };
+ const prepareRealLeadSinger=async()=>{
+  if(busy)return;
+  const alignment=project.vocalAlignment;
+  if(!alignment||isAlignmentStale(project,alignment)){
+   notify('먼저 현재 곡의 실제 한국어 가사·MIDI 시간표를 저장하세요.');return;
+  }
+  const characterId=project.duetSingers?.lead?.characterId||project.characterId;
+  const member=plan.members.find(m=>m.characterId===characterId&&m.role==='lead');
+  const character=byId.get(characterId);
+  if(!member||!character||!['self','owned','licensed'].includes(character.rights)||
+     (character.rights==='licensed'&&!String(character.rightsNote||'').trim())){
+   notify('사용 허가받은 주보컬 캐릭터를 lead 역할로 배치하세요.');return;
+  }
+  const sources=projectVocalSources(project);
+  const trackId=project.duetSingers?.lead?.trackId;
+  const source=sources.find(s=>s.trackId===trackId)||(!trackId?sources.find(s=>!project.tracks.find(t=>t.id===s.trackId)?.mute):null);
+  if(!source){notify('원곡 시작 위치에 연결된 실제 주보컬 WAV 트랙이 필요합니다.');return;}
+  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioContextClass){notify('Windows EXE의 실제 보컬 WAV 디코딩이 필요합니다.');return;}
+  setBusy(true);setStatus('주보컬 실제 PCM 발성 구간을 전곡 MIDI·가사와 연결 중');
+  let context;
+  try{
+   context=new AudioContextClass();
+   const wav=await getFile(source.assetId);
+   if(!(wav instanceof Blob)||wav.size<44||wav.size>90*1024*1024)
+    throw Error('실제 주보컬 WAV 자산이 없거나 크기가 올바르지 않습니다.');
+   const audio=await context.decodeAudioData(await wav.arrayBuffer());
+   if(audio.duration+.08<alignment.cues.at(-1)?.endSec||audio.duration+.08<plan.durationSec)
+    throw Error('주보컬 WAV가 현재 가사 또는 공연의 전곡 길이보다 짧습니다.');
+   const lip=lipSyncFromSingingAudio(alignment,audio);
+   setDuetLipSyncs({projectId:project.id,lips:new Map([[character.id,lip]]),trackIds:[source.trackId]});
+   setStatus('실제 주보컬 PCM '+lip.cues.length+'개 발성 립싱크 준비됨');
+   notify('실제 주보컬 WAV 발성에 따른 2D·VRM·허가 인물 입 움직임을 공연에 연결했습니다.');
+  }catch(e){notify('실제 주보컬 립싱크 연결 실패: '+e.message);}
+  finally{await context?.close().catch(()=>{});setBusy(false);}
+ };
  const prepareFullSong=async()=>{
   if(busy)return;
   setBusy(true);
@@ -228,12 +273,12 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
    notify('가상 밴드 실제 FFmpeg MP4 출력 완료 · 기존 WebM도 보존했습니다.');
   }
  }catch(e){notify('밴드 영상 출력 실패: '+e.message);}finally{abort.current=null;setBusy(false);}};
- return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}><Notice>**STEP90 가상 밴드** · 최대 6명의 2D·3D·실제 사람을 단일 Canvas에 동시에 합성하고 각자의 STEP85/87/88/89 연출을 사용합니다. 기존 무음 WebM 출력도 유지하며 원곡 전체 음악·가창을 넣은 3~6분 WebM과 로컬 FFmpeg MP4도 출력합니다. 실제 사람은 등록 영상 프레임만 사용합니다.</Notice>
+ return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}><Notice>**STEP90 가상 밴드** · 최대 6명의 2D·3D·실제 사람을 단일 Canvas에 동시에 합성하고 각자의 STEP85/87/88/89 연출을 사용합니다. 기존 무음 WebM 출력도 유지하며 원곡 전체 음악·가창을 넣은 3~6분 WebM과 로컬 FFmpeg MP4도 출력합니다. 실제 사람은 등록 영상 프레임만 사용하며, STEP86에서 검토한 입 영역과 실제 WAV 발성 시간표가 있으면 해당 영역에만 로컬 변형을 적용합니다. Wav2Lip 신경망 결과와는 구분됩니다.</Notice>
  <Field label="영상 길이 (2~360초)"><input type="number" min="2" max="360" value={plan.durationSec} disabled={busy} onChange={e=>patch('durationSec',Number(e.target.value))}/></Field>
  <Field label="FPS"><select value={plan.fps} onChange={e=>patch('fps',Number(e.target.value))}><option value={24}>24</option><option value={30}>30</option></select></Field>
  {plan.members.map((m,i)=><div className="hstack" key={i} style={{gap:6,flexWrap:'wrap',margin:'8px 0'}}><select aria-label={`멤버 ${i+1}`} value={m.characterId} onChange={e=>patchMember(i,'characterId',e.target.value)}>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select aria-label={`역할 ${i+1}`} value={m.role} onChange={e=>patchMember(i,'role',e.target.value)}>{BAND90_ROLES.map(role=><option key={role}>{role}</option>)}</select><select value={m.position} onChange={e=>patchMember(i,'position',e.target.value)}>{positions.map(pos=><option key={pos}>{pos}</option>)}</select><label>시작<input type="number" min="0" step="0.1" style={{width:58}} value={m.startSec} onChange={e=>patchMember(i,'startSec',Number(e.target.value))}/></label><label>종료<input type="number" min="0" step="0.1" style={{width:58}} value={m.endSec} onChange={e=>patchMember(i,'endSec',Number(e.target.value))}/></label><Button onClick={()=>patch('members',plan.members.filter((_,j)=>j!==i))}>제외</Button></div>)}
  <Button disabled={plan.members.length>=6||available.length<=plan.members.length} onClick={()=>patch('members',[...plan.members,{characterId:available.find(c=>!plan.members.some(m=>m.characterId===c.id))?.id||'',role:'harmony',position:'center',startSec:0,endSec:plan.durationSec}])}>멤버 추가</Button>
- <div className="look-actions"><Button disabled={busy} onClick={prepareFullSong}>3~6분 전체 음악·밴드 연결</Button><Button disabled={busy} onClick={prepareCurrentMusic}>현재 밴드 음악 WAV 연결</Button></div>
+ <div className="look-actions"><Button disabled={busy} onClick={prepareFullSong}>3~6분 전체 음악·밴드 연결</Button><Button disabled={busy} onClick={prepareRealLeadSinger}>실제 주보컬 WAV 발성 → 전곡 2D·VRM·허가 인물 립싱크</Button><Button disabled={busy} onClick={prepareCurrentMusic}>현재 밴드 음악 WAV 연결</Button></div>
  {project.duetSingers?.version===1&&<div className="look-actions">
   <Button disabled={busy} onClick={arrangeDuetSingerStage}>두 가수 실제 보컬·캐릭터를 전곡 밴드 lead/harmony로 배치</Button>
   <Button disabled={busy} onClick={prepareRealSingerDuet}>실제 서로 다른 두 가수 WAV 발성 → 2D/VRM 듀엣 립싱크</Button>
