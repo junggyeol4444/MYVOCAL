@@ -23,7 +23,7 @@ import {downloadProjectBundle} from '../lib/projectBundle';
 const palettes=['#a48dff','#62c5fe','#f58fbb','#7dddb5','#f1b97b','#9d9efb','#8dd6db','#e3aeef'];
 export default function Workspace({data,project,onChange,navigate,notify,studio,add,remove}){
  const chosen=project||data.projects[0];
- const [tab,setTab]=useState('arrangement');const [newTrack,setNewTrack]=useState('');const [chat,setChat]=useState('');
+ const [tab,setTab]=useState('arrangement');const [directorSceneId,setDirectorSceneId]=useState('');const [newTrack,setNewTrack]=useState('');const [chat,setChat]=useState('');
  if(!chosen)return <><SectionHead eyebrow="MUSIC STUDIO" title="Music Studio" description="트랙 기반 작곡과 편집을 위한 작업 공간입니다."/><Empty icon="music" title="먼저 프로젝트를 만들어 주세요" description="프로젝트 안에서 가사와 트랙을 편집할 수 있습니다." action={<Button variant="primary" icon="plus" onClick={()=>navigate('create')}>프로젝트 만들기</Button>}/></>;
  const p=chosen;
  const change=(patch)=>onChange({...p,...patch});
@@ -49,8 +49,8 @@ export default function Workspace({data,project,onChange,navigate,notify,studio,
  return <><SectionHead eyebrow="MUSIC PRODUCTION WORKSPACE" title="Music Studio" description="오디오·MIDI·가사 싱크·모음 샘플 보컬·외부 Singing 결과를 한 프로젝트에서 관리합니다." action={<div className="hstack"><Button icon="folder" onClick={()=>navigate('projects')}>프로젝트 목록</Button><Button icon="download" onClick={()=>downloadText(JSON.stringify(p,null,2),`${p.title.replace(/[^\w가-힣-]/g,'_')}.json`,'application/json')}>메타데이터 JSON</Button><Button icon="save" onClick={async()=>{try{const n=await downloadProjectBundle(p,data);notify(`전체 백업 저장: 파일 ${n}개 포함`)}catch(e){notify(`백업 실패: ${e.message}`)}}}>전체 백업</Button></div>}/>
  <div className="workspace-heading panel"><div><span className="eyebrow">NOW EDITING · {p.status}</span><input className="project-title-input" aria-label="프로젝트 제목" value={p.title} onChange={e=>change({title:e.target.value})}/><div className="inline-meta">프로젝트 ID: {p.id.slice(0,13)} · 음악 및 MV 통합 작업 공간</div></div><div className="workspace-meta"><label>BPM <input type="number" min="40" max="300" value={p.bpm} onChange={e=>change({bpm:Number(e.target.value)||120})}/></label><label>KEY <select value={p.key} onChange={e=>change({key:e.target.value})}>{['C Major','G Major','D Major','A Major','E Major','F Major','Bb Major','A Minor','E Minor','B Minor','D Minor','G Minor','F# Minor'].map(k=><option key={k}>{k}</option>)}</select></label></div></div>
  <div className="workspace-tabs">{[['arrangement','편곡 / 트랙'],['compose','작사 · 자동 작곡'],['midi','MIDI 피아노 롤'],['sync','가사·MIDI 싱크'],['phonemes','발음 타임라인'],['singing','보컬 렌더링'],['openutau','OpenUtau · 보이스뱅크'],['lyrics','가사'],['structure','곡 구조 / 장르'],['video','영상 스토리보드'],['director','96 · Creative Director'],['finish','98~100 · 출력·검증']].map(([id,name])=><button className={tab===id?'selected':''} onClick={()=>setTab(id)} key={id}>{name}</button>)}</div>
- {tab==='video'?<Video data={data} project={p} onChange={onChange} navigate={navigate} notify={notify} embedded mode="video"/>:<div className="editor-layout"><div className="editor-main">
- {tab==='director'&&<CreativeDirector96 project={p} onChange={onChange} notify={notify}/>}
+ {tab==='video'?<Video data={data} project={p} onChange={onChange} navigate={navigate} notify={notify} focusSceneId={directorSceneId} embedded mode="video"/>:<div className="editor-layout"><div className="editor-main">
+ {tab==='director'&&<CreativeDirector96 project={p} onChange={onChange} notify={notify} onOpenVideo={sceneId=>{setDirectorSceneId(sceneId);setTab("video");}}/>}
  {tab==='finish'&&<FinalDelivery98 project={p} data={data} notify={notify}/>}
  {tab==='compose'&&<Songwriter project={p} onChange={onChange} notify={notify}/>}
  {tab==='arrangement'&&<><AudioWorkstation project={p} onChange={change} notify={notify}/><StemArchiveImportPanel project={p} onChange={change} notify={notify}/></>}
