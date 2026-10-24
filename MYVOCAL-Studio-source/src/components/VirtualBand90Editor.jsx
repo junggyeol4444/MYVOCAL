@@ -94,13 +94,18 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
     else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c));ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='person'&&src.element.readyState>=2){
      const lip=lipByMember.get(c.id);
+     let drawn=false;
      if(c.personLipSync&&lip?.cues?.length&&src.videoAssetId===c.personLipSync.videoAssetId){
-      // 사용자가 검토한 입 ROI에만 실제 PCM 발성 시간표를 적용한다. 원본 영상은 불변.
-      renderPersonLipFrame(src.mouthCanvas.getContext('2d'),src.element,
-       {...c,lipSync:lip},c.personLipSync,Math.max(0,t-member.startSec),
-       src.mouthCanvas.width,src.mouthCanvas.height);
-      ctx.drawImage(src.mouthCanvas,x,0,tileW,h-62);
-     }else ctx.drawImage(src.element,x,0,tileW,h-62);
+      // 저장된 입 영역이 유효할 때만 실제 PCM 립싱크를 적용한다.
+      // 오래된 설정이라면 기존 등록 영상 재생을 유지한다.
+      try{
+       renderPersonLipFrame(src.mouthCanvas.getContext('2d'),src.element,
+        {...c,lipSync:lip},c.personLipSync,Math.max(0,t-member.startSec),
+        src.mouthCanvas.width,src.mouthCanvas.height);
+       ctx.drawImage(src.mouthCanvas,x,0,tileW,h-62);drawn=true;
+      }catch{/* 기존 사람 영상 프레임을 그대로 사용한다. */}
+     }
+     if(!drawn)ctx.drawImage(src.element,x,0,tileW,h-62);
     }
    }catch{/* display fallback tile instead of failing the entire ensemble */}
    ctx.fillStyle='#0a1022';ctx.fillRect(x,h-62,tileW,62);ctx.fillStyle='white';ctx.font='bold 21px sans-serif';ctx.fillText(String(member.name).slice(0,28),x+12,h-34);ctx.font='15px sans-serif';ctx.fillStyle='#b8d2ef';ctx.fillText(`${member.role} · ${visemeAt(lipByMember.get(c.id)||c.lipSync,t-member.startSec).viseme} · ${member.kind}`,x+12,h-12);ctx.restore();});
