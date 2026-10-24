@@ -92,7 +92,22 @@ export function planRVCWavChunks(input,{maxBytes=RVC_SOURCE_LIMIT,overlapSeconds
    .filter(candidate=>candidate.rms<=.08);
   preferred.sort((a,b)=>Math.abs(a.frame-nominal)-Math.abs(b.frame-nominal)||
    a.rms-b.rms);
-  boundaries.push(preferred.length?preferred[0].frame:nominal);
+  // MIDI 휴지 정보가 없더라도 실제 원본 PCM의 조용한 위치를 찾는다.
+  // 음성 구간을 강제로 무음으로 바꾸지 않으며 후보가 없으면 기존 경계를 유지한다.
+  let quiet=null;
+  if(!preferred.length){
+   const radius=Math.round(layout.info.sampleRate*.65);
+   const step=Math.max(1,Math.round(layout.info.sampleRate*.04));
+   const first=Math.max(minimum,nominal-radius),last=Math.min(maximum,nominal+radius);
+   for(let frame=first;frame<=last;frame+=step){
+    const rms=rvcBoundaryEnergy(layout,frame);
+    if(rms>.045)continue;
+    const distance=Math.abs(frame-nominal)/layout.info.sampleRate;
+    const cost=rms*4+distance*.015;
+    if(!quiet||cost<quiet.cost)quiet={frame,cost};
+   }
+  }
+  boundaries.push(preferred.length?preferred[0].frame:quiet?.frame??nominal);
  }
  boundaries.push(layout.frames);
  const chunks=[];
