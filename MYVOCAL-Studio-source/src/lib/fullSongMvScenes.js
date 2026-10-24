@@ -1,6 +1,65 @@
 // 3~6분 원곡 MV의 빈 구간만 기존 SD/SVD 모델의 새 자동 장면으로 연결한다.
 // 사용자 작성 장면·기존 미디어·인물/의상 원본은 수정하지 않는다.
 import {describeOriginalSongMvScene} from './mvSongSectionDirection.js';
+import {personPhotoAssets,validatePersonSource} from './imageToMv.js';
+import {characterArtworkAssets,validateCharacterArtwork} from './characterToMv.js';
+
+// 두 가수의 실제 등록 사진·원화를 원곡 자동 생성 장면에 연결한다.
+// 기존 수동 장면과 이미 생성된 이미지/영상, 원본 자산은 수정하지 않는다.
+export function bindRegisteredDuetToAutoScenes(project,characters,{includeReferences=false}={}){
+ if(!project?.id||!Array.isArray(project.scenes)||!Array.isArray(characters))
+  throw Error('듀엣 MV에는 기존 프로젝트와 등록 인물 목록이 필요합니다.');
+ const duet=project.duetSingers;
+ if(duet?.version!==1)return {project,updated:0};
+ if(includeReferences!==true)
+  throw Error('듀엣의 등록된 원본 사진·원화 사용 동의가 필요합니다.');
+ const leadId=duet.lead?.characterId,harmonyId=duet.harmony?.characterId;
+ if(!leadId||!harmonyId||leadId===harmonyId)
+  throw Error('듀엣은 서로 다른 두 명의 등록 인물이 필요합니다.');
+ const bpm=Number(project.bpm);
+ if(!Number.isFinite(bpm)||bpm<40||bpm>240)
+  throw Error('듀엣 자동 MV 장면은 원곡 BPM이 필요합니다.');
+ const referenceFor=id=>{
+  const character=characters.find(item=>item?.id===id);
+  if(!character)throw Error('듀엣 가수의 등록 인물을 찾지 못했습니다.');
+  const person=character.kind==='person';
+  if(!person&&character.kind!=='character')
+   throw Error('듀엣 자동 MV는 등록된 실제 사람 또는 2D 캐릭터 원화가 필요합니다.');
+  const assets=person?personPhotoAssets(character):characterArtworkAssets(character);
+  const preferred=['portrait','front','full-body','expression','side','back','outfit'];
+  const original=assets.slice().sort((a,b)=>
+   preferred.indexOf(a.role)-preferred.indexOf(b.role)).find(asset=>asset?.id);
+  if(!original)throw Error('듀엣 가수마다 본인 또는 허가된 원본 사진·원화가 필요합니다.');
+  if(person)validatePersonSource(character,original.id);
+  else validateCharacterArtwork(character,original.id);
+  return person?{characterId:id,personMv:{personId:id,referenceAssetId:original.id,denoise:.35}}:
+   {characterId:id,characterMv:{characterId:id,referenceAssetId:original.id,denoise:.35}};
+ };
+ // 인물·권한 검사를 모든 장면 수정 전에 완료한다.
+ const lead=referenceFor(leadId),harmony=referenceFor(harmonyId);
+ let updated=0;
+ const scenes=project.scenes.map(scene=>{
+  if(scene?.generatedBy!=='full-song-auto-scene'||scene.imageAssetId||scene.videoClipAssetId)
+   return scene;
+  const start=Number(scene.start);
+  if(!Number.isFinite(start)||start<0||start>360)
+   throw Error('듀엣 자동 MV 장면의 원곡 시간이 올바르지 않습니다.');
+  const role=scene.duetSingerRole==='lead'||scene.duetSingerRole==='harmony'?
+   scene.duetSingerRole:Math.floor(start*bpm/240)%2===0?'lead':'harmony';
+  const ref=role==='lead'?lead:harmony;
+  const linked=ref.personMv?scene.personMv:scene.characterMv;
+  if(scene.characterId===ref.characterId&&
+    linked?.referenceAssetId===(ref.personMv||ref.characterMv).referenceAssetId&&
+    !((ref.personMv&&scene.characterMv)||(ref.characterMv&&scene.personMv))&&
+    scene.duetSingerRole===role)return scene;
+  // 원본 수동 장면이 아닌 미생성 자동 장면만 교체한다.
+  // 생성 전에 상속한 다른 가수의 참조를 제거해 얼굴 혼합을 막는다.
+  const {personMv:oldPerson,characterMv:oldCharacter,...rest}=scene;
+  updated++;
+  return {...rest,...ref,duetSingerRole:role};
+ });
+ return {project:updated?{...project,scenes}:project,updated};
+}
 const CLOCK=1000;
 const FRAME_SECONDS=3; // 실제 SVD 25프레임·8fps 출력 3.125초 이내
 const at=seconds=>Math.round(seconds*CLOCK)/CLOCK;
