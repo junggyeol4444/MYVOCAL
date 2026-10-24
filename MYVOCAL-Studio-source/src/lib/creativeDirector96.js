@@ -9,10 +9,38 @@ const sourceSnapshot96=project=>JSON.stringify({
  locks:[project.outfitLock,project.backgroundLock,project.cameraLock]
 });
 const producerMidi96=/^(?:(?:마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(?:멜로디|코드|드럼|베이스|기타|피아노|스트링|신스|패드)|후렴이\s*심심해|마지막\s*후렴(?:만|을|에서)?\s*(?:반키|반음)|드럼\s*(?:을\s*)?(?:더\s*)?강화|(?:후렴(?:의|에|에서)?\s*)?(?:멜로디|베이스|화음|스트링)\s*(?:변경|바꿔|강화|추가|넣어)|후렴(?:을|이)?\s*(?:더\s*)?웅장하게)/u;
+// 사용자가 장면 번호 또는 정확한 제목을 지정하면 첫 장면 대신 그 장면을 수정한다.
+function selectDirectedScene96(project,text){
+ const ordinal=text.match(/^(?:(\d{1,2})번째\s*장면|장면\s*(\d{1,2})번?)(?:의|에서|을|은)?\s+(.+)$/u);
+ if(ordinal){
+  const index=Number(ordinal[1]||ordinal[2])-1;
+  if(index<0||index>=project.scenes.length)throw Error('지정한 장면 번호가 프로젝트 범위를 벗어났습니다.');
+  return {scene:project.scenes[index],instruction:ordinal[3]};
+ }
+ const named=text.match(/^(?:["“]([^"”]{1,80})["”]|'([^']{1,80})')\s*장면(?:의|에서|을|은)?\s+(.+)$/u);
+ if(named){
+  const title=named[1]||named[2];
+  const matches=project.scenes.filter(s=>s.title===title);
+  if(matches.length!==1)throw Error('장면 제목이 없거나 중복됩니다. 정확한 제목 또는 장면 번호를 지정하세요.');
+  return {scene:matches[0],instruction:named[3]};
+ }
+ return {scene:project.scenes[0],instruction:text};
+}
 export function previewCreativeDirection96(project,command){
  if(!project?.id||!Array.isArray(project.scenes))throw Error('프로젝트가 필요합니다.');
  if(typeof command!=='string'||!command.trim()||command.length>500||/[\u0000-\u001f\u007f]/u.test(command))throw Error('500자 이하의 단일 명령을 입력하세요.');
  const text=command.trim();let action;
+ // 음악·영상 타임라인 변경을 한 번에 미리 검토하고 한 번에 적용한다.
+ const parts=text.split(/\s+그리고\s+/u);
+ if(parts.length>1){
+  if(parts.length!==2||parts.some(p=>!p.trim()))throw Error('음악 명령 하나와 영상 명령 하나만 그리고로 연결하세요.');
+  const previews=parts.map(part=>previewCreativeDirection96(project,part));
+  if(previews[0].action.domain===previews[1].action.domain)
+   throw Error('음악과 영상 명령을 하나씩 지정하세요.');
+  return {version:2,projectId:project.id,command:text,source:sourceSnapshot96(project),
+   parts,actions:previews.map(p=>p.action),action:{domain:'both'},
+   summary:previews.map(p=>p.summary).join(' / ')};
+ }
  const bpm=text.match(/^(?:BPM|템포)\s*(?:을|를)?\s*(\d{2,3})\s*(?:으로|로)\s*(?:바꿔|설정해)(?:줘|주세요)?[.!]?$/i);
  if(bpm){const value=Number(bpm[1]);if(value<40||value>240)throw Error('템포는 40~240 BPM이어야 합니다.');action={domain:'music',field:'bpm',value,summary:`BPM ${project.bpm} → ${value}`};}
  else if(/^가사(?:를|을)?\s*.+(?:으로|로)\s*(?:바꿔|변경해)(?:줘|주세요)?[.!]?$/u.test(text)){
@@ -35,20 +63,39 @@ export function previewCreativeDirection96(project,command){
   action={domain:'music',field:'midi',value:text,kind:result.kind,
    changed:result.changed,summary:result.response};
  }else{
-  const scene=project.scenes[0];if(!scene)throw Error('변경할 첫 번째 장면이 없습니다.');
-  const p=interpretMvInstruction93(project,scene.id,text);
-  action={domain:'video',sceneId:scene.id,field:p.field,value:p.after,summary:p.summary};
+  const {scene,instruction}=selectDirectedScene96(project,text);
+  if(!scene)throw Error('변경할 장면이 없습니다.');
+  const p=interpretMvInstruction93(project,scene.id,instruction);
+  action={domain:'video',sceneId:scene.id,sceneCommand:instruction,field:p.field,value:p.after,
+   summary:(scene.title||scene.id)+': '+p.summary};
  }
  return {version:1,projectId:project.id,command:text,action,source:sourceSnapshot96(project),summary:action.summary};
 }
 export function applyCreativeDirection96(project,plan){
+ if(plan?.version===2){
+  if(plan.projectId!==project?.id||plan.source!==sourceSnapshot96(project)||
+   !Array.isArray(plan.parts)||plan.parts.length!==2||!Array.isArray(plan.actions)||
+   plan.actions.length!==2||plan.parts.join(' 그리고 ')!==plan.command)
+   throw Error('검토한 음악·영상 동시 수정이 아니거나 프로젝트가 변경됐습니다.');
+  let updated=project;
+  for(let i=0;i<2;i++){
+   const verified=previewCreativeDirection96(updated,plan.parts[i]);
+   if(JSON.stringify(verified.action)!==JSON.stringify(plan.actions[i]))
+    throw Error('음악·영상 동시 수정 계획이 달라졌습니다. 다시 검토하세요.');
+   updated=applyCreativeDirection96(updated,verified);
+  }
+  const history=[...(project.creativeDirector96?.history||[]),
+   {command:plan.command,domain:'music+video',summary:plan.summary,at:new Date().toISOString()}].slice(-30);
+  return {...updated,creativeDirector96:{version:1,history}};
+ }
+
  if(plan?.version!==1||plan.projectId!==project?.id)throw Error('검토한 프로젝트가 아닙니다.');
  const current=sourceSnapshot96(project);
  if(current!==plan.source)throw Error('검토 후 내용이 변경되었습니다. 다시 미리 확인하세요.');
  const action=plan.action;if(!action||!['bpm','lyrics','location','outfit','camera','expression','action','lighting','neuralWav','midi'].includes(action.field))throw Error('지원하지 않는 수정입니다.');
  let updated;
  if(action.domain==='video'){
-  const validation=interpretMvInstruction93(project,action.sceneId,plan.command);
+  const validation=interpretMvInstruction93(project,action.sceneId,action.sceneCommand||plan.command);
   if(validation.field!==action.field||validation.after!==action.value)throw Error('검토 결과가 변조되었습니다.');
   updated=applyMvInstruction93(project,validation);
  }else if(action.domain==='music'&&action.field==='neuralWav'&&action.value===plan.command){
@@ -67,4 +114,4 @@ export function applyCreativeDirection96(project,plan){
  const audit={command:plan.command,domain:action.domain,summary:plan.summary,at:new Date().toISOString()};
  return {...updated,creativeDirector96:{version:1,history:[...(project.creativeDirector96?.history||[]),audit].slice(-30)}};
 }
-export function directorCapabilities96(){return {music:['BPM 설정','가사 전체 수정','신경망 WAV 트랙 음량·음소거','구간별 MIDI 악기 쉼표·복원·강약·길이·음높이·후렴 편곡'],video:['선택 첫 장면의 배경·의상·카메라·표정·동작·조명'],unavailable:['자유 대화 AI','모델 미설치 시 영상 픽셀 생성','학습되지 않은 가창 모델 추론']};}
+export function directorCapabilities96(){return {music:['BPM 설정','가사 전체 수정','신경망 WAV 트랙 음량·음소거','구간별 MIDI 악기 쉼표·복원·강약·길이·음높이·후렴 편곡'],video:['장면 번호·정확한 제목으로 배경·의상·카메라·표정·동작·조명 변경','그리고로 음악·영상 명령 동시 적용'],unavailable:['자유 대화 AI','모델 미설치 시 영상 픽셀 생성','학습되지 않은 가창 모델 추론']};}
