@@ -189,12 +189,14 @@ function applyChorusArrangement11(project,windows,selected){
 // 원본 66항 #11·#62: 자연어로 구간별 악기를 쉬게 하거나 되돌린다.
 // 변경은 새 프로젝트 객체에만 적용한다. 삭제한 MIDI 음표는 복원 자료로 보존한다.
 const SECTION_REST_INSTRUMENTS83=Object.freeze({
+ melody:['melody','lead','멜로디'],chords:['chords','chord','코드'],
  drums:['drums','drum','rhythm','드럼'],bass:['bass','베이스'],
  guitar:['guitar','기타'],piano:['piano','keys','keyboard','피아노'],
  strings:['strings','string','스트링'],synth:['synth','synthesizer','신스'],
  pad:['pad','패드']
 });
 const SECTION_REST_LABELS83=Object.freeze({
+ melody:'멜로디',chords:'코드',
  drums:'드럼',bass:'베이스',guitar:'기타',piano:'피아노',
  strings:'스트링',synth:'신스',pad:'패드'
 });
@@ -226,7 +228,7 @@ function sectionRestTrack83(project,role,allowEmpty=false){
  const aliases=SECTION_REST_INSTRUMENTS83[role];
  const tracks=project.tracks.filter(t=>{
   if(!Array.isArray(t.midiNotes)||(!allowEmpty&&!t.midiNotes.length))return false;
-  const fields=[t.instrument,t.composerRole,t.name].map(x=>String(x||'').toLowerCase());
+  const fields=[t.role,t.instrument,t.composerRole,t.name].map(x=>String(x||'').toLowerCase());
   return fields.some(f=>aliases.some(a=>f===a||new RegExp('(^|[\\s·_/-])'+a+'($|[\\s·_/-])','i').test(f)));
  });
  if(tracks.length!==1)throw Error(SECTION_REST_LABELS83[role]+' MIDI 트랙을 하나로 확정할 수 없습니다. 현재 '+tracks.length+'개입니다.');
@@ -234,7 +236,7 @@ function sectionRestTrack83(project,role,allowEmpty=false){
  return tracks[0];
 }
 function applyProducerSectionRest83(project,cmd){
- const m=/^(마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(드럼|베이스|기타|피아노|스트링|신스|패드)(?:을|를)?\s*(빼\s*줘|빼\s*주세요|쉬게\s*해\s*줘|쉬게\s*해주세요|다시\s*넣어\s*줘|다시\s*넣어\s*주세요|복원해\s*줘|복원해\s*주세요)$/u.exec(cmd);
+ const m=/^(마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(멜로디|코드|드럼|베이스|기타|피아노|스트링|신스|패드)(?:을|를)?\s*(빼\s*줘|빼\s*주세요|쉬게\s*해\s*줘|쉬게\s*해주세요|다시\s*넣어\s*줘|다시\s*넣어\s*주세요|복원해\s*줘|복원해\s*주세요)$/u.exec(cmd);
  if(!m)return null;
  const sectionLabel=m[1].replace(/\s+/gu,' '),instrument=m[2],action=m[3];
  const role=Object.keys(SECTION_REST_LABELS83).find(k=>SECTION_REST_LABELS83[k]===instrument);
@@ -276,7 +278,7 @@ function applyProducerSectionRest83(project,cmd){
 // 원본 66항 #11·#62: 자연어로 특정 악기의 실제 MIDI 연주 강약·길이를 편집한다.
 // 녹음 WAV, 원본 트랙 ID, 저장된 다른 구간과 프로젝트 자산은 수정하지 않는다.
 function applyProducerSectionDynamics84(project,cmd){
- const match=/^(마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(드럼|베이스|기타|피아노|스트링|신스|패드)(?:을|를)?\s*(?:더\s*)?(강하게|세게|약하게|작게|길게|짧게)\s*(?:연주\s*)?(?:해\s*줘|해\s*주세요|해줘|해주세요)$/u.exec(cmd);
+ const match=/^(마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(멜로디|코드|드럼|베이스|기타|피아노|스트링|신스|패드)(?:을|를)?\s*(?:더\s*)?(강하게|세게|약하게|작게|길게|짧게)\s*(?:연주\s*)?(?:해\s*줘|해\s*주세요|해줘|해주세요)$/u.exec(cmd);
  if(!match)return null;
  const sectionLabel=match[1].replace(/\s+/gu,' ');
  const instrument=match[2],action=match[3];
@@ -312,7 +314,7 @@ function applyProducerSectionDynamics84(project,cmd){
 // 원본 66항 #11·#62: 지정 악기의 MIDI 음높이를 실제 음표에 적용한다.
 // 다른 악기·원본 WAV·프로젝트 자산을 변경하지 않고 음역 초과는 전체 거부한다.
 function applyProducerSectionTranspose85(project,cmd){
- const match=/^(마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(베이스|기타|피아노|스트링|신스|패드)(?:을|를)?\s*(반음|한\s*음|한\s*옥타브)\s*(올려\s*줘|올려\s*주세요|내려\s*줘|내려\s*주세요)$/u.exec(cmd);
+ const match=/^(마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(멜로디|코드|베이스|기타|피아노|스트링|신스|패드)(?:을|를)?\s*(반음|한\s*음|한\s*옥타브)\s*(올려\s*줘|올려\s*주세요|내려\s*줘|내려\s*주세요)$/u.exec(cmd);
  if(!match)return null;
  const sectionLabel=match[1].replace(/\s+/gu,' ');
  const instrument=match[2],interval=match[3].replace(/\s+/gu,''),direction=match[4];
@@ -369,7 +371,7 @@ function applyProducerNeuralWav86(project,cmd){
   kind:'neural-wav-mix-86',changed:1};
 }
 
-export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['베이스 오디오 음량을 50%로 설정해줘','드럼 WAV 음소거 해줘','드럼 WAV 음소거 해제해줘','인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴에서 기타를 더 강하게 해줘','2절에서 피아노를 작게 해줘','브리지에서 스트링을 길게 해줘','2절에서 기타를 반음 내려줘','후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
+export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['1절에서 멜로디를 세게 해줘','후렴에서 코드를 반음 올려줘','인트로에서 멜로디 빼줘','베이스 오디오 음량을 50%로 설정해줘','드럼 WAV 음소거 해줘','드럼 WAV 음소거 해제해줘','인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴에서 기타를 더 강하게 해줘','2절에서 피아노를 작게 해줘','브리지에서 스트링을 길게 해줘','2절에서 기타를 반음 내려줘','후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
 export function applyProducerCommand(project,rawCommand){
  if(!project?.id||!Array.isArray(project.tracks))throw Error('편집할 음악 프로젝트가 없습니다.');
  if(typeof rawCommand!=='string'||rawCommand.length>300)throw Error('300자 이하의 수정 요청을 입력하세요.');
