@@ -52,7 +52,7 @@ export function instrumentNeuralPrompts(project,role,{segments,seconds=18,crossf
  });
 }
 export async function renderAndStoreNeuralAudioStems(project,{
- python,modelDir,seconds=18,segments=11,crossfadeSec=.5,audible=false,session,signal,
+ python,modelDir,seconds=18,segments=11,crossfadeSec=.5,audible=false,roles=NEURAL_SCORE_ROLES,session,signal,
  current,onChange,newId,readInfo,createTrack,save,remove,
  generate=generateMusicGenSequence,onProgress=()=>{}
 }={}){
@@ -64,6 +64,12 @@ export async function renderAndStoreNeuralAudioStems(project,{
  crossfadeSec!==.5)throw Error('로컬 MusicGen 실행 환경과 3~6분 설정을 확인하세요.');
  alive(project,current,signal);
  if(!latestCompleteNeuralScore(project))throw Error('실제 로컬 AI가 생성한 동일 회차의 6악기 MIDI가 필요합니다.');
+ // 원본 6악기 전체 생성과 선택한 1개 악기만 실제 MusicGen으로 다시 만드는 경로를 공유한다.
+ // 기존 MIDI/PCM/사용자 자산은 그대로 두고 생성 성공한 새 WAV만 별도 트랙에 추가한다.
+ if(!Array.isArray(roles)||roles.length<1||roles.length>NEURAL_SCORE_ROLES.length||
+  new Set(roles).size!==roles.length||roles.some(role=>!NEURAL_SCORE_ROLES.includes(role)))
+  throw Error('독립 신경망 악기는 멜로디·코드·베이스·드럼·기타·패드 중 중복 없이 선택하세요.');
+ const selectedRoles=NEURAL_SCORE_ROLES.filter(role=>roles.includes(role));
  const scoreSec=Number(project.neuralAutoScore.durationSec)||
   Number(project.neuralAutoScore.bars)*4*60/Number(project.bpm);
  const timing=planScoreMatchedMusicGenSegments(scoreSec,segments,{fadeSec:crossfadeSec,bpm:Number(project.bpm)});
@@ -74,10 +80,10 @@ export async function renderAndStoreNeuralAudioStems(project,{
   if(typeof id!=='string'||!id||allocated.has(id))throw Error('새 신경망 악기 자산 또는 트랙 ID가 중복됐습니다.');
   allocated.add(id);return id;
  };
- for(const [index,role] of NEURAL_SCORE_ROLES.entries()){
+ for(const [index,role] of selectedRoles.entries()){
   alive(project,current,signal);
   const prompts=instrumentNeuralPrompts(project,role,{segments,seconds,crossfadeSec,segmentSeconds:timing.segmentSeconds});
-  onProgress('로컬 신경망 독립 악기 오디오 '+INSTRUMENT[role][1]+' '+(index+1)+'/6 생성 중');
+  onProgress('로컬 신경망 독립 악기 오디오 '+INSTRUMENT[role][1]+' '+(index+1)+'/'+selectedRoles.length+' 생성 중');
   const rendered=await generate({
    python,modelDir,prompt:prompts[0],seconds,seed:4200+index*100
   },{segments,crossfadeSec,prompts,continuation:true,
@@ -122,7 +128,8 @@ export async function renderAndStoreNeuralAudioStems(project,{
   await save(entries);stored=true;alive(project,current,signal);
   const changed={...project,tracks:[...project.tracks,...tracks]};
   await Promise.resolve(onChange(changed));stored=false;
-  return {project:changed,assets:6,tracks:6,durationSec:baseline,source:'real-musicgen-independent'};
+  return {project:changed,assets:tracks.length,tracks:tracks.length,roles:selectedRoles,
+   durationSec:baseline,source:'real-musicgen-independent'};
  }catch(e){
   if(stored&&current()===project){
    try{await remove(entries.map(([id])=>id));}
