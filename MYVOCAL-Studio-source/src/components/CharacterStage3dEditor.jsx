@@ -1,7 +1,7 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {Button,Field,Notice} from './UI';
 import {getFile} from '../lib/assetDb.js';
-import {usableExpressionPlan} from '../lib/characterExpressionDirector.js';
+import {usableExpressionPlan,createSingingWavExpressionPlan} from '../lib/characterExpressionDirector.js';
 import {usableDancePlan,createFullSongDancePlan,saveDancePlan} from '../lib/characterDanceDirector.js';
 import {usablePerformance89,PERFORMANCE_ROLES} from '../lib/characterPerformance89.js';
 import {makeFullSongInstrumentPerformance} from '../lib/fullSongInstrumentPerformance.js';
@@ -12,7 +12,7 @@ import {Character3dRenderer} from '../lib/character3dRenderer.js';
 import {createStageSettings,validateStageSettings,saveStageSettings,stageRigSettings,stageMetadata,STAGE_FPS} from '../lib/characterStage3d.js';
 import {recordStageWebM,supportedStageWebM} from '../lib/stage3dRecording.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
-import {linkedVrmSingingProjects,resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
+import {linkedVrmSingingProjects,resolveProjectVrmLipSync,resolveProjectVrmExpression} from '../lib/projectVrmSingingSync.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
 import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
 import {isAlignmentStale} from '../lib/lyricAlignment.js';
@@ -33,6 +33,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
  const [fullSongPerformance,setFullSongPerformance]=useState(null);
  const [midiStageDirection,setMidiStageDirection]=useState(null);
  const [audioDrivenLipSync,setAudioDrivenLipSync]=useState(null);
+ const [audioDrivenExpression,setAudioDrivenExpression]=useState(null);
  const [instrumentRole,setInstrumentRole]=useState('all');
  const eligibleProjects=useMemo(()=>linkedVrmSingingProjects(character,projects),[character,projects]);
  const [linkedProjectId,setLinkedProjectId]=useState('');
@@ -45,6 +46,17 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
   try{return resolveProjectVrmLipSync(activeProject,character)?.lipSync||character.lipSync;}
   catch{return character.lipSync;}
  },[activeProject,character,audioDrivenLipSync]);
+ // 현재 프로젝트의 가사/PCM 표정은 저장된 캐릭터 원본을 바꾸지 않고
+ // 같은 VRM 렌더 호출에서 입 모양과 함께 적용한다.
+ const activeExpression=useMemo(()=>{
+  if(!activeProject)return null;
+  if(audioDrivenExpression?.projectId===activeProject.id&&
+     audioDrivenExpression?.assetId===audioDrivenLipSync?.assetId)
+   return audioDrivenExpression;
+  return resolveProjectVrmExpression(character,activeLipSync);
+ },[activeProject,character,activeLipSync,audioDrivenExpression,audioDrivenLipSync]);
+ const stageExpressionCharacter=activeExpression?.character||character;
+ const stageExpressionPlan=activeExpression?.plan||directedPlan;
  const initial=()=>{try{if(character.stage3d){validateStageSettings(character,character.stage3d);return {...character.stage3d};}}catch{}return createStageSettings(character);};
  const [settings,setSettings]=useState(initial),[model,setModel]=useState(null),[status,setStatus]=useState('3D 모델 분석 중…'),[playing,setPlaying]=useState(true),[time,setTime]=useState(0),[exporting,setExporting]=useState(false),[progress,setProgress]=useState(0),[singingWav,setSingingWav]=useState(null);
  const canvas=useRef(null),engine=useRef(null),raf=useRef(0),start=useRef(0),clock=useRef(0),config=useRef(settings),abort=useRef(null),busy=useRef(false);
@@ -58,7 +70,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
   (async()=>{try{const f=await getFile(settings.assetId);if(!f)throw Error('저장된 3D 모델 파일을 찾을 수 없습니다.');if(f.size>40*1024*1024)throw Error('모델은 40MB 이하만 지원됩니다.');
    const parsed=parseCharacter3d(await f.arrayBuffer(),f.name||assets.find(a=>a.id===settings.assetId)?.name);
    if(dead)return;const renderer=new Character3dRenderer(canvas.current,parsed);engine.current=renderer;setModel(parsed);setStatus(`모델 연결됨 · 메시 ${parsed.meshCount}개 · 본 ${parsed.skins.reduce((n,s)=>n+s.joints.length,0)}개 · 모션 ${parsed.animations.length}개`);
-   const stage=stageAt(0);renderer.render(stageRigSettings(stage),0,stage,activeLipSync,directedPlan,character,activeDancePlan,activePerformancePlan);
+   const stage=stageAt(0);renderer.render(stageRigSettings(stage),0,stage,activeLipSync,stageExpressionPlan,stageExpressionCharacter,activeDancePlan,activePerformancePlan);
   }catch(e){if(!dead){setStatus('3D 무대 오류: '+e.message);notify(e.message);}}})();
   return ()=>{dead=true;abort.current?.abort();cancelAnimationFrame(raf.current);engine.current?.dispose();engine.current=null;};
  },[character.id,settings.assetId]);
@@ -66,13 +78,13 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
   const tick=now=>{if(!engine.current||busy.current)return;if(!start.current)start.current=now;
    if(playing)clock.current=(clock.current+(now-start.current)/1000)%config.current.duration;
    start.current=now;
-   try{const stage=stageAt(clock.current);engine.current.render(stageRigSettings(stage),clock.current,stage,activeLipSync,directedPlan,character,activeDancePlan,activePerformancePlan);}catch(e){setStatus('무대 렌더링 오류: '+e.message);return;}
+   try{const stage=stageAt(clock.current);engine.current.render(stageRigSettings(stage),clock.current,stage,activeLipSync,stageExpressionPlan,stageExpressionCharacter,activeDancePlan,activePerformancePlan);}catch(e){setStatus('무대 렌더링 오류: '+e.message);return;}
    if(Math.floor(now/250)!==Math.floor((now-16)/250))setTime(clock.current);
    raf.current=requestAnimationFrame(tick);
   };raf.current=requestAnimationFrame(tick);return ()=>{cancelAnimationFrame(raf.current);start.current=0;};
  },[model,playing,exporting,activeLipSync,activeDancePlan,activePerformancePlan,midiStageDirection,activeProject?.id]);
  const patch=(name,value)=>setSettings(s=>({...s,[name]:value}));
- const draw=t=>{if(!engine.current)throw Error('3D 모델이 로딩되지 않았습니다.');const stage=stageAt(t);engine.current.render(stageRigSettings(stage),t,stage,activeLipSync,directedPlan,character,activeDancePlan,activePerformancePlan);};
+ const draw=t=>{if(!engine.current)throw Error('3D 모델이 로딩되지 않았습니다.');const stage=stageAt(t);engine.current.render(stageRigSettings(stage),t,stage,activeLipSync,stageExpressionPlan,stageExpressionCharacter,activeDancePlan,activePerformancePlan);};
  const seek=t=>{clock.current=Math.max(0,Math.min(config.current.duration,Number(t)));setTime(clock.current);try{draw(clock.current);}catch(e){notify(e.message);}};
  const selectAsset=id=>{const next=createStageSettings({...character,rig3d:null,stage3d:null,assets:character.assets?.filter(a=>a.id===id)});setSettings({...next,assetId:id});clock.current=0;};
  const applyFullSongDance=()=>{
@@ -128,9 +140,19 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
    try{
     const buffer=await ctx.decodeAudioData(await blob.arrayBuffer());
     const lipSync=lipSyncFromSingingAudio(activeProject.vocalAlignment,buffer);
+    const linkedCharacter={...character,lipSync};
+    let expressionMessage='';
+    try{
+     const manual=usableExpressionPlan(linkedCharacter);
+     const plan=manual||createSingingWavExpressionPlan(linkedCharacter,buffer,{
+      midiStageDirection:midiStageDirection?.projectId===activeProject.id?midiStageDirection:null});
+     setAudioDrivenExpression({projectId:activeProject.id,assetId:source.assetId,
+      character:linkedCharacter,plan});
+     expressionMessage=manual?' · 기존 사용자 표정 유지':' · 실제 PCM 강약·가사 표정 적용';
+    }catch(error){setAudioDrivenExpression(null);expressionMessage=' · 표정 분석 미적용: '+error.message;}
     setAudioDrivenLipSync({projectId:activeProject.id,lipSync,assetId:source.assetId});
     notify('실제 녹음된 한국어 보컬 WAV 발성구간 '+lipSync.cues.length+
-     '개를 MIDI 가사·VRM 입 모양에 연결했습니다. 기존 캐릭터 립싱크는 보존됩니다.');
+     '개를 MIDI 가사·VRM 입 모양에 연결했습니다'+expressionMessage+'. 기존 캐릭터 원본은 보존됩니다.');
    }finally{await ctx.close().catch(()=>{});}
   }catch(e){notify('VRM 실제 음성 립싱크 연결 실패: '+e.message);}
  };
@@ -202,8 +224,8 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
     throw Error('원곡 MIDI 무대 카메라 시간과 실제 WAV 재생시간이 다릅니다.');
    const drawRecordedFrame=t=>{
     const at=Math.min(t,recordDuration),stage=stageAt(at,recordSettings);
-    engine.current.render(stageRigSettings(stage),at,stage,activeLipSync,directedPlan,
-     character,activeDancePlan,activePerformancePlan);
+    engine.current.render(stageRigSettings(stage),at,stage,activeLipSync,stageExpressionPlan,
+     stageExpressionCharacter,activeDancePlan,activePerformancePlan);
    };
    const clip=await recordStageWebM({canvas:canvas.current,duration:recordDuration,
     fps:settings.fps,draw:drawRecordedFrame,onProgress:setProgress,
