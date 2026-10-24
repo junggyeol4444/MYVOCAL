@@ -1,4 +1,5 @@
 import {chordPitches} from './midiEngine.js';
+import {latestCompleteNeuralScore} from './neuralScoreBatch.js';
 // Apply only explicitly supported music editing commands from the original
 // MYVOCAL Producer specification. These are real MIDI/chord edits, not LLM AI.
 // Original audio/image assets are never overwritten.
@@ -347,11 +348,16 @@ function applyProducerNeuralWav86(project,cmd){
  const volume=/^(멜로디|코드|베이스|드럼|기타|패드)\s*(?:신경망\s*)?(?:WAV|오디오)(?:의)?\s*음량(?:을)?\s*(\d{1,3})\s*%?(?:로)?\s*(?:설정해\s*줘|맞춰\s*줘)$/iu.exec(cmd);
  if(!mute&&!volume)return null;
  const label=(mute||volume)[1],role=NEURAL_WAV_ROLES86[label];
+ const source=latestCompleteNeuralScore(project)?.get(role);
+ if(!source)throw Error(label+' 신경망 WAV의 원본 6악기 MIDI 회차를 확인할 수 없습니다.');
+ // 개별 악기를 재생성하면 이전 WAV 트랙을 보존하므로, 내보내기와
+ // 동일하게 현재 MIDI 회차의 가장 최근 독립 WAV만 수정한다.
  const tracks=project.tracks.filter(t=>t?.generatedBy==='musicgen-independent-audio'&&
-  t?.sourceRole===role&&t.type==='instrument'&&Array.isArray(t.clips)&&t.clips.some(c=>c.assetId));
- if(tracks.length!==1)
-  throw Error(label+' 신경망 MusicGen WAV 트랙이 '+tracks.length+'개입니다. 편집할 트랙 하나를 확정한 뒤 실행하세요.');
- const target=tracks[0];
+  t?.sourceRole===role&&t?.sourceMidiTrackId===source.id&&
+  t.type==='instrument'&&Array.isArray(t.clips)&&t.clips.some(c=>c.assetId));
+ if(!tracks.length)
+  throw Error(label+' 현재 MIDI 회차의 MusicGen WAV 트랙이 없습니다.');
+ const target=tracks.at(-1);
  let changed,description;
  if(mute){
   const muted=/^음소거\s*해\s*줘$/u.test(mute[2]);
@@ -367,7 +373,7 @@ function applyProducerNeuralWav86(project,cmd){
   description='재생 음량 '+next+'%';
  }
  return {project:{...project,tracks:project.tracks.map(t=>t.id===target.id?changed:t)},
-  response:label+' 실제 신경망 WAV '+description+'를 프로젝트 재생·WAV 믹스에 반영했습니다. 원본 오디오·MIDI·모델은 그대로입니다.',
+  response:label+' 현재 MIDI 회차의 최신 신경망 WAV '+description+'를 프로젝트 재생·WAV 믹스에 반영했습니다. 이전 생성 WAV·MIDI·모델은 그대로입니다.',
   kind:'neural-wav-mix-86',changed:1};
 }
 
