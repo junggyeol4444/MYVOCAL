@@ -2,6 +2,7 @@
 // 등록 VRM/GLB 공연의 실제 Morph 립싱크 시간표로 연결한다.
 // 학습/추론 성공을 대신하지 않으며 캐릭터·프로젝트 원본은 수정하지 않는다.
 import {automaticSingingVisemes} from './autoMvPhonemeLip.js';
+import {createExpressionPlan,usableExpressionPlan,validateExpressionPlan} from './characterExpressionDirector.js';
 import {validateLipSync,phonemeViseme} from './characterLipSync.js';
 import {isAlignmentStale} from './lyricAlignment.js';
 import {isPhonemePlanStale,validatePhonemePlan} from './phonemePlan.js';
@@ -51,6 +52,23 @@ export function resolveProjectVrmLipSync(project,character){
  const lipSync=validateLipSync({version:1,cues});
  return {lipSync,source:'현재 프로젝트 한국어 Singing/MIDI 음소 자동 연결',
   durationSec:Math.max(2,Math.ceil(end/1000))};
+}
+
+/**
+ * 원본 66항 #29/#33/#35: 저장된 3D 캐릭터는 수정하지 않고 현재
+ * 음악 프로젝트의 한국어 립싱크와 같은 시간축으로 VRM 표정을 구동한다.
+ * 같은 음소에 저장된 사용자의 수동 표정은 자동 표정보다 우선한다.
+ */
+export function resolveProjectVrmExpression(character,lipSync){
+ if(!character?.id||!lipSync?.cues?.length)return null;
+ const linkedCharacter={...character,lipSync};
+ try{
+  const saved=usableExpressionPlan(linkedCharacter);
+  if(saved)return {character:linkedCharacter,plan:saved,source:'저장된 사용자 표정'};
+  const generated=createExpressionPlan(linkedCharacter);
+  validateExpressionPlan(linkedCharacter,generated);
+  return {character:linkedCharacter,plan:generated,source:'원곡 한국어 가사 표정'};
+ }catch{return null;}
 }
 export function linkedVrmSingingProjects(character,projects=[]){
  if(!character?.id||!Array.isArray(projects))return [];
