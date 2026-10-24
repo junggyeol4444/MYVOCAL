@@ -82,10 +82,13 @@ export async function renderAndStoreNeuralAudioStems(project,{
  };
  for(const [index,role] of selectedRoles.entries()){
   alive(project,current,signal);
+  // 악기를 하나만 다시 생성해도 6악기 전체 생성 때와 같은 역할별 시드를 사용한다.
+  // 선택 순서에 따라 악기 음색이 바뀌는 일을 막고 원본 MIDI 회차를 유지한다.
+  const roleSeed=4200+NEURAL_SCORE_ROLES.indexOf(role)*100;
   const prompts=instrumentNeuralPrompts(project,role,{segments,seconds,crossfadeSec,segmentSeconds:timing.segmentSeconds});
   onProgress('로컬 신경망 독립 악기 오디오 '+INSTRUMENT[role][1]+' '+(index+1)+'/'+selectedRoles.length+' 생성 중');
   const rendered=await generate({
-   python,modelDir,prompt:prompts[0],seconds,seed:4200+index*100
+   python,modelDir,prompt:prompts[0],seconds,seed:roleSeed
   },{segments,crossfadeSec,prompts,continuation:true,
     segmentSeconds:timing.segmentSeconds,trimToSeconds:timing.targetSec,session,signal,
     onProgress:(done,total)=>onProgress(INSTRUMENT[role][1]+' '+done+'/'+total+'구간')});
@@ -120,7 +123,9 @@ export async function renderAndStoreNeuralAudioStems(project,{
   tracks.push({...track,id:trackId,clips:[syncedClip],
    name:'MusicGen 개별 신경망 악기 · '+INSTRUMENT[role][1],
    type:'instrument',mute:!audible,solo:false,volume:audible?35:70,generatedBy:'musicgen-independent-audio',
-   sourceRole:role,sourceMidiTrackId:latestCompleteNeuralScore(project).get(role).id});
+   sourceRole:role,sourceMidiTrackId:latestCompleteNeuralScore(project).get(role).id,
+   sourceRoleSeed:roleSeed,sourceBpm:Number(project.bpm),
+   sourceScoreDurationSec:timing.targetSec});
  }
  alive(project,current,signal);
  let stored=false;
