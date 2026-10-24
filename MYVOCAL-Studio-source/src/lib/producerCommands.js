@@ -334,12 +334,49 @@ function applyProducerSectionTranspose85(project,cmd){
   kind:'section-midi-transpose-85',changed};
 }
 
-export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴에서 기타를 더 강하게 해줘','2절에서 피아노를 작게 해줘','브리지에서 스트링을 길게 해줘','2절에서 기타를 반음 내려줘','후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
+// 원본 #11·#62: 실제 MusicGen 독립 WAV의 재생 음량·음소거를 자연어로 편집한다.
+// audioEngine.js의 실시간 재생·오프라인 WAV 믹스가 track.volume/mute를 직접 사용한다.
+// 파일·MIDI·모델은 수정하지 않고 기존 프로젝트의 선택된 트랙 메타데이터만 바꾼다.
+const NEURAL_WAV_ROLES86=Object.freeze({
+ '멜로디':'melody','코드':'chords','베이스':'bass','드럼':'drums','기타':'guitar','패드':'pad'
+});
+function applyProducerNeuralWav86(project,cmd){
+ const mute=/^(멜로디|코드|베이스|드럼|기타|패드)\\s*(?:신경망\\s*)?(?:WAV|오디오)(?:를|을)?\\s*(음소거\\s*해\\s*줘|음소거\\s*해제해\\s*줘|소리\\s*켜\\s*줘)$/iu.exec(cmd);
+ const volume=/^(멜로디|코드|베이스|드럼|기타|패드)\\s*(?:신경망\\s*)?(?:WAV|오디오)(?:의)?\\s*음량(?:을)?\\s*(\\d{1,3})\\s*%?(?:로)?\\s*(?:설정해\\s*줘|맞춰\\s*줘)$/iu.exec(cmd);
+ if(!mute&&!volume)return null;
+ const label=(mute||volume)[1],role=NEURAL_WAV_ROLES86[label];
+ const tracks=project.tracks.filter(t=>t?.generatedBy==='musicgen-independent-audio'&&
+  t?.sourceRole===role&&t.type==='instrument'&&Array.isArray(t.clips)&&t.clips.some(c=>c.assetId));
+ if(tracks.length!==1)
+  throw Error(label+' 신경망 MusicGen WAV 트랙이 '+tracks.length+'개입니다. 편집할 트랙 하나를 확정한 뒤 실행하세요.');
+ const target=tracks[0];
+ let changed,description;
+ if(mute){
+  const muted=/^음소거\\s*해\\s*줘$/u.test(mute[2]);
+  if(Boolean(target.mute)===muted)throw Error(label+' 신경망 WAV가 이미 해당 재생 상태입니다.');
+  changed={...target,mute:muted,solo:false};
+  description=muted?'음소거':'음소거 해제';
+ }else{
+  const next=Number(volume[2]);
+  if(!Number.isSafeInteger(next)||next<0||next>100)
+   throw Error('실제 신경망 WAV 트랙 음량은 0~100%입니다.');
+  if(Number(target.volume??75)===next)throw Error(label+' 신경망 WAV가 이미 해당 음량입니다.');
+  changed={...target,volume:next};
+  description='재생 음량 '+next+'%';
+ }
+ return {project:{...project,tracks:project.tracks.map(t=>t.id===target.id?changed:t)},
+  response:label+' 실제 신경망 WAV '+description+'를 프로젝트 재생·WAV 믹스에 반영했습니다. 원본 오디오·MIDI·모델은 그대로입니다.',
+  kind:'neural-wav-mix-86',changed:1};
+}
+
+export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['베이스 오디오 음량을 50%로 설정해줘','드럼 WAV 음소거 해줘','드럼 WAV 음소거 해제해줘','인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴에서 기타를 더 강하게 해줘','2절에서 피아노를 작게 해줘','브리지에서 스트링을 길게 해줘','2절에서 기타를 반음 내려줘','후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
 export function applyProducerCommand(project,rawCommand){
  if(!project?.id||!Array.isArray(project.tracks))throw Error('편집할 음악 프로젝트가 없습니다.');
  if(typeof rawCommand!=='string'||rawCommand.length>300)throw Error('300자 이하의 수정 요청을 입력하세요.');
  const cmd=trimCommand(rawCommand);
  if(!cmd||/[\u0000-\u001f\u007f]/u.test(cmd))throw Error('수정 요청을 확인해 주세요.');
+ const neuralWav=applyProducerNeuralWav86(project,cmd);
+ if(neuralWav)return neuralWav;
  const sectionRest=applyProducerSectionRest83(project,cmd);
  if(sectionRest)return sectionRest;
  const dynamics=applyProducerSectionDynamics84(project,cmd);
