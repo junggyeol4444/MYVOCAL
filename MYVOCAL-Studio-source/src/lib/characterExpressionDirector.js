@@ -78,5 +78,54 @@ export function expressionAt(character,plan,time){
  const weight=expression==='neutral'?0:Math.max(0,magnitude*fade);
  return {expression,weight,lyric,dynamics:found.dynamics,energy:found.energy,source:found.emotion==='auto'?'가사 규칙 분석':'수동 지정'};
 }
+
+/**
+ * 원본 66항 #29/#33/#35: 등록된 실제 가창 WAV의 PCM 진폭을 읽어
+ * 기존 VRM 표정 타임라인의 강약에 반영한다. 가사 감정은 기존 규칙을
+ * 재사용하며 AI 감정 인식 또는 새로운 음성 생성이라고 주장하지 않는다.
+ * 입력 AudioBuffer와 캐릭터 저장 데이터는 절대 변경하지 않는다.
+ */
+export function createSingingWavExpressionPlan(character,audioBuffer,{midiStageDirection=null}={}){
+ const plan=createExpressionPlan(character);
+ if(!audioBuffer||typeof audioBuffer.getChannelData!=='function'||
+    !Number.isFinite(audioBuffer.sampleRate)||audioBuffer.sampleRate<8000||
+    audioBuffer.sampleRate>96000||!Number.isInteger(audioBuffer.numberOfChannels)||
+    audioBuffer.numberOfChannels<1||audioBuffer.numberOfChannels>2||
+    !Number.isFinite(audioBuffer.duration)||audioBuffer.duration<2||
+    audioBuffer.duration>360)
+  throw Error('실제 보컬 PCM 형식·곡 길이를 확인하세요.');
+ const channels=Array.from({length:audioBuffer.numberOfChannels},
+  (_,i)=>audioBuffer.getChannelData(i));
+ const sampleRate=audioBuffer.sampleRate;
+ const stride=Math.max(1,Math.floor(sampleRate/2000));
+ const rms=plan.cues.map(cue=>{
+  const from=Math.max(0,Math.floor(cue.startMs*sampleRate/1000));
+  const to=Math.min(channels[0].length,Math.ceil(cue.endMs*sampleRate/1000));
+  if(to<=from)throw Error('실제 가창 WAV보다 긴 한국어 표정 시간표입니다.');
+  let power=0,count=0;
+  for(let frame=from;frame<to;frame+=stride){
+   for(const samples of channels){
+    const sample=samples[frame];
+    if(!Number.isFinite(sample))throw Error('가창 WAV PCM에 잘못된 샘플이 있습니다.');
+    power+=sample*sample;count++;
+   }
+  }
+  return Math.sqrt(power/Math.max(1,count));
+ });
+ const maxRms=Math.max(...rms);
+ if(maxRms<.0001)throw Error('가창 WAV에서 표정 강약을 계산할 실제 발성이 없습니다.');
+ const energy=midiStageDirection?.perSecond;
+ if(energy!==undefined&&(!Array.isArray(energy)||
+    energy.some(v=>!Number.isFinite(v)||v<0||v>1)))
+  throw Error('원곡 MIDI 무대 에너지 시간표가 올바르지 않습니다.');
+ const cues=plan.cues.map((cue,i)=>{
+  const at=Math.floor((cue.startMs+cue.endMs)/2000);
+  const midiEnergy=energy?.[Math.min(energy.length-1,at)];
+  return {...cue,dynamics:Math.max(0,Math.min(1,rms[i]/maxRms)),
+   energy:Number.isFinite(midiEnergy)?midiEnergy:cue.energy};
+ });
+ return validateExpressionPlan(character,{...plan,cues,
+  source:'실제 보컬 PCM 강약·원곡 MIDI 에너지·한국어 가사 표정'});
+}
 export function usableExpressionPlan(character){try{return character?.expression87&&validateExpressionPlan(character,character.expression87)?character.expression87:null;}catch{return null;}}
 export function expressionPlanStatus(character){if(!character?.expression87)return '표정 타임라인 없음';try{validateExpressionPlan(character,character.expression87);return '표정 연출 저장됨';}catch{return '가사 변경 / 표정 계획 재검토 필요';}}
