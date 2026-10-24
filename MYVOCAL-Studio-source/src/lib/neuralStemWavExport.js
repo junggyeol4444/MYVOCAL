@@ -10,7 +10,8 @@ export const NEURAL_STEM_EXPORT_LABELS=Object.freeze({
  melody:'멜로디',chords:'코드',bass:'베이스',drums:'드럼',guitar:'기타',pad:'패드'
 });
 const validId=v=>typeof v==='string'&&v.length>0&&v.length<140;
-export function identifyOriginalNeuralWavTracks(project){
+export function identifyOriginalNeuralWavTracks(project,{requireAll=true}={}){
+ if(typeof requireAll!=='boolean')throw Error('신경망 악기 WAV 내보내기 범위가 올바르지 않습니다.');
  if(!project?.id||!Array.isArray(project.tracks))
   throw Error('기존 MYVOCAL 음악 프로젝트를 선택해 주세요.');
  const score=latestCompleteNeuralScore(project);
@@ -28,19 +29,23 @@ export function identifyOriginalNeuralWavTracks(project){
   if(!validId(clip.assetId)||clip.startBar!==1||
      !Number.isFinite(clip.durationSec)||clip.durationSec<150||clip.durationSec>360)
    continue;
-  if(result.has(role))throw Error('동일 악기의 실제 신경망 WAV 트랙이 둘 이상입니다. 원본은 유지하고 선택해 주세요.');
+  // 동일 MIDI에서 특정 악기를 다시 생성한 경우 원본을 지우지 않고
+  // 트랙 목록상 가장 최근에 추가된 WAV를 내보내기 대상으로 선택한다.
   result.set(role,{role,track,assetId:clip.assetId,durationSec:clip.durationSec});
  }
- if(result.size!==6||NEURAL_SCORE_ROLES.some(role=>!result.has(role)))
+ if(!result.size)throw Error('내보낼 MusicGen 독립 신경망 WAV 트랙이 없습니다.');
+ if(requireAll&&(result.size!==6||NEURAL_SCORE_ROLES.some(role=>!result.has(role))))
   throw Error('동일 회차 MusicGen 원천 6악기 편집 WAV 트랙이 모두 필요합니다.');
- return NEURAL_SCORE_ROLES.map(role=>result.get(role));
+ return NEURAL_SCORE_ROLES.filter(role=>result.has(role)).map(role=>result.get(role));
 }
 export async function exportOriginalNeuralWav(project,{
  role,current,loadFile=getFile,signal,onProgress=()=>{}
 }={}){
  if(!NEURAL_SCORE_ROLES.includes(role)||typeof loadFile!=='function'||
    typeof current!=='function')throw Error('내보낼 신경망 악기·프로젝트 저장소가 올바르지 않습니다.');
- const ordered=identifyOriginalNeuralWavTracks(project);
+ const ordered=identifyOriginalNeuralWavTracks(project,{requireAll:false});
+ if(!ordered.some(stem=>stem.role===role))
+  throw Error('선택한 악기의 실제 MusicGen WAV를 먼저 생성·저장하세요.');
  const guard=()=>{if(signal?.aborted||current()!==project)
   throw Error('악기 WAV 내보내기가 취소됐거나 프로젝트가 변경됐습니다. 원본은 보존합니다.');};
  guard();
