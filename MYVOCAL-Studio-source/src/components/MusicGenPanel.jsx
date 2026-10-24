@@ -4,6 +4,7 @@ import {generateMusicGenAudio} from '../lib/musicGenClient.js';
 import {splitMusicGenStems} from '../lib/musicStemsClient.js';
 import {generateMusicGenSequence} from '../lib/musicGenSequence.js';
 import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
+import {exportOriginalNeuralWav,NEURAL_STEM_EXPORT_LABELS} from '../lib/neuralStemWavExport.js';
 import {latestCompleteNeuralScore} from '../lib/neuralScoreBatch.js';
 import {planScoreMatchedMusicGenSegments} from '../lib/neuralStemScoreTiming.js';
 import {buildNeuralMusicPrompts} from '../lib/neuralMusicPromptTimeline.js';
@@ -27,6 +28,7 @@ export default function MusicGenPanel({project,onChange,notify}){
  const [sequence,setSequence]=useState(false),[scoreMatch,setScoreMatch]=useState(false),[continuation,setContinuation]=useState(false),[segments,setSegments]=useState('4'),[fade,setFade]=useState('0.5'),[partPrompts,setPartPrompts]=useState(''),[progress,setProgress]=useState('');
  const [stemMix,setStemMix]=useState({}),[remix,setRemix]=useState(null);
  const [neuralStemRole,setNeuralStemRole]=useState('all');
+ const [neuralExportRole,setNeuralExportRole]=useState('melody');
  const [midiPython,setMidiPython]=useState(''),[midiStem,setMidiStem]=useState('bass'),[midiResult,setMidiResult]=useState(null);
  const active=useRef(null),latest=useRef(project);latest.current=project;
  useEffect(()=>()=>active.current?.abort(),[]);
@@ -79,6 +81,26 @@ export default function MusicGenPanel({project,onChange,notify}){
    notify('기존 프로젝트에 MusicGen 원천 독립 악기 '+result.roles.join('·')+' '+result.tracks+'개 WAV 트랙을 새로 추가했습니다. MIDI 원곡 '+result.durationSec.toFixed(2)+'초에 동기화했습니다. 기존 트랙은 유지됩니다.');
   }catch(e){setError(e.message)}
   finally{active.current=null;setBusy(false);setProgress('')}
+ };
+ // 기존 IndexedDB의 실제 독립 신경망 WAV 바이트를 다시 인코딩하지 않고 내보낸다.
+ // 선택 악기만 생성한 프로젝트에서도 동작하며, 기존 녹음·모델·트랙은 변경하지 않는다.
+ const exportNeuralStem=async()=>{
+  if(busy)return;
+  const initial=latest.current,controller=new AbortController();active.current=controller;
+  setBusy(true);setError('');setProgress('선택한 신경망 악기 원본 WAV 확인 중');
+  let objectUrl='';
+  try{
+   const result=await exportOriginalNeuralWav(initial,{
+    role:neuralExportRole,current:()=>latest.current,signal:controller.signal,
+    onProgress:(done,total)=>setProgress('신경망 악기 PCM 검증 '+done+'/'+total)
+   });
+   if(controller.signal.aborted||latest.current!==initial)throw Error('WAV 내보내기가 취소됐거나 프로젝트가 변경됐습니다.');
+   objectUrl=URL.createObjectURL(result.file);
+   const link=document.createElement('a');link.href=objectUrl;link.download=result.file.name;
+   document.body.appendChild(link);try{link.click();}finally{link.remove();}
+   notify(NEURAL_STEM_EXPORT_LABELS[result.role]+' 신경망 악기 '+result.durationSec.toFixed(2)+'초 WAV 내보내기를 시작했습니다. 기존 트랙·원본 파일은 유지됩니다.');
+  }catch(e){setError(e.message)}
+  finally{if(objectUrl)setTimeout(()=>URL.revokeObjectURL(objectUrl),20000);active.current=null;setBusy(false);setProgress('');}
  };
  const oneClickProduction=async()=>{
   if(busy||!python||!modelDir||!demucsRepo)return;
@@ -245,6 +267,11 @@ export default function MusicGenPanel({project,onChange,notify}){
      </select></Field>
     <p className="muted">특정 악기 MIDI를 편집한 뒤 해당 악기만 새로 생성할 수 있습니다. 기존 6악기 WAV·MIDI는 덮어쓰지 않습니다.</p>
     <div className="mv7-actions"><Button disabled={busy||!python||!modelDir||!neuralScoreLengthOK} onClick={generateSelectedNeuralStems}>{neuralStemRole==='all'?'MIDI 동기화 6악기 MusicGen WAV 생성·트랙 저장':'선택한 악기 MusicGen WAV 신규 트랙 생성'}</Button></div>
+    <Field label="저장된 독립 신경망 악기 WAV 개별 내보내기"><select value={neuralExportRole} disabled={busy} onChange={e=>setNeuralExportRole(e.target.value)}>
+     {Object.entries(NEURAL_STEM_EXPORT_LABELS).map(([role,label])=><option key={role} value={role}>{label} · 최신 생성 WAV</option>)}
+    </select></Field>
+    <div className="mv7-actions"><Button disabled={busy} onClick={exportNeuralStem}>선택한 독립 악기 원본 WAV 저장</Button></div>
+    <p className="muted">이미 프로젝트에 저장한 MusicGen 악기 PCM만 내보냅니다. 모델을 다시 실행하지 않으며 같은 MIDI 악기를 재생성했다면 가장 최근 WAV를 선택합니다.</p>
    </div>}
    <div className="mv7-item">
     <Field label="기존 WAV 불러와서 분리"><input type="file" accept=".wav,audio/wav" disabled={busy} onChange={async e=>{
