@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {Button,Field,Notice} from './UI';
 import {getFile,putFile,putFileNew,removeFile} from '../lib/assetDb.js';
 import {renderNeuralPersonLip} from '../lib/neuralPersonLipClient.js';
+import {assertUsableSingingWav} from '../lib/singingOutputValidation.js';
 import {genId} from '../lib/schema.js';
 import {createPersonLipSettings,personAudioAssets,personVideoAssets,renderPersonLipFrame,savePersonLipSettings,validatePersonLipAudio,validatePersonLipSettings} from '../lib/personLipSync.js';
 import {recordPersonLipWebM,supportedPersonLipRecording} from '../lib/personLipRecording.js';
@@ -13,6 +14,7 @@ export default function PersonLipSyncEditor({character,onSave,notify}){
  const [audioFile,setAudioFile]=useState(null),[videoUrl,setVideoUrl]=useState(''),[audioUrl,setAudioUrl]=useState('');
  const [neuralPython,setNeuralPython]=useState(''),[neuralRoot,setNeuralRoot]=useState(''),[neuralCheckpoint,setNeuralCheckpoint]=useState('');
  const [neuralModelRights,setNeuralModelRights]=useState(false),[neuralResize,setNeuralResize]=useState(2);
+ const [neuralFullSongVocal,setNeuralFullSongVocal]=useState(null),[neuralFullSongSoundtrack,setNeuralFullSongSoundtrack]=useState(null);
  const [readyVersion,setReadyVersion]=useState(0);
  const [status,setStatus]=useState('등록된 로컬 원본을 확인하는 중…'),[time,setTime]=useState(0),[playing,setPlaying]=useState(false),[exporting,setExporting]=useState(false),[progress,setProgress]=useState(0),[guide,setGuide]=useState(true),[audioConsent,setAudioConsent]=useState(false);
  const canvasRef=useRef(null),videoRef=useRef(null),audioRef=useRef(null),raf=useRef(0),controller=useRef(null),mounted=useRef(true);
@@ -71,19 +73,40 @@ export default function PersonLipSyncEditor({character,onSave,notify}){
    notify('STEP86 로컬 WebM 출력 완료 · 가창 오디오 포함 (MP4는 98단계)');
   }catch(e){notify('STEP86 출력 실패: '+e.message);}finally{controller.current=null;if(mounted.current){setExporting(false);setPlaying(false);setTime(0);}}
  };
+ const importNeuralFullSong=async(event,kind)=>{
+  const raw=event.target.files?.[0]||null;
+  if(!raw){if(kind==='vocal')setNeuralFullSongVocal(null);else setNeuralFullSongSoundtrack(null);return;}
+  try{
+   if(!/\\.wav$/i.test(raw.name)||raw.size<128||raw.size>80*1024*1024)
+    throw Error('3~6분 원곡은 80MiB 이하 PCM WAV 파일이어야 합니다.');
+   const info=assertUsableSingingWav(await raw.arrayBuffer(),{maxDurationSec:360});
+   if(info.durationSec<150||info.durationSec>360)
+    throw Error('전곡 가창/음악 WAV는 150~360초여야 합니다.');
+   const safe=new File([raw],raw.name,{type:'audio/wav'});
+   if(kind==='vocal')setNeuralFullSongVocal(safe);
+   else setNeuralFullSongSoundtrack(safe);
+   notify((kind==='vocal'?'전곡 보컬':'전곡 음악 믹스')+' WAV '+info.durationSec.toFixed(1)+'초를 원본 변경 없이 선택했습니다.');
+  }catch(error){
+   event.target.value='';
+   if(kind==='vocal')setNeuralFullSongVocal(null);
+   else setNeuralFullSongSoundtrack(null);
+   notify('전곡 WAV 선택 실패: '+error.message);
+  }
+ };
  const exportNeuralVideo=async()=>{
-  if(!isReady||exporting||!audioConsent||!neuralModelRights){notify('사용 권한을 확인하고 실제 사람 영상·보컬을 준비하세요.');return;}
+  if((!isReady&&!neuralFullSongVocal)||!videoUrl||exporting||!audioConsent||!neuralModelRights){notify('사용 권한을 확인하고 실제 사람 영상·보컬을 준비하세요.');return;}
   let newId='';
   const abort=new AbortController();controller.current=abort;
   setExporting(true);setStatus('로컬 Wav2Lip 신경망에서 실제 사람 얼굴과 노래를 합성하는 중…');
   try{
    if(!['self','owned','licensed'].includes(character.rights))throw Error('본인 또는 사용 허가된 사람만 신경망 립싱크에 사용할 수 있습니다.');
    const source=await getFile(settings.videoAssetId);
-   const vocals=audioFile||await getFile(settings.audioAssetId);
+   const vocals=neuralFullSongVocal||audioFile||await getFile(settings.audioAssetId);
    if(!(source instanceof Blob)||!(vocals instanceof Blob))throw Error('등록된 영상 또는 가창 오디오 원본을 읽을 수 없습니다.');
    const result=await renderNeuralPersonLip(source,vocals,{
     python:neuralPython,root:neuralRoot,checkpoint:neuralCheckpoint,resize:neuralResize,
-    rightsConfirmed:audioConsent,modelRights:neuralModelRights
+    rightsConfirmed:audioConsent,modelRights:neuralModelRights,
+    soundtrack:neuralFullSongSoundtrack
    },{signal:abort.signal});
    if(abort.signal.aborted)throw Error('사용자가 신경망 립싱크 영상을 취소했습니다.');
    // Preserve character/video/audio originals. The new neural MP4 is a NEW
@@ -136,8 +159,19 @@ export default function PersonLipSyncEditor({character,onSave,notify}){
     <Field label="실제 신경망 체크포인트 (.pth)"><input value={neuralCheckpoint} disabled={exporting} onChange={e=>setNeuralCheckpoint(e.target.value)} placeholder="D:\\AI\\Wav2Lip\\checkpoints\\wav2lip.pth"/></Field>
     <Field label="영상 축소 배율"><select value={neuralResize} disabled={exporting} onChange={e=>setNeuralResize(Number(e.target.value))}><option value={1}>1 (원본)</option><option value={2}>2 (권장)</option><option value={3}>3</option><option value={4}>4</option></select></Field>
    </div>
+   <Field label="3~6분 실제 가창 WAV (선택하면 기존 30초 미리보기 오디오 대신 사용)">
+    <input type="file" accept=".wav,audio/wav,audio/x-wav" disabled={exporting}
+     onChange={event=>importNeuralFullSong(event,'vocal')}/>
+   </Field>
+   {neuralFullSongVocal&&<p className="muted">선택한 전곡 가창: {neuralFullSongVocal.name} · {Math.round(neuralFullSongVocal.size/1024/1024)}MiB</p>}
+   <Field label="3~6분 최종 반주+보컬 믹스 WAV (선택)">
+    <input type="file" accept=".wav,audio/wav,audio/x-wav" disabled={exporting}
+     onChange={event=>importNeuralFullSong(event,'soundtrack')}/>
+   </Field>
+   {neuralFullSongSoundtrack&&<p className="muted">최종 MP4 오디오: {neuralFullSongSoundtrack.name}</p>}
+   <p className="muted">3~6분 전곡을 선택하면 기존 Windows EXE가 짧은 허가 영상의 격리 사본을 반복 준비한 뒤 실제 Wav2Lip 신경망으로 전곡을 처리합니다. FFmpeg·FFprobe와 설치된 신경망 모델이 필요하며 원본 영상·가창 파일은 변경하지 않습니다.</p>
    <label><input type="checkbox" checked={neuralModelRights} disabled={exporting} onChange={e=>setNeuralModelRights(e.target.checked)}/>설치된 신경망 모델과 이 영상의 사용 권한·라이선스를 확인했습니다.</label>
-   <Button disabled={!isReady||exporting||!audioConsent||!neuralModelRights} onClick={exportNeuralVideo}>Wav2Lip 실제 MP4 만들고 라이브러리에 저장</Button>
+   <Button disabled={(!isReady&&!neuralFullSongVocal)||!videoUrl||exporting||!audioConsent||!neuralModelRights} onClick={exportNeuralVideo}>Wav2Lip 실제 MP4 만들고 라이브러리에 저장</Button>
   </div>
   <Notice>원본은 그대로 보존되며 새 오디오는 캐릭터 자산으로 로컬 저장되어 프로젝트 백업에 포함됩니다. 시간표나 입 위치가 부정확하면 출력도 부정확합니다. 실제 Windows 실행·GPU 품질·인물 얼굴의 사실적인 변형은 별도 검증이 필요합니다.</Notice>
  </div>;
