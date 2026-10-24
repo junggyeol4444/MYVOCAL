@@ -309,7 +309,32 @@ function applyProducerSectionDynamics84(project,cmd){
   kind:'section-midi-dynamics-84',changed};
 }
 
-export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴에서 기타를 더 강하게 해줘','2절에서 피아노를 작게 해줘','브리지에서 스트링을 길게 해줘','후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
+// 원본 66항 #11·#62: 지정 악기의 MIDI 음높이를 실제 음표에 적용한다.
+// 다른 악기·원본 WAV·프로젝트 자산을 변경하지 않고 음역 초과는 전체 거부한다.
+function applyProducerSectionTranspose85(project,cmd){
+ const match=/^(마지막\s*후렴|인트로|전주|1절|2절|후렴|브리지|아웃트로|엔딩)(?:에서|의)?\s*(베이스|기타|피아노|스트링|신스|패드)(?:을|를)?\s*(반음|한\s*음|한\s*옥타브)\s*(올려\s*줘|올려\s*주세요|내려\s*줘|내려\s*주세요)$/u.exec(cmd);
+ if(!match)return null;
+ const sectionLabel=match[1].replace(/\s+/gu,' ');
+ const instrument=match[2],interval=match[3].replace(/\s+/gu,''),direction=match[4];
+ const amount=interval==='반음'?1:interval==='한음'?2:12;
+ const delta=/^올려/u.test(direction)?amount:-amount;
+ const role=Object.keys(SECTION_REST_LABELS83).find(key=>SECTION_REST_LABELS83[key]===instrument);
+ const windows=sectionRestWindows83(project,sectionLabel),track=sectionRestTrack83(project,role);
+ let changed=0;
+ const notes=track.midiNotes.map(note=>{
+  if(!playableNote(note)||!windows.some(w=>note.startBeat>=w.fromBeat&&note.startBeat<w.toBeat))return note;
+  const pitch=note.pitch+delta;
+  if(pitch<0||pitch>127)throw Error('음역을 벗어나는 MIDI 음표가 있어 '+sectionLabel+'의 '+instrument+'를 변경하지 않았습니다.');
+  changed++;return {...note,pitch};
+ });
+ if(!changed)throw Error(sectionLabel+'에서 '+instrument+' MIDI 음표를 찾지 못했습니다. 원본을 보존합니다.');
+ const tracks=project.tracks.map(t=>t.id===track.id?{...t,midiNotes:notes}:t);
+ return {project:{...project,tracks},
+  response:sectionLabel+'의 '+instrument+' MIDI 음표 '+changed+'개를 '+interval+' '+(delta>0?'올렸습니다.':'내렸습니다.')+' 다른 트랙과 원본 녹음은 그대로입니다.',
+  kind:'section-midi-transpose-85',changed};
+}
+
+export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴에서 기타를 더 강하게 해줘','2절에서 피아노를 작게 해줘','브리지에서 스트링을 길게 해줘','2절에서 기타를 반음 내려줘','후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
 export function applyProducerCommand(project,rawCommand){
  if(!project?.id||!Array.isArray(project.tracks))throw Error('편집할 음악 프로젝트가 없습니다.');
  if(typeof rawCommand!=='string'||rawCommand.length>300)throw Error('300자 이하의 수정 요청을 입력하세요.');
@@ -319,6 +344,8 @@ export function applyProducerCommand(project,rawCommand){
  if(sectionRest)return sectionRest;
  const dynamics=applyProducerSectionDynamics84(project,cmd);
  if(dynamics)return dynamics;
+ const transpose=applyProducerSectionTranspose85(project,cmd);
+ if(transpose)return transpose;
  const windows=songWindows(project);
  const choruses=windows.filter(w=>isChorus(w.name));
  if(!choruses.length)throw Error('후렴 구간이 없습니다. 곡 구조에서 후렴을 추가해 주세요.');
