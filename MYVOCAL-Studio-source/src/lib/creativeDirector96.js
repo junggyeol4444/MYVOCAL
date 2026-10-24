@@ -26,6 +26,24 @@ function selectDirectedScene96(project,text){
  }
  return {scene:project.scenes[0],instruction:text};
 }
+// 기존 영상 파일은 건드리지 않고 스토리보드 시간만 조정한다.
+// 다른 장면과 겹치는 변경은 실제 MV 렌더 전에 차단한다.
+function sceneTimePlan96(project,scene,instruction){
+ const match=instruction.match(/^시간(?:을|를)?\s*(\d{1,3}(?:\.\d{1,3})?)\s*초?\s*(?:부터|~|-)\s*(\d{1,3}(?:\.\d{1,3})?)\s*초?\s*(?:까지)?\s*(?:로|으로)?\s*(?:바꿔|변경해|설정해)(?:줘|주세요)?[.!]?$/u);
+ if(!match)return null;
+ const start=Number(match[1]),end=Number(match[2]);
+ if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end>360||end-start<.05)
+  throw Error('장면 시간은 0~360초 범위이며 최소 0.05초 이상이어야 합니다.');
+ for(const other of project.scenes){
+  if(other.id===scene.id)continue;
+  if(!Number.isFinite(other.start)||!Number.isFinite(other.end)||other.end<=other.start)
+   throw Error('다른 장면의 시간 정보가 올바르지 않습니다.');
+  if(start<other.end&&end>other.start)
+   throw Error('장면 시간이 다른 장면과 겹칩니다. 기존 장면을 보존합니다.');
+ }
+ return {domain:'video',sceneId:scene.id,field:'sceneTime',value:{start,end},
+  summary:(scene.title||scene.id)+': '+scene.start+'~'+scene.end+'초 → '+start+'~'+end+'초'};
+}
 export function previewCreativeDirection96(project,command){
  if(!project?.id||!Array.isArray(project.scenes))throw Error('프로젝트가 필요합니다.');
  if(typeof command!=='string'||!command.trim()||command.length>500||/[\u0000-\u001f\u007f]/u.test(command))throw Error('500자 이하의 단일 명령을 입력하세요.');
@@ -65,9 +83,13 @@ export function previewCreativeDirection96(project,command){
  }else{
   const {scene,instruction}=selectDirectedScene96(project,text);
   if(!scene)throw Error('변경할 장면이 없습니다.');
-  const p=interpretMvInstruction93(project,scene.id,instruction);
-  action={domain:'video',sceneId:scene.id,sceneCommand:instruction,field:p.field,value:p.after,
-   summary:(scene.title||scene.id)+': '+p.summary};
+  const timing=sceneTimePlan96(project,scene,instruction);
+  if(timing)action={...timing,sceneCommand:instruction};
+  else{
+   const p=interpretMvInstruction93(project,scene.id,instruction);
+   action={domain:'video',sceneId:scene.id,sceneCommand:instruction,field:p.field,value:p.after,
+    summary:(scene.title||scene.id)+': '+p.summary};
+  }
  }
  return {version:1,projectId:project.id,command:text,action,source:sourceSnapshot96(project),summary:action.summary};
 }
@@ -92,9 +114,17 @@ export function applyCreativeDirection96(project,plan){
  if(plan?.version!==1||plan.projectId!==project?.id)throw Error('검토한 프로젝트가 아닙니다.');
  const current=sourceSnapshot96(project);
  if(current!==plan.source)throw Error('검토 후 내용이 변경되었습니다. 다시 미리 확인하세요.');
- const action=plan.action;if(!action||!['bpm','lyrics','location','outfit','camera','expression','action','lighting','neuralWav','midi'].includes(action.field))throw Error('지원하지 않는 수정입니다.');
+ const action=plan.action;if(!action||!['bpm','lyrics','location','outfit','camera','expression','action','lighting','neuralWav','midi','sceneTime'].includes(action.field))throw Error('지원하지 않는 수정입니다.');
  let updated;
- if(action.domain==='video'){
+ if(action.domain==='video'&&action.field==='sceneTime'){
+  const scene=project.scenes.find(s=>s.id===action.sceneId);
+  if(!scene)throw Error('변경할 장면이 없습니다.');
+  const verified=sceneTimePlan96(project,scene,action.sceneCommand||plan.command);
+  if(!verified||JSON.stringify(verified.value)!==JSON.stringify(action.value)||verified.summary!==plan.summary)
+   throw Error('장면 시간 미리보기와 적용 결과가 달라졌습니다.');
+  updated={...project,scenes:project.scenes.map(s=>s.id===scene.id?
+   {...s,start:verified.value.start,end:verified.value.end}:s)};
+ }else if(action.domain==='video'){
   const validation=interpretMvInstruction93(project,action.sceneId,action.sceneCommand||plan.command);
   if(validation.field!==action.field||validation.after!==action.value)throw Error('검토 결과가 변조되었습니다.');
   updated=applyMvInstruction93(project,validation);
@@ -114,4 +144,4 @@ export function applyCreativeDirection96(project,plan){
  const audit={command:plan.command,domain:action.domain,summary:plan.summary,at:new Date().toISOString()};
  return {...updated,creativeDirector96:{version:1,history:[...(project.creativeDirector96?.history||[]),audit].slice(-30)}};
 }
-export function directorCapabilities96(){return {music:['BPM 설정','가사 전체 수정','신경망 WAV 트랙 음량·음소거','구간별 MIDI 악기 쉼표·복원·강약·길이·음높이·후렴 편곡'],video:['장면 번호·정확한 제목으로 배경·의상·카메라·표정·동작·조명 변경','그리고로 음악·영상 명령 동시 적용'],unavailable:['자유 대화 AI','모델 미설치 시 영상 픽셀 생성','학습되지 않은 가창 모델 추론']};}
+export function directorCapabilities96(){return {music:['BPM 설정','가사 전체 수정','신경망 WAV 트랙 음량·음소거','구간별 MIDI 악기 쉼표·복원·강약·길이·음높이·후렴 편곡'],video:['장면 번호·정확한 제목으로 배경·의상·카메라·표정·동작·조명 변경','장면 시간(0~360초) 이동·겹침 방지','그리고로 음악·영상 명령 동시 적용'],unavailable:['자유 대화 AI','모델 미설치 시 영상 픽셀 생성','학습되지 않은 가창 모델 추론']};}
