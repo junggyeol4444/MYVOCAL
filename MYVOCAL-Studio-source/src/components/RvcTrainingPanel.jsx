@@ -10,6 +10,7 @@ export default function RvcTrainingPanel({voice,plans,add,notify}){
  const [planId,setPlanId]=useState(''),[root,setRoot]=useState(''),[python,setPython]=useState(''),[script,setScript]=useState('');
  const [args,setArgs]=useState('["--dataset","{dataset}","--output","{output}"]');
  const [mode,setMode]=useState('official'),[epochs,setEpochs]=useState(20),[batchSize,setBatchSize]=useState(2),[gpu,setGpu]=useState('0');
+ const [inferenceF0,setInferenceF0]=useState('pm');
  const [confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[status,setStatus]=useState(null),[error,setError]=useState('');
  const selected=(plans||[]).find(x=>x.id===planId&&x.engineId==='rvc')||(plans||[]).find(x=>x.engineId==='rvc');
  const ref=useRef(voice?.id);ref.current=voice?.id;
@@ -21,7 +22,7 @@ export default function RvcTrainingPanel({voice,plans,add,notify}){
    if(!['self','owned','licensed'].includes(voice.rights))throw Error('이 목소리로 학습할 권한이 없습니다.');
    const data=await packageTrainingPlan(selected,voice);
    if(ref.current!==originalVoice)throw Error('작업 중 목소리 선택이 변경됐습니다.');
-   const job=await startLocalRVCTraining(new Blob([data.bytes],{type:'application/zip'}),{root,python,script,args,mode,epochs,batchSize,gpu,voiceId:originalVoice,rightsConfirmed:confirmed},{session:session()});
+   const job=await startLocalRVCTraining(new Blob([data.bytes],{type:'application/zip'}),{root,python,script,args,mode,epochs,batchSize,gpu,inferenceF0,voiceId:originalVoice,rightsConfirmed:confirmed},{session:session()});
    setStatus({...job,voiceId:originalVoice});notify('설치된 로컬 학습 프로그램을 시작했습니다. 학습 성공과 모델 호환성은 결과 확인 후 판단합니다.');
   }catch(e){setError(e.message)}finally{setBusy(false)}
  };
@@ -56,6 +57,7 @@ export default function RvcTrainingPanel({voice,plans,add,notify}){
    <Field label="에포크 (1~1000)"><input type="number" min="1" max="1000" value={epochs} disabled={busy} onChange={e=>setEpochs(Number(e.target.value))}/></Field>
    <Field label="배치 크기 (1~64)"><input type="number" min="1" max="64" value={batchSize} disabled={busy} onChange={e=>setBatchSize(Number(e.target.value))}/></Field>
    <Field label="GPU 번호 (0~15)"><input value={gpu} disabled={busy} onChange={e=>setGpu(e.target.value)}/></Field>
+   <Field label="음정 추적 방식(F0)"><select value={inferenceF0} disabled={busy} onChange={e=>setInferenceF0(e.target.value)}><option value="pm">PM · 공식 기본 음정 추적</option><option value="rmvpe">RMVPE · 설치된 로컬 모델 사용</option></select></Field>
   </div>:<>  <Field label="설치된 학습 스크립트 (.py)"><input value={script} disabled={busy} onChange={e=>setScript(e.target.value)} placeholder="D:\\RVC\\train.py"/></Field>
   <Field label="학습 실행 인수 (JSON 배열)"><textarea value={args} disabled={busy} rows={3} onChange={e=>setArgs(e.target.value)}/></Field>
   <Notice><code>{'{dataset}'}</code>는 원본 복사본이 담긴 격리 작업 폴더이고, <code>{'{output}'}</code>은 새로 생성할 모델의 절대 경로입니다. 외부 스크립트가 실제로 두 인수를 지원해야 학습할 수 있습니다.</Notice>
