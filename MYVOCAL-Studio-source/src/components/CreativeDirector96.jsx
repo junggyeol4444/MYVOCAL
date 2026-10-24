@@ -14,7 +14,7 @@ export default function CreativeDirector96({project,onChange,notify,onOpenVideo}
  }catch(e){setPlan(null);setError(e.message);}};
  const caps=directorCapabilities96();
  return <Panel title="STEP96 · Creative Director" description="Music Director와 Video Director의 실제 프로젝트 타임라인 변경을 검토 후 적용합니다. 외부 AI 호출 없음.">
-  <label>한 번에 한 가지 로컬 명령<textarea rows={3} value={command} onChange={e=>{setCommand(e.target.value);setPlan(null);}} placeholder="BPM을 130으로 바꿔 그리고 2번째 장면의 배경을 비 오는 밤거리로 바꿔 / 2번째 장면의 시간을 20초부터 35초까지로 바꿔"/></label>
+  <label>로컬 명령(음악·영상 각각 한 가지까지)<textarea rows={3} value={command} onChange={e=>{setCommand(e.target.value);setPlan(null);}} placeholder="BPM을 130으로 바꿔 그리고 2번째 장면의 배경을 비 오는 밤거리로 바꿔 / 2번째 장면의 시간을 20초부터 35초까지로 바꿔"/></label>
   <p className="muted">음악: {caps.music.join(', ')} · 영상: {caps.video.join(', ')}</p>
   <div className="hstack"><Button onClick={inspect}>변경 미리 검토</Button>{plan&&<Button variant="primary" onClick={apply}>검토한 변경 적용</Button>}</div>
   {editedSceneId&&typeof onOpenVideo==='function'&&<Button onClick={()=>onOpenVideo(editedSceneId)}>수정한 장면의 실제 SD/SVD 영상 제작 화면 열기</Button>}
