@@ -14,7 +14,7 @@ import {makeImportedVocalTrack} from '../lib/lyricAlignment.js';
 import {genId} from '../lib/schema.js';
 import {putFilesAtomic,deleteFilesAtomic,getFile} from '../lib/assetDb.js';
 import {exportOriginalNeuralWav,NEURAL_STEM_EXPORT_LABELS} from '../lib/neuralStemWavExport.js';
-import {extendMvToFullSong} from '../lib/fullSongMvScenes.js';
+import {extendMvToFullSong,bindRegisteredDuetToAutoScenes} from '../lib/fullSongMvScenes.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
@@ -263,6 +263,18 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     if(finalDuration>0&&finalDuration<=360&&finalSource.scenes.length<120){
      const filled=extendMvToFullSong(finalSource,finalDuration,{newId:genId});
      if(filled.added)await Promise.resolve(commit(filled.project));
+    }
+    // 노래 생성 뒤 확정된 두 명의 실제 Voice·캐릭터를 기존 자동 장면에 연결한다.
+    // MusicGen이 가창보다 먼저 장면을 만든 경우에도 수동 장면·이미 생성된 영상은 보존한다.
+    const duetSceneSource=current();
+    if(duetSceneSource?.duetSingers?.version===1){
+     if(duetSceneSource.id!==project.id)throw Error('듀엣 자동 MV 중 프로젝트가 변경됐습니다.');
+     const cast=bindRegisteredDuetToAutoScenes(duetSceneSource,dataRef.current?.characters||[],
+      {includeReferences});
+     if(cast.updated){
+      await Promise.resolve(commit(cast.project));
+      setMessage('듀엣 자동 장면 '+cast.updated+'개에 두 가수별 실제 등록 원본 사진·원화를 연결했습니다.');
+     }
     }
     if(makeAutoScore&&makeNeuralSceneDirection){
      const source=current();
