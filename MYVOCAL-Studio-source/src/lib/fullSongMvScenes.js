@@ -27,8 +27,9 @@ export function bindRegisteredDuetToAutoScenes(project,characters,{includeRefere
    throw Error('듀엣 자동 MV는 등록된 실제 사람 또는 2D 캐릭터 원화가 필요합니다.');
   const assets=person?personPhotoAssets(character):characterArtworkAssets(character);
   const preferred=['portrait','front','full-body','expression','side','back','outfit'];
+  const priority=role=>{const index=preferred.indexOf(role);return index<0?preferred.length:index;};
   const original=assets.slice().sort((a,b)=>
-   preferred.indexOf(a.role)-preferred.indexOf(b.role)).find(asset=>asset?.id);
+   priority(a.role)-priority(b.role)).find(asset=>asset?.id);
   if(!original)throw Error('듀엣 가수마다 본인 또는 허가된 원본 사진·원화가 필요합니다.');
   if(person)validatePersonSource(character,original.id);
   else validateCharacterArtwork(character,original.id);
