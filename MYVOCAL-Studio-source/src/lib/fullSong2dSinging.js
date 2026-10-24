@@ -87,7 +87,9 @@ export async function recordFullSong2dCharacter({
  if(!performancePlan){
   const member=project.band90?.members?.find(m=>m.characterId===character.id);
   if(member&&PERFORMANCE_ROLES.includes(member.role)){
-   performancePlan=makeFullSongInstrumentPerformance(project,{durationSec:duration,role:member.role});
+   // 사용자가 해당 악기의 MIDI를 아직 만들지 않았다면 기존 2D 가창만 유지한다.
+   try{performancePlan=makeFullSongInstrumentPerformance(project,{durationSec:duration,role:member.role});}
+   catch{performancePlan=null;}
   }
  }
  const config={...settings,durationSec:duration},ctx=canvas.getContext('2d');
