@@ -5,6 +5,18 @@ import {summarizeOriginalMidiTheme,prependSongTheme} from './neuralMusicMotifCon
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const pitchName=n=>NOTES[n%12]+Math.floor(n/12-1);
 const limited=(s,n)=>[...String(s??'').replace(/[\r\n\t]/g,' ').trim()].slice(0,n).join('');
+// 원본 66항 #4: 저장된 실제 혼합 장르 비율을 MusicGen 조건에 유지한다.
+// 기존 단일 장르 프로젝트와 잘못된 임시 입력은 이전 설명으로 되돌린다.
+function neuralGenreMixText(mix){
+ if(!Array.isArray(mix)||mix.length<1||mix.length>3)return '';
+ const seen=new Set();let total=0;const names=[];
+ for(const item of mix){
+  const name=limited(item?.name,40),weight=Number(item?.weight);
+  if(!name||seen.has(name)||!Number.isSafeInteger(weight)||weight<1||weight>100)return '';
+  seen.add(name);total+=weight;names.push(name+' '+weight+'%');
+ }
+ return total===100?names.join(' + '):'';
+}
 function scoreSection(i,total){
  if(i===0)return 'Intro';
  if(i===total-1)return 'Outro';
@@ -19,8 +31,7 @@ function projectSectionAtBeat(project,beat){
   if(!Number.isInteger(bars)||bars<1||bars>512)return null;
   const end=position+4*bars;
   if(beat<end){
-   const genres=Array.isArray(section.genreMix)?section.genreMix.slice(0,5)
-    .map(g=>limited(g?.name,30)).filter(Boolean).join(', '):'';
+   const genres=neuralGenreMixText(section.genreMix);
    return {name:limited(section.name||'Verse',70),genres};
   }
   position=end;
@@ -43,7 +54,7 @@ export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSe
  const globalTheme=summarizeOriginalMidiTheme(batch);
  const totalSections=Math.max(1,Math.ceil(Number(project.neuralAutoScore?.bars||0)/8));
  const base=limited(basePrompt||project.prompt||project.title||'오리지널 한국어 노래',220);
- const genre=limited(project.genre||'K-pop',40),key=limited(project.key||'C Major',30);
+ const genre=neuralGenreMixText(project.genreMix)||limited(project.genre||'K-pop',40),key=limited(project.key||'C Major',30);
  return Array.from({length:segments},(_,index)=>{
   const fromSec=segmentSeconds.length?
    segmentSeconds.slice(0,index).reduce((sum,s)=>sum+s,0)-index*crossfadeSec:
