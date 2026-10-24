@@ -26,6 +26,7 @@ export default function MusicGenPanel({project,onChange,notify}){
  const [demucsRepo,setDemucsRepo]=useState(''),[demucsModel,setDemucsModel]=useState('htdemucs'),[demucsDevice,setDemucsDevice]=useState('auto'),[stems,setStems]=useState(null);
  const [sequence,setSequence]=useState(false),[scoreMatch,setScoreMatch]=useState(false),[continuation,setContinuation]=useState(false),[segments,setSegments]=useState('4'),[fade,setFade]=useState('0.5'),[partPrompts,setPartPrompts]=useState(''),[progress,setProgress]=useState('');
  const [stemMix,setStemMix]=useState({}),[remix,setRemix]=useState(null);
+ const [neuralStemRole,setNeuralStemRole]=useState('all');
  const [midiPython,setMidiPython]=useState(''),[midiStem,setMidiStem]=useState('bass'),[midiResult,setMidiResult]=useState(null);
  const active=useRef(null),latest=useRef(project);latest.current=project;
  useEffect(()=>()=>active.current?.abort(),[]);
@@ -43,7 +44,7 @@ export default function MusicGenPanel({project,onChange,notify}){
   const duration=Number(source.neuralAutoScore?.durationSec)||
    Number(source.neuralAutoScore?.bars)*4*60/Number(source.bpm);
   const parts=duration<=210?11:20;
-  const timing=planScoreMatchedMusicGenSegments(duration,parts,{fadeSec:.5});
+  const timing=planScoreMatchedMusicGenSegments(duration,parts,{fadeSec:.5,bpm:Number(source.bpm)});
   const prompts=buildNeuralMusicPrompts(source,{segments:parts,seconds:18,
    crossfadeSec:.5,segmentSeconds:timing.segmentSeconds,basePrompt:prompt});
   if(prompts.length!==parts)throw Error('MIDI 원곡 구간을 MusicGen으로 연결할 수 없습니다.');
@@ -62,19 +63,20 @@ export default function MusicGenPanel({project,onChange,notify}){
    setWav({file,projectId:initial.id});setUrl(URL.createObjectURL(file));notify(sequence?'실제 MusicGen 오디오 구간을 크로스페이드해 WAV를 만들었습니다. 구간별 음악적 연속성은 보장하지 않습니다.':'실제 로컬 MusicGen WAV를 수신했습니다. 미리 듣고 저장할 수 있습니다.');
   }catch(e){setError(e.message)}finally{active.current=null;setBusy(false)}
  };
- const generateSixNeuralStems=async()=>{
+ const generateSelectedNeuralStems=async()=>{
   if(busy||!python||!modelDir||!neuralScoreReady||!neuralScoreLengthOK)return;
   const initial=latest.current,controller=new AbortController();active.current=controller;
-  setBusy(true);setError('');setProgress('MIDI 원곡 길이에 맞춘 독립 6악기 MusicGen 오디오 생성 중');
+  setBusy(true);setError('');setProgress(neuralStemRole==='all'?'MIDI 원곡 길이에 맞춘 독립 6악기 MusicGen 생성 중':'선택한 독립 신경망 악기 WAV 생성 중');
   try{
    const result=await renderAndStoreNeuralAudioStems(initial,{
     python,modelDir,seconds:18,segments:neuralScoreSeconds<=210?11:20,
+    roles:neuralStemRole==='all'?undefined:[neuralStemRole],
     crossfadeSec:.5,audible:true,session:window.__MYVOCAL_SESSION_KEY,
     signal:controller.signal,current:()=>latest.current,onChange,
     newId:genId,readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
     save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setProgress
    });
-   notify('기존 프로젝트에 원천 생성 6악기 MusicGen WAV '+result.tracks+'트랙을 추가했습니다. MIDI 원곡 길이 '+result.durationSec.toFixed(2)+'초에 맞췄습니다.');
+   notify('기존 프로젝트에 MusicGen 원천 독립 악기 '+result.roles.join('·')+' '+result.tracks+'개 WAV 트랙을 새로 추가했습니다. MIDI 원곡 '+result.durationSec.toFixed(2)+'초에 동기화했습니다. 기존 트랙은 유지됩니다.');
   }catch(e){setError(e.message)}
   finally{active.current=null;setBusy(false);setProgress('')}
  };
@@ -235,7 +237,14 @@ export default function MusicGenPanel({project,onChange,notify}){
    {neuralScoreReady&&<div className="mv7-item">
     <p className="muted">동일 AI 작곡 회차의 멜로디·코드·베이스·드럼·기타·패드 MIDI를 기준으로 6개 MusicGen WAV를 독립 생성하여 편집 트랙에 저장합니다. Demucs 사후 분리가 아니며 악기 격리 품질은 로컬 모델에 따라 달라집니다.</p>
     <p className="muted">MIDI 곡 길이: {neuralScoreLengthOK?neuralScoreSeconds.toFixed(2)+'초':'3~6분 원곡 정보 확인 필요'}</p>
-    <div className="mv7-actions"><Button disabled={busy||!python||!modelDir||!neuralScoreLengthOK} onClick={generateSixNeuralStems}>MIDI 동기화 6악기 MusicGen WAV 생성·트랙 저장</Button></div>
+    <Field label="독립 MusicGen 생성 악기"><select value={neuralStemRole} disabled={busy} onChange={e=>setNeuralStemRole(e.target.value)}>
+      <option value="all">6악기 전체 (각각 독립 WAV)</option>
+      <option value="melody">멜로디만 새 WAV 생성</option><option value="chords">코드만 새 WAV 생성</option>
+      <option value="bass">베이스만 새 WAV 생성</option><option value="drums">드럼만 새 WAV 생성</option>
+      <option value="guitar">기타만 새 WAV 생성</option><option value="pad">패드만 새 WAV 생성</option>
+     </select></Field>
+    <p className="muted">특정 악기 MIDI를 편집한 뒤 해당 악기만 새로 생성할 수 있습니다. 기존 6악기 WAV·MIDI는 덮어쓰지 않습니다.</p>
+    <div className="mv7-actions"><Button disabled={busy||!python||!modelDir||!neuralScoreLengthOK} onClick={generateSelectedNeuralStems}>{neuralStemRole==='all'?'MIDI 동기화 6악기 MusicGen WAV 생성·트랙 저장':'선택한 악기 MusicGen WAV 신규 트랙 생성'}</Button></div>
    </div>}
    <div className="mv7-item">
     <Field label="기존 WAV 불러와서 분리"><input type="file" accept=".wav,audio/wav" disabled={busy} onChange={async e=>{
