@@ -5,7 +5,7 @@
 import {validateAnimationSettings,drawAnimationFrame} from './characterAnimation2d.js';
 import {validateLayerPlan} from './characterLayers.js';
 import {validateLipSync,phonemeViseme} from './characterLipSync.js';
-import {usableExpressionPlan} from './characterExpressionDirector.js';
+import {usableExpressionPlan,createExpressionPlan,createSingingWavExpressionPlan} from './characterExpressionDirector.js';
 import {usableDancePlan} from './characterDanceDirector.js';
 import {usablePerformance89,PERFORMANCE_ROLES} from './characterPerformance89.js';
 import {makeFullSongInstrumentPerformance} from './fullSongInstrumentPerformance.js';
@@ -79,7 +79,14 @@ export async function recordFullSong2dCharacter({
   fullSong2dKoreanLipSync(project,character);
  if(lipSync.cues.some(c=>c.endMs>duration*1000+65))
   throw Error('한국어 원곡 입 모양이 실제 완성 음악보다 깁니다.');
- const expressionPlan=usableExpressionPlan(character),dancePlan=usableDancePlan(character);
+ // 같은 실제 보컬 음소 시간축을 2D 표정에도 사용한다. 기존 사용자
+ // 표정이 해당 음소와 일치하면 우선하고, 없으면 실제 PCM 강약을 분석한다.
+ // 저장된 캐릭터·원화·사용자 표정은 변경하지 않는다.
+ const singingCharacter={...character,lipSync};
+ const expressionPlan=usableExpressionPlan(singingCharacter)||
+  (vocalAudioBuffer?createSingingWavExpressionPlan(singingCharacter,vocalAudioBuffer):
+   createExpressionPlan(singingCharacter));
+ const dancePlan=usableDancePlan(character);
  // STEP89에서 직접 검토·저장한 연기를 최우선으로 유지한다.
  // 별도 연기가 없고 이 인물이 전곡 밴드의 악기 연주자로 지정된 경우에만
  // 원곡 MIDI의 3~6분 실제 음표로 해당 악기 동작을 계산한다.
@@ -96,7 +103,7 @@ export async function recordFullSong2dCharacter({
  if(!ctx)throw Error('현재 Windows WebView2가 2D 공연 Canvas를 지원하지 않습니다.');
  const draw=time=>drawAnimationFrame(ctx,image,character.layerPlan,config,
   Math.min(time,duration),canvas.width,canvas.height,lipSync,expressionPlan,
-  character,dancePlan,performancePlan);
+  singingCharacter,dancePlan,performancePlan);
  const webm=await record({canvas,duration,fps:settings.fps,draw,onProgress,signal,audioBlob,prewarmedAudioContext});
  if(signal?.aborted)throw Error('2D 공연 녹화 완료 전 취소됐습니다.');
  if(!(webm instanceof Blob)||webm.size<1000||webm.type!=='video/webm')
