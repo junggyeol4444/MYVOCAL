@@ -109,6 +109,50 @@ function accessorLoader(json,buffers){
   return {array:out,components:n,count:a.count};
  };
 }
+// glTF/VRM 매트릭스 노드를 실제 본 회전에도 사용할 수 있도록 TRS로 분해한다.
+// 미변경 노드에는 아래 추출된 원본 matrix 자체를 그대로 사용한다.
+function decomposeGLTFMatrix(matrix){
+ if(!Array.isArray(matrix)||matrix.length!==16||!matrix.every(Number.isFinite)||
+    Math.abs(matrix[3])>1e-6||Math.abs(matrix[7])>1e-6||
+    Math.abs(matrix[11])>1e-6||Math.abs(matrix[15]-1)>1e-6)
+  throw Error('VRM/glTF 노드에 지원되지 않는 4×4 변환 행렬이 있습니다.');
+ const translation=matrix.slice(12,15);
+ const axis=[0,1,2].map(k=>matrix.slice(k*4,k*4+3));
+ const scale=axis.map(v=>Math.hypot(...v));
+ if(scale.some(x=>x<1e-8||!Number.isFinite(x)))throw Error('VRM/glTF 본의 크기가 0입니다.');
+ // 음수 스케일이 포함된 미러링 좌표계는 한 축의 부호를 보존한다.
+ const cross=[axis[0][1]*axis[1][2]-axis[0][2]*axis[1][1],
+  axis[0][2]*axis[1][0]-axis[0][0]*axis[1][2],
+  axis[0][0]*axis[1][1]-axis[0][1]*axis[1][0]];
+ const determinant=cross.reduce((sum,v,i)=>sum+v*axis[2][i],0);
+ if(Math.abs(determinant)<1e-10)throw Error('VRM/glTF 본의 축이 겹쳐 회전할 수 없습니다.');
+ if(determinant<0)scale[0]*=-1;
+ const col=axis.map((v,i)=>v.map(x=>x/scale[i]));
+ const dot=(x,y)=>col[x].reduce((sum,v,k)=>sum+v*col[y][k],0);
+ if([dot(0,1),dot(0,2),dot(1,2)].some(x=>Math.abs(x)>1e-4))
+  throw Error('VRM/glTF 본의 기울어진 행렬은 안전하게 회전할 수 없습니다.');
+ const m00=col[0][0],m01=col[1][0],m02=col[2][0];
+ const m10=col[0][1],m11=col[1][1],m12=col[2][1];
+ const m20=col[0][2],m21=col[1][2],m22=col[2][2];
+ let quaternion;
+ const trace=m00+m11+m22;
+ if(trace>0){
+  const n=Math.sqrt(trace+1)*2;
+  quaternion=[(m21-m12)/n,(m02-m20)/n,(m10-m01)/n,n/4];
+ }else if(m00>m11&&m00>m22){
+  const n=Math.sqrt(1+m00-m11-m22)*2;
+  quaternion=[n/4,(m01+m10)/n,(m02+m20)/n,(m21-m12)/n];
+ }else if(m11>m22){
+  const n=Math.sqrt(1+m11-m00-m22)*2;
+  quaternion=[(m01+m10)/n,n/4,(m12+m21)/n,(m02-m20)/n];
+ }else{
+  const n=Math.sqrt(1+m22-m00-m11)*2;
+  quaternion=[(m02+m20)/n,(m12+m21)/n,n/4,(m10-m01)/n];
+ }
+ const qnorm=Math.hypot(...quaternion);
+ if(!Number.isFinite(qnorm)||qnorm<1e-8)throw Error('VRM/glTF 본의 회전 쿼터니언이 올바르지 않습니다.');
+ return {translation,rotation:quaternion.map(x=>x/qnorm),scale};
+}
 function vrmInfo(json){
  const vrm1=json.extensions?.VRMC_vrm,vrm0=json.extensions?.VRM;
  const map={};
@@ -128,7 +172,13 @@ export function parseCharacter3d(arrayBuffer,filename){
  if(bytes.length>40*1024*1024)throw Error('모델은 40MB 이하여야 합니다.');
  const {json,buffers,extension}=loadContainer(bytes,filename),read=accessorLoader(json,buffers);
  if(arr(json.nodes).length>MAX_NODES)throw Error('노드가 너무 많습니다.');
- const vrm=vrmInfo(json), nodes=arr(json.nodes).map((node,i)=>({index:i,name:String(node.name||`Node ${i}`).slice(0,100),children:arr(node.children),mesh:node.mesh,skin:node.skin,translation:arr(node.translation).length===3?node.translation:[0,0,0],rotation:arr(node.rotation).length===4?node.rotation:[0,0,0,1],scale:arr(node.scale).length===3?node.scale:[1,1,1],matrix:node.matrix,weights:arr(node.weights)}));
+ const vrm=vrmInfo(json), nodes=arr(json.nodes).map((node,i)=>{
+  const decomposed=node.matrix?decomposeGLTFMatrix(node.matrix):null;
+  const translation=decomposed?.translation||(arr(node.translation).length===3?node.translation:[0,0,0]);
+  const rotation=decomposed?.rotation||(arr(node.rotation).length===4?node.rotation:[0,0,0,1]);
+  const scale=decomposed?.scale||(arr(node.scale).length===3?node.scale:[1,1,1]);
+  return {index:i,name:String(node.name||`Node ${i}`).slice(0,100),children:arr(node.children),mesh:node.mesh,skin:node.skin,translation,rotation,scale,matrix:node.matrix,weights:arr(node.weights)};
+ });
  const skins=arr(json.skins).map(s=>({joints:arr(s.joints),inverseBind:s.inverseBindMatrices===undefined?null:read(s.inverseBindMatrices).array,skeleton:s.skeleton}));
  const primitives=[];let vertexCount=0;
  nodes.forEach(node=>{if(node.mesh===undefined)return;const mesh=json.meshes?.[node.mesh];if(!mesh)throw Error('메시 참조가 없습니다.');
