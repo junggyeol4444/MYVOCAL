@@ -6,6 +6,7 @@ import LocalMvBatchPanel from '../components/LocalMvBatchPanel.jsx';
 import Pv95Editor from '../components/Pv95Editor.jsx';
 import {interpretMvInstruction93,applyMvInstruction93,undoMvInstruction93} from '../lib/mvNaturalEdit93.js';
 import {regenerateNaturalMvScene,undoNeuralNaturalMvScene} from '../lib/mvNaturalMediaRegeneration.js';
+import {previewSectionNaturalEdit,applySectionNaturalEdit,undoSectionNaturalEdit,regenerateSectionNaturalMvScenes,undoSectionNaturalMvScenes} from '../lib/mvSectionNaturalEdit.js';
 import {prepareCharacterReplace94,applyCharacterReplace94,undoCharacterReplace94} from '../lib/characterReplace94.js';
 import {eligibleBandCharacters} from '../lib/virtualBand90.js';
 import {prepareRegeneration92,verifyRegeneration92,applyRegeneration92,undoRegeneration92} from '../lib/identityRegeneration92.js';
@@ -62,6 +63,9 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  const [pvBusy,setPvBusy]=useState(false),[pvStatus,setPvStatus]=useState('2D 캐릭터 그림 선택 필요');
  const pvAbort=useRef(null);
  const natural93Abort=useRef(null);
+ const sectionAbort=useRef(null);
+ const [sectionCommand,setSectionCommand]=useState(''),[sectionPlan,setSectionPlan]=useState(null);
+ const [sectionBusy,setSectionBusy]=useState(false),[sectionStatus,setSectionStatus]=useState('');
  const latestProject=useRef(null);latestProject.current=p;
  const latestCharacters=useRef([]);latestCharacters.current=data.characters;
  const readSession=()=>typeof window==='undefined'?'':window.__MYVOCAL_SESSION_KEY||'';
@@ -372,6 +376,47 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
   const next=undoNeuralNaturalMvScene(p);onChange(next);setReview93(null);
   setNatural93Status('직전 장면과 이전 이미지·영상 연결 복원 완료');
  }catch(e){notify('실제 영상 수정 복원: '+e.message);}};
+ const reviewSection93=()=>{
+  try{const plan=previewSectionNaturalEdit(p,sectionCommand);setSectionPlan(plan);setSectionStatus(plan.summary);}
+  catch(e){setSectionPlan(null);notify('구간 편집 검토: '+e.message);}
+ };
+ const applySection93=()=>{
+  try{
+   if(!sectionPlan)throw Error('먼저 구간 편집 내용을 검토하세요.');
+   const next=applySectionNaturalEdit(p,sectionPlan);
+   latestProject.current=next;onChange(next);setSectionPlan(null);
+   setSectionStatus('구간 장면 '+sectionPlan.sceneIds.length+'개 설명 수정 완료');
+  }catch(e){setSectionPlan(null);notify('구간 설명 수정: '+e.message);}
+ };
+ const undoSection93=()=>{
+  try{const next=undoSectionNaturalEdit(p);latestProject.current=next;onChange(next);
+   setSectionStatus('직전 구간 장면 설명 복원 완료');setSectionPlan(null);}
+  catch(e){notify('구간 설명 복원: '+e.message);}
+ };
+ const renderSection93=async()=>{
+  if(!sectionPlan||sectionBusy||natural93Busy||imageBusy||videoBusy||personBusy||pvBusy||regen92Busy)return;
+  const controller=new AbortController();sectionAbort.current=controller;setSectionBusy(true);
+  try{
+   if(!checkpoint||!checkpoints.includes(checkpoint)||!videoModel||!videoModels.includes(videoModel))
+    throw Error('로컬 SD 이미지·SVD 영상 모델을 먼저 확인하세요.');
+   const [width,height]=imageSize.split('x').map(Number);
+   const result=await regenerateSectionNaturalMvScenes(p,sectionPlan,data.characters,{
+    port:Number(imagePort),session:readSession(),checkpoint,videoModel,width,height,
+    imageSteps:Number(imageSteps),frames:Number(videoFrames),fps:Number(videoFps),
+    videoSteps:Number(videoSteps),motion:Number(videoMotion),signal:controller.signal,
+    current:()=>latestProject.current,currentCharacters:()=>latestCharacters.current,
+    commit:next=>{latestProject.current=next;onChange(next)},onProgress:setSectionStatus
+   });
+   setSectionPlan(null);setSectionStatus(result.generatedVideos+'개 실제 SD/SVD 장면 신규 저장 완료');
+   notify('구간 실제 영상 '+result.generatedVideos+'개 생성 완료');
+  }catch(e){setSectionStatus('구간 생성 중단: '+e.message);notify('구간 실제 영상 생성: '+e.message);}
+  finally{sectionAbort.current=null;setSectionBusy(false);}
+ };
+ const undoSectionVideo93=()=>{
+  try{const next=undoSectionNaturalMvScenes(p);latestProject.current=next;onChange(next);
+   setSectionStatus('직전 구간의 원래 이미지·영상 연결을 일괄 복원했습니다.');setSectionPlan(null);}
+  catch(e){notify('구간 영상 연결 복원: '+e.message);}
+ };
  const reviewReplacement94=()=>{try{setReview94(prepareCharacterReplace94(p,replace94All?p.scenes.map(s=>s.id):[current.id],replace94Id,data.characters));}catch(e){setReview94(null);notify('STEP94: '+e.message);}};
  const applyReplacement94=()=>{try{if(!review94)throw Error('교체 내용을 먼저 확인하세요.');onChange(applyCharacterReplace94(p,review94,data.characters));setReview94(null);notify('캐릭터 링크 교체 완료. 이전 미디어는 복원 이력에 보존되고 새 인물의 이미지 생성은 별도로 필요합니다.');}catch(e){setReview94(null);notify('STEP94 적용 실패: '+e.message);}};
  const change=(patch)=>onChange({...p,...patch});
@@ -394,6 +439,25 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
   <p className="muted">설치된 로컬 SD 모델로 수정된 장면 이미지를 새로 만들고 SVD 모델로 실제 움직이는 클립을 생성합니다. 등록된 인물·캐릭터는 먼저 허가된 사진·원화를 장면에 연결해야 합니다. 이전 이미지·영상은 덮어쓰지 않고 복원 이력에 남깁니다. GPU가 필요하며 짧은 SVD 클립은 장면 길이 동안 반복됩니다.</p>
   {review93&&<p className="muted">적용 대기 · {review93.summary} · 다른 장면이나 원본 영상은 변경하지 않습니다.</p>}
  <p className="muted">지원: 배경/장소, 의상/옷, 카메라, 표정/감정, 동작/행동, 조명 변경. 장면 타임라인·원본 사진·영상은 보존합니다. 잠긴 속성과 지원하지 않는 지시는 거부됩니다.</p>
+ </Panel>
+ <Panel title="STEP93 · 곡 구간 자연어 편집·실제 SD/SVD" description="기존 곡 BPM·마디 구간을 기준으로 후렴·절·브리지·전체 장면의 배경·의상·카메라·표정·동작·조명을 함께 수정합니다.">
+  <Field label="구간 자연어 지시"><input aria-label="구간 장면 자연어 지시" maxLength={500} value={sectionCommand}
+   onChange={e=>{setSectionCommand(e.target.value);setSectionPlan(null);}}
+   placeholder="후렴 장면들의 배경을 밤거리로 바꿔 그리고 조명을 푸른빛으로 바꿔"/></Field>
+  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
+   <Button disabled={sectionBusy} onClick={reviewSection93}>구간 변경 검토</Button>
+   <Button disabled={!sectionPlan||sectionBusy} onClick={applySection93}>검토한 구간 설명 일괄 적용</Button>
+   <Button disabled={!p.mvSectionEdits?.history?.length||sectionBusy} onClick={undoSection93}>구간 설명 복원</Button>
+  </div>
+  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
+   <Button variant="primary" disabled={!sectionPlan||sectionBusy||natural93Busy||imageBusy||videoBusy||personBusy||pvBusy||regen92Busy||!checkpoint||!videoModel}
+    onClick={renderSection93}>{sectionBusy?'실제 구간 SD/SVD 제작 중…':'검토한 구간 실제 영상 일괄 재생성'}</Button>
+   <Button disabled={!p.mvSectionNeuralEdits?.history?.length||sectionBusy} onClick={undoSectionVideo93}>구간 이전 영상 연결 복원</Button>
+   {sectionBusy&&<Button onClick={()=>sectionAbort.current?.abort()}>이후 생성 취소</Button>}
+  </div>
+  {sectionPlan&&<p className="muted">검토: {sectionPlan.summary} · 대상 장면 {sectionPlan.sceneIds.length}개</p>}
+  {sectionStatus&&<p role="status" className="muted">{sectionStatus}</p>}
+  <Notice>실제 설치된 Windows 로컬 SD/SVD 모델을 사용합니다. 여러 장면은 순차 제작되며 중단 시 완료된 장면만 신규 자산으로 저장됩니다. 기존 원본 이미지·영상·캐릭터·프로젝트 파일은 삭제하지 않습니다. 사용 허가된 등록 사진·원화를 장면에 먼저 연결해야 합니다.</Notice>
  </Panel>
  <Panel title="STEP94 · Character Replace" description="장면·카메라·시간을 유지하면서 출연 캐릭터만 교체합니다. 구 캐릭터 이미지·영상은 이력에 보존되고 새 이미지로 재사용하지 않습니다.">
  <div className="hstack" style={{gap:9,flexWrap:'wrap'}}><Field label="교체할 캐릭터"><select aria-label="Step94 새 캐릭터" value={replace94Id} onChange={e=>{setReplace94Id(e.target.value);setReview94(null);}}><option value="">대상 선택</option>{data.characters.filter(c=>['owned','self','licensed'].includes(c.rights)&&(c.rights!=='licensed'||c.rightsNote?.trim())).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><label className="muted"><input type="checkbox" checked={replace94All} onChange={e=>{setReplace94All(e.target.checked);setReview94(null);}}/> 모든 장면</label><Button disabled={!current||!replace94Id} onClick={reviewReplacement94}>교체 검토</Button><Button disabled={!review94} onClick={applyReplacement94}>검토한 캐릭터 교체</Button><Button disabled={!current?.characterReplace94?.history?.length} onClick={()=>{try{onChange(undoCharacterReplace94(p,current.id));notify('이전 캐릭터·이미지 연결을 복구했습니다.');}catch(e){notify(e.message);}}}>이 장면 캐릭터 복원</Button></div>
