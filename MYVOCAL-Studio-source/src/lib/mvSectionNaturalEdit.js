@@ -9,9 +9,23 @@ const SECTION={
  '1절':/1절|verse\s*1|verse\s*i\b/i,'2절':/2절|verse\s*2|verse\s*ii\b/i
 };
 const COMMAND=/^(전체|마지막\s*후렴|후렴|브리지|인트로|아웃트로|1절|2절)\s*장면(?:들)?(?:의|에서|을|은)?\s+(.+)$/u;
+
+const DIRECT_COMMAND=/^(전체|마지막\s*후렴|후렴|브리지|인트로|아웃트로|1절|2절)(?:\s*부분)?(?:에서|에서는)\s+(.+)$/u;
+const SHOW_MORE='캐릭터를 더 많이 보여줘';
+const SHOW_MORE_INSTRUCTION='카메라를 인물 중심 클로즈업으로 바꿔 그리고 동작을 캐릭터의 공연과 가창 중심으로 바꿔';
+function parseSectionDirective(command){
+ const value=typeof command==='string'?command.trim():'';
+ const match=value.match(COMMAND)||value.match(DIRECT_COMMAND);
+ if(!match)return null;
+ let instruction=match[2].trim().replace(/[.!]$/u,'');
+ const showMore=instruction===SHOW_MORE;
+ if(showMore)instruction=SHOW_MORE_INSTRUCTION;
+ return {scope:match[1].replace(/\s+/g,' '),instruction,showMore};
+}
+
 const snapshot=p=>JSON.stringify({id:p?.id,scenes:p?.scenes,sections:p?.sections,
  bpm:p?.bpm,locks:[p?.outfitLock,p?.backgroundLock,p?.cameraLock]});
-export const isSectionNaturalInstruction=text=>typeof text==='string'&&COMMAND.test(text.trim());
+export const isSectionNaturalInstruction=text=>typeof text==='string'&&!!parseSectionDirective(text);
 function targets(project,scope){
  if(!Array.isArray(project.scenes)||!project.scenes.length)throw Error('현재 프로젝트의 장면이 없습니다.');
  let ranges;
@@ -45,10 +59,12 @@ export function previewSectionNaturalEdit(project,command){
  if(!project?.id||typeof command!=='string'||!command.trim()||command.length>500||
   /[\u0000-\u001f\u007f]/u.test(command))
   throw Error('500자 이하의 한국어 구간 수정 지시가 필요합니다.');
- const match=command.trim().match(COMMAND);
- if(!match)throw Error('예: 후렴 장면들의 배경을 밤거리로 바꿔 그리고 조명을 푸른빛으로 바꿔');
- const scope=match[1].replace(/\s+/g,' '),instruction=match[2].trim();
+ const directive=parseSectionDirective(command);
+ if(!directive)throw Error('예: 후렴 장면들의 배경을 밤거리로 바꿔 그리고 조명을 푸른빛으로 바꿔');
+ const {scope,instruction,showMore}=directive;
  const scenes=targets(project,scope);
+ if(showMore&&scenes.some(scene=>!(scene.characterId||project.characterId)))
+  throw Error('캐릭터 등장 비중을 높이려면 대상 후렴 장면 모두에 등록된 캐릭터가 필요합니다.');
  const parsed=scenes.map(s=>interpretMvInstruction93(project,s.id,instruction));
  return {version:1,projectId:project.id,source:snapshot(project),command:command.trim(),
   scope,instruction,sceneIds:scenes.map(s=>s.id),
