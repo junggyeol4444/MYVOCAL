@@ -20,8 +20,16 @@ import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
 import {visemeAt} from '../lib/characterLipSync.js';
 import {stageSingerExpressionFromVocal} from '../lib/duetSingingExpression.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
-import {loadNeuralStemPerformance,attachNeuralStemPerformance} from '../lib/neuralStemPerformanceEnvelope.js';
+import {loadNeuralStemPerformance,attachNeuralStemPerformance,stemPerformanceLevel} from '../lib/neuralStemPerformanceEnvelope.js';
 import {isAlignmentStale} from '../lib/lyricAlignment.js';
+// 실제 원천 악기 WAV의 PCM 강약으로 저장된 VRM 무대 조명만 구동한다.
+function pcmStageLighting(stage,envelope,absoluteSeconds){
+ if(!stage||!envelope)return stage;
+ const original=Number(stage.lightIntensity);
+ if(!Number.isFinite(original)||original<=0)return stage;
+ const level=stemPerformanceLevel(envelope,absoluteSeconds*1000);
+ return {...stage,lightIntensity:Math.max(.2,Math.min(2,original*(.72+.42*level)))};
+}
 const positions=['left','center','right'];
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
 export default function VirtualBand90Editor({project,characters,onSave,notify}){
@@ -118,7 +126,7 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   const active=bandFrame90(project,characters,plan,Math.max(0,Math.min(plan.durationSec,t)));const tileW=Math.floor(w/Math.max(1,active.length));
   active.forEach((member,i)=>{const c=byId.get(member.characterId),src=sources.current.get(c.id),x=i*tileW;ctx.save();ctx.beginPath();ctx.rect(x,0,tileW,h);ctx.clip();
    ctx.fillStyle=i%2?'#252d48':'#182b43';ctx.fillRect(x,0,tileW,h);
-   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,c.stage3d||null,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(src.element,x,0,tileW,h-62);}
+   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,pcmStageLighting(c.stage3d||null,rolePerformance.get(c.id)?.pcmEnergy,t),lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='person'&&src.element.readyState>=2){
      const lip=lipByMember.get(c.id);
@@ -323,6 +331,7 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   }
  }catch(e){notify('밴드 영상 출력 실패: '+e.message);}finally{abort.current=null;setBusy(false);}};
  return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}><Notice>**STEP90 가상 밴드** · 최대 6명의 2D·3D·실제 사람을 단일 Canvas에 동시에 합성하고 각자의 STEP85/87/88/89 연출을 사용합니다. 기존 무음 WebM 출력도 유지하며 원곡 전체 음악·가창을 넣은 3~6분 WebM과 로컬 FFmpeg MP4도 출력합니다. 실제 사람은 등록 영상 프레임만 사용하며, STEP86에서 검토한 입 영역과 실제 WAV 발성 시간표가 있으면 해당 영역에만 로컬 변형을 적용합니다. Wav2Lip 신경망 결과와는 구분됩니다.</Notice>
+ <p role="status">VRM 무대 조명: 실제 악기 WAV PCM 연주 연결 시 각 연주자의 저장된 조명 밝기만 실음원 강약에 동기화합니다. 원본 설정은 유지합니다.</p>
  <p role="status">실제 독립 악기 PCM 연주: {stemPerformance?.projectId===project.id&&stemPerformance.signature===stemSignature?stemPerformance.envelopes.size+"개 WAV 연결됨":"연결 전"} · 2D/VRM 동작만 PCM 강약으로 구동하며 원본 음악·MIDI는 그대로 유지합니다.</p>
  <p role="status">전곡 참고 동작 연결: {[...rolePerformance.values()].filter(value=>value.referenceLoopMs).length}명 · 허가된 STEP89 영상·웹캠 움직임 강약을 원곡 BPM 마디에 맞춰 반복합니다. 3D 관절 모션캡처 AI는 아닙니다.</p>
  <Field label="영상 길이 (2~360초)"><input type="number" min="2" max="360" value={plan.durationSec} disabled={busy} onChange={e=>patch('durationSec',Number(e.target.value))}/></Field>
