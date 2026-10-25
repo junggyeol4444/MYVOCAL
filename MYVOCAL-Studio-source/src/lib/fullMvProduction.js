@@ -13,7 +13,7 @@ import {automaticSingingVisemes,reviewedCharacterMouthPlacement} from './autoMvP
 
 export async function runFullLocalMv({
  project,data,current,currentData,commit,session,checkpoint,videoModel,port,
- imageSteps,width,height,frames,fps,videoSteps,motion,includeReferences=false,
+ imageSteps,width,height,frames,fps,videoSteps,motion,includeReferences=false,autoVirtualSinger=false,
  includeAudio=true,includeCaptions=true,lipPlacement=null,prewarmedAudioContext=null,
  signal,onProgress=()=>{}
 },{
@@ -41,7 +41,7 @@ export async function runFullLocalMv({
   // A completed project can be exported again without GPU models installed.
   // Never invoke or require an external inference engine when no scenes need it.
   generated=pending.total>0?await batch({project,data,checkpoint,videoModel,port,session,imageSteps,width,height,
-    frames,fps,videoSteps,motion,includeReferences,current,currentData,commit,signal,
+    frames,fps,videoSteps,motion,includeReferences,autoVirtualSinger,current,currentData,commit,signal,
     progress:s=>onProgress('이미지/영상 생성: '+s)}):{generatedImages:0,generatedVideos:0};
   if(signal?.aborted)throw Error('완성 MV 제작을 취소했습니다.');
   const latest=current();
