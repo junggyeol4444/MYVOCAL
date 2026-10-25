@@ -3,11 +3,30 @@ export const STEP93_FIELDS=Object.freeze({배경:'location',장소:'location',�
 const VALID=new Set(Object.values(STEP93_FIELDS));
 const locked=(project,field)=>(field==='outfit'&&project.outfitLock===true)||(field==='location'&&project.backgroundLock===true)||(field==='camera'&&project.cameraLock===true);
 const clean=s=>typeof s==='string'&&s.length<=500&&!/[\u0000-\u001f\u007f]/.test(s);
+// 원본 51항의 문장 예시를 기존 명시적 STEP93 속성 문법으로 연결한다.
+// 확신할 수 없는 자유 문장은 추측하지 않고 기존 검토 절차에서 거부한다.
+export function normalizeNaturalMvPhrase93(phrase,{scene=null}={}){
+ const t=String(phrase||'').trim().replace(/[.!]$/u,'');
+ const preserve=t.match(/^(?:주인공|인물)(?:의)?\s*얼굴(?:은|을)?\s*그대로\s*두고\s*(?:옷|의상)(?:만|을|를)?\s*(.+?)\s*(?:으로|로)\s*(?:바꿔|변경해)(?:줘|주세요)?$/u);
+ if(preserve){
+  if(!scene?.personMv&&!scene?.characterMv)throw Error('얼굴을 유지하려면 이 장면에 사용 허가된 인물 원본 또는 캐릭터 원화를 먼저 연결하세요.');
+  return '의상을 '+preserve[1].trim()+'으로 바꿔';
+ }
+ const clothes=t.match(/^(?:옷|의상)만\s*(.+?)\s*(?:으로|로)\s*(?:바꿔|변경해)(?:줘|주세요)?$/u);
+ if(clothes)return '의상을 '+clothes[1].trim()+'으로 바꿔';
+ const place=t.match(/^(?:이|현재|선택한?)\s*장면만\s*(비\s*오는\s*밤(?:거리)?|밤거리|낮거리|눈\s*오는\s*밤(?:거리)?)\s*(?:으로|로)\s*(?:바꿔|변경해)(?:줘|주세요)?$/u);
+ if(place)return '배경을 '+place[1].trim()+'으로 바꿔';
+ const camera=t.match(/^(?:여기서는|이\s*부분에서는?|이\s*장면에서는?)\s*카메라가\s*(캐릭터\s*주변을\s*돌|인물\s*주변을\s*돌)게\s*(?:해|해주세요)$/u);
+ if(camera)return '카메라를 '+camera[1].trim()+'며 회전하는 촬영으로 바꿔';
+ if(/^(?:이\s*부분에서|여기서는|이\s*장면에서)\s*(?:주인공|캐릭터)이\s*울지\s*말고\s*웃게\s*(?:해|해주세요)$/u.test(t))
+  return '표정을 웃는 표정으로 바꿔';
+ return phrase;
+}
 export function interpretMvInstruction93(project,sceneId,command){
  if(!project?.id||!Array.isArray(project.scenes))throw Error('프로젝트 장면 정보가 없습니다.');
  const scene=project.scenes.find(s=>s.id===sceneId);if(!scene)throw Error('대상 장면이 없습니다.');
  if(!clean(command)||!command.trim())throw Error('500자 이하의 지시를 입력하세요.');
- const text=command.trim().replace(/^(?:이|현재|선택한?)\s*장면(?:의|에서|은|을)?\s*/,'');
+ const text=normalizeNaturalMvPhrase93(command.trim(),{scene}).replace(/^(?:이|현재|선택한?)\s*장면(?:의|에서|은|을)?\s*/,'');
  // 기존 선택 장면 안에서 서로 다른 두 속성까지 한 번에 검토한다. 임의 문장은 추측하지 않는다.
  const parts=text.split(/\s+그리고\s+/u);
  if(parts.length>2||parts.some(x=>!x.trim()))throw Error('서로 다른 장면 속성은 최대 두 개까지 지정하세요.');
