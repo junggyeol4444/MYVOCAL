@@ -10,7 +10,7 @@ import {assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
 import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
 import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
 import {chooseSceneReference} from './characterSceneReference.js';
-import {validateAutoVirtualSinger,autoSingerReference,autoSingerRequest,recordAutoSingerFirstImage} from './autoVirtualSingerImages.js';
+import {validateAutoVirtualSinger,autoSingerReference,autoSingerRequest,recordAutoSingerFirstImage,generateAutoSingerReferenceImage} from './autoVirtualSingerImages.js';
 // A registered character reuses the SAME sampling seed in each scene.
 // img2img still uses the original authorized reference; seed consistency
 // reduces variation but does not guarantee neural identity equivalence.
@@ -78,7 +78,7 @@ export function planMvBatch(project,{maxScenes=120,includeReferences=false}={}){
  return {sceneIds,already,linked,total:sceneIds.length};
 }
 export async function runMvBatch({project,data,checkpoint,videoModel,port,session,imageSteps=20,width=768,height=448,frames=14,fps=6,videoSteps=20,motion=127,includeReferences=false,autoVirtualSinger=false,current,currentData=()=>data,commit,progress,signal,
- generateImage=generateComfyImage,generateReferencePerson=generatePersonMvImage,generateReferenceCharacter=generateCharacterMvImage,generateVideo=generateLocalVideoClip,loadFile=getFile,saveFile=putFileNew,sourceFrame=readSourceFrame,idFactory=genId}={}){
+ generateImage=generateComfyImage,generateReferencePerson=generatePersonMvImage,generateReferenceCharacter=generateCharacterMvImage,generateAutoSingerReference=generateAutoSingerReferenceImage,generateVideo=generateLocalVideoClip,loadFile=getFile,saveFile=putFileNew,sourceFrame=readSourceFrame,idFactory=genId}={}){
  const plan=planMvBatch(project,{includeReferences});
  validateAutoVirtualSinger(project,{enabled:autoVirtualSinger});
  if(!session||typeof session!=='string')throw Error('Windows EXE의 로컬 세션이 없습니다.');
@@ -116,9 +116,25 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
     referenceImage=await sourceFrame(original);checkCancel();
    }
    const settings={port,checkpoint,prompt:request.prompt,negative:request.negative,width,height,steps:imageSteps,seed};
-   const blob=reference?
-     await (reference.kind==='person'?generateReferencePerson:generateReferenceCharacter)({...settings,imageData:referenceImage,denoise:reference.denoise},session,signal):
-     await generateImage(settings,session,signal);
+   // 등록 인물/등록 2D/자체 생성 가수마다 실제 설치된 ComfyUI img2img 경로를 사용한다.
+   // 자동 가수는 기록된 최초 이미지 파일과 프로젝트 식별자가 일치할 때만 실행한다.
+   const imageSettings={...settings,imageData:referenceImage,denoise:reference?.denoise};
+   let blob;
+   if(reference?.kind==='auto-generated'){
+    const anchor=validateAutoVirtualSinger(live,{enabled:true}).anchor;
+    if(!anchor||anchor.sourceAssetId!==reference.assetId)
+     throw Error('자동 가수 첫 이미지의 저장 출처가 달라 후속 장면을 생성할 수 없습니다.');
+    blob=await generateAutoSingerReference({...imageSettings,sourceProjectId:initialId,
+     sourceSceneId:anchor.sourceSceneId,sourceAssetId:anchor.sourceAssetId,sourceKey:anchor.sourceKey},session,signal);
+   }else if(reference?.kind==='person'){
+    blob=await generateReferencePerson(imageSettings,session,signal);
+   }else if(reference?.kind==='character'){
+    blob=await generateReferenceCharacter(imageSettings,session,signal);
+   }else if(reference){
+    throw Error('지원하지 않는 장면 원본 이미지 형식입니다. 생성하지 않고 원본을 보존합니다.');
+   }else{
+    blob=await generateImage(settings,session,signal);
+   }
    checkCancel();live=current();scene=live?.scenes?.find(s=>s.id===sceneId);
    if(!live||live.id!==initialId||!scene)throw Error('이미지 생성 중 장면이 변경됐습니다.');
    const latestCharacter=(currentData()?.characters||[]).find(c=>c.id===(scene.characterId||live.characterId));
