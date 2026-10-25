@@ -20,6 +20,7 @@ import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
 import {visemeAt} from '../lib/characterLipSync.js';
 import {stageSingerExpressionFromVocal} from '../lib/duetSingingExpression.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
+import {loadNeuralStemPerformance,attachNeuralStemPerformance} from '../lib/neuralStemPerformanceEnvelope.js';
 import {isAlignmentStale} from '../lib/lyricAlignment.js';
 const positions=['left','center','right'];
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),20000);}
@@ -28,7 +29,10 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
  const [time,setTime]=useState(0),[playing,setPlaying]=useState(false),[busy,setBusy]=useState(false),[status,setStatus]=useState('멤버별 로컬 영상·모델을 불러옵니다.');
  const [music,setMusic]=useState(null);
  const [duetLipSyncs,setDuetLipSyncs]=useState(null);
+ const [stemPerformance,setStemPerformance]=useState(null);
  const canvas=useRef(null),sources=useRef(new Map()),frameRef=useRef(0),lastRef=useRef(0),timeRef=useRef(0),abort=useRef(null);
+ const currentProject=useRef(project);currentProject.current=project;
+ const stemSignature=(project.tracks||[]).filter(t=>t?.generatedBy==='musicgen-independent-audio').map(t=>t.id+':'+(t.clips?.[0]?.assetId||'')).join('|');
  const available=eligibleBandCharacters(characters),byId=new Map(characters.map(c=>[c.id,c]));
  const rolePerformance=useMemo(()=>{
   const plans=new Map();
@@ -51,8 +55,19 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
     if(midiPlan)plans.set(member.characterId,midiPlan);
    }
   }
+  // 기존 MIDI/허가 참고 동작에 실제 신경망 악기 WAV PCM 강약만 연결한다.
+  if(stemPerformance?.projectId===project.id&&stemPerformance.signature===stemSignature){
+   for(const member of plan.members){
+    const envelope=stemPerformance.envelopes.get(member.role);
+    if(!envelope)continue;
+    try{plans.set(member.characterId,attachNeuralStemPerformance(
+     plans.get(member.characterId),project,envelope,
+     {durationSec:plan.durationSec,startSec:member.startSec}));}
+    catch{/* 프로젝트/원곡 길이가 달라졌으면 기존 MIDI 연주를 유지한다. */}
+   }
+  }
   return plans;
- },[project,characters,plan.durationSec,plan.members]);
+ },[project,characters,plan.durationSec,plan.members,stemPerformance,stemSignature]);
  const lipByMember=useMemo(()=>{
   const result=new Map();
   for(const member of plan.members){
@@ -275,6 +290,22 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   finally{setBusy(false);}
  };
  const save=()=>{try{onSave(saveBand90(project,characters,plan));notify('90단계 다중 캐릭터 공연 타임라인을 저장했습니다.');}catch(e){notify('공연 저장 오류: '+e.message);}};
+ const prepareNeuralStemMotion=async()=>{
+  if(busy)return;
+  const controller=new AbortController();abort.current=controller;
+  setBusy(true);setStatus('실제 독립 신경망 악기 WAV PCM 분석 중');
+  try{
+   const envelopes=await loadNeuralStemPerformance(project,{
+    loadFile:getFile,current:()=>currentProject.current,signal:controller.signal,
+    durationSec:plan.durationSec,onProgress:setStatus
+   });
+   if(currentProject.current!==project||controller.signal.aborted)
+    throw Error('프로젝트가 변경되거나 분석이 취소됐습니다.');
+   setStemPerformance({projectId:project.id,signature:stemSignature,envelopes});
+   notify('실제 독립 악기 WAV '+envelopes.size+'개 PCM 강약을 2D/VRM 연주 동작에 연결했습니다. MIDI·원본 WAV는 그대로 유지됩니다.');
+  }catch(e){notify('실제 악기 WAV 연주 동작 연결 실패: '+e.message);}
+  finally{abort.current=null;setBusy(false);}
+ };
  const record=async({includeAudio=false,asMp4=false}={})=>{try{saveBand90(project,characters,plan);if(!supportedStageWebM())throw Error('이 Windows EXE는 WebM 녹화를 지원하지 않습니다.');
   if(includeAudio&&(!music||music.projectId!==project.id||music.durationSec+.08<plan.durationSec))throw Error('실제 음악 WAV를 연결해 주세요.');
   if(asMp4&&!window.__MYVOCAL_SESSION_KEY)throw Error('MP4에는 로컬 Windows EXE 세션이 필요합니다.');setPlaying(false);setBusy(true);const controller=new AbortController();abort.current=controller;
@@ -292,11 +323,13 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   }
  }catch(e){notify('밴드 영상 출력 실패: '+e.message);}finally{abort.current=null;setBusy(false);}};
  return <div className="modal-form" style={{maxHeight:'78vh',overflowY:'auto'}}><Notice>**STEP90 가상 밴드** · 최대 6명의 2D·3D·실제 사람을 단일 Canvas에 동시에 합성하고 각자의 STEP85/87/88/89 연출을 사용합니다. 기존 무음 WebM 출력도 유지하며 원곡 전체 음악·가창을 넣은 3~6분 WebM과 로컬 FFmpeg MP4도 출력합니다. 실제 사람은 등록 영상 프레임만 사용하며, STEP86에서 검토한 입 영역과 실제 WAV 발성 시간표가 있으면 해당 영역에만 로컬 변형을 적용합니다. Wav2Lip 신경망 결과와는 구분됩니다.</Notice>
+ <p role="status">실제 독립 악기 PCM 연주: {stemPerformance?.projectId===project.id&&stemPerformance.signature===stemSignature?stemPerformance.envelopes.size+"개 WAV 연결됨":"연결 전"} · 2D/VRM 동작만 PCM 강약으로 구동하며 원본 음악·MIDI는 그대로 유지합니다.</p>
  <p role="status">전곡 참고 동작 연결: {[...rolePerformance.values()].filter(value=>value.referenceLoopMs).length}명 · 허가된 STEP89 영상·웹캠 움직임 강약을 원곡 BPM 마디에 맞춰 반복합니다. 3D 관절 모션캡처 AI는 아닙니다.</p>
  <Field label="영상 길이 (2~360초)"><input type="number" min="2" max="360" value={plan.durationSec} disabled={busy} onChange={e=>patch('durationSec',Number(e.target.value))}/></Field>
  <Field label="FPS"><select value={plan.fps} onChange={e=>patch('fps',Number(e.target.value))}><option value={24}>24</option><option value={30}>30</option></select></Field>
  {plan.members.map((m,i)=><div className="hstack" key={i} style={{gap:6,flexWrap:'wrap',margin:'8px 0'}}><select aria-label={`멤버 ${i+1}`} value={m.characterId} onChange={e=>patchMember(i,'characterId',e.target.value)}>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select aria-label={`역할 ${i+1}`} value={m.role} onChange={e=>patchMember(i,'role',e.target.value)}>{BAND90_ROLES.map(role=><option key={role}>{role}</option>)}</select><select value={m.position} onChange={e=>patchMember(i,'position',e.target.value)}>{positions.map(pos=><option key={pos}>{pos}</option>)}</select><label>시작<input type="number" min="0" step="0.1" style={{width:58}} value={m.startSec} onChange={e=>patchMember(i,'startSec',Number(e.target.value))}/></label><label>종료<input type="number" min="0" step="0.1" style={{width:58}} value={m.endSec} onChange={e=>patchMember(i,'endSec',Number(e.target.value))}/></label><Button onClick={()=>patch('members',plan.members.filter((_,j)=>j!==i))}>제외</Button></div>)}
  <Button disabled={plan.members.length>=6||available.length<=plan.members.length} onClick={()=>patch('members',[...plan.members,{characterId:available.find(c=>!plan.members.some(m=>m.characterId===c.id))?.id||'',role:'harmony',position:'center',startSec:0,endSec:plan.durationSec}])}>멤버 추가</Button>
+ <div className="look-actions"><Button disabled={busy||plan.durationSec<150} onClick={prepareNeuralStemMotion}>실제 6악기 WAV PCM → 2D/VRM 연주 동작</Button>{stemPerformance?.projectId===project.id&&stemPerformance.signature===stemSignature&&<Button disabled={busy} onClick={()=>setStemPerformance(null)}>PCM 연주 연결 해제</Button>}</div>
  <div className="look-actions"><Button disabled={busy} onClick={prepareFullSong}>3~6분 전체 음악·밴드 연결</Button><Button disabled={busy} onClick={prepareRealLeadSinger}>실제 주보컬 WAV 발성 → 전곡 2D·VRM·허가 인물 립싱크</Button><Button disabled={busy} onClick={prepareCurrentMusic}>현재 밴드 음악 WAV 연결</Button></div>
  {project.duetSingers?.version===1&&<div className="look-actions">
   <Button disabled={busy} onClick={arrangeDuetSingerStage}>두 가수 실제 보컬·캐릭터를 전곡 밴드 lead/harmony로 배치</Button>
