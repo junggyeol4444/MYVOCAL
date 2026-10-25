@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-const maxSingingWAV = 32 << 20
-const maxSingingPayload = 48 << 10
+const maxSingingWAV = 160 << 20 // 3~6분 PCM WAV: 기존 32MiB 제한을 확장
+const maxSingingPayload = 2 << 20 // 최대 2048음표·8192발음 구간
 
 type singingCue struct {
 	Lyric    string  `json:"lyric"`
@@ -32,6 +32,7 @@ type singingRequest struct {
 	Port    int    `json:"port"`
 	Format  string `json:"format"`
 	Version int    `json:"version"`
+	LongForm bool `json:"longForm,omitempty"`
 	Project string `json:"project"`
 	Voice   struct {
 		ID     string `json:"id"`
@@ -68,6 +69,10 @@ func (a *appServer) authorizeSinging(w http.ResponseWriter, r *http.Request) boo
 func singingClient() *http.Client {
 	// No proxy env variables or redirects: all requests always target loopback.
 	return &http.Client{Timeout: 115 * time.Second, CheckRedirect: func(r *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }, Transport: &http.Transport{Proxy: nil, ResponseHeaderTimeout: 105 * time.Second, DisableKeepAlives: true}}
+}
+// 긴 곡의 실제 로컬 신경망 추론은 짧은 건강 확인과 별도 시간 제한을 사용한다.
+func singingLongFormClient() *http.Client {
+ return &http.Client{Timeout: 15 * time.Minute, CheckRedirect: func(r *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }, Transport: &http.Transport{Proxy: nil, ResponseHeaderTimeout: 14 * time.Minute, DisableKeepAlives: true}}
 }
 func (a *appServer) singingHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -134,23 +139,25 @@ func (a *appServer) singingRender(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if len(input.Cues) < 1 || len(input.Cues) > 128 || input.BPM < 40 || input.BPM > 240 || len(input.Voice.ID) > 150 || len(input.Project) > 300 || len(input.Voice.Name) > 300 {
+	maxCues, maxPhonemes, maxEndSec := 128, 512, 90.0
+	if input.LongForm { maxCues, maxPhonemes, maxEndSec = 2048, 8192, 360.0 }
+	if len(input.Cues) < 1 || len(input.Cues) > maxCues || input.BPM < 40 || input.BPM > 240 || len(input.Voice.ID) > 150 || len(input.Project) > 300 || len(input.Voice.Name) > 300 {
 		jsonError(w, 400, "보컬 요청이 허용된 범위를 벗어났습니다.")
 		return
 	}
 	for _, c := range input.Cues {
-		if c.Pitch < 36 || c.Pitch > 96 || c.StartSec < 0 || c.EndSec <= c.StartSec || c.EndSec > 90 || len(c.Lyric) > 240 || c.Velocity < 0 || c.Velocity > 127 || (c.Hangul != nil && (len(c.Hangul.Onset) > 16 || len(c.Hangul.Vowel) > 16 || len(c.Hangul.Coda) > 16)) {
+		if c.Pitch < 36 || c.Pitch > 96 || c.StartSec < 0 || c.EndSec <= c.StartSec || c.EndSec > maxEndSec || len(c.Lyric) > 240 || c.Velocity < 0 || c.Velocity > 127 || (c.Hangul != nil && (len(c.Hangul.Onset) > 16 || len(c.Hangul.Vowel) > 16 || len(c.Hangul.Coda) > 16)) {
 			jsonError(w, 400, "잘못된 보컬 음표 데이터입니다.")
 			return
 		}
 	}
-	if len(input.Phonemes) > 512 {
-		jsonError(w, 400, "발음 구간은 최대 512개까지 허용됩니다.")
+	if len(input.Phonemes) > maxPhonemes {
+		jsonError(w, 400, "발음 구간 수가 현재 가창 길이 제한을 초과했습니다.")
 		return
 	}
 	last := map[int]float64{}
 	for _, x := range input.Phonemes {
-		if x.CueIndex < 1 || x.CueIndex > len(input.Cues) || len(x.Token) < 1 || len(x.Token) > 120 || x.StartSec < 0 || x.EndSec <= x.StartSec || x.EndSec > 90 || x.Pitch != input.Cues[x.CueIndex-1].Pitch ||
+		if x.CueIndex < 1 || x.CueIndex > len(input.Cues) || len(x.Token) < 1 || len(x.Token) > 120 || x.StartSec < 0 || x.EndSec <= x.StartSec || x.EndSec > maxEndSec || x.Pitch != input.Cues[x.CueIndex-1].Pitch ||
 			x.StartSec < input.Cues[x.CueIndex-1].StartSec-0.001 || x.EndSec > input.Cues[x.CueIndex-1].EndSec+0.001 ||
 			!(x.Kind == "onset" || x.Kind == "nucleus" || x.Kind == "coda" || x.Kind == "text") ||
 			(last[x.CueIndex] != 0 && x.StartSec < last[x.CueIndex]-0.00011) {
@@ -171,7 +178,9 @@ func (a *appServer) singingRender(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	res, e := singingClient().Do(req)
+	client := singingClient()
+	if input.LongForm { client = singingLongFormClient() }
+	res, e := client.Do(req)
 	if e != nil {
 		jsonError(w, 502, "로컬 가창 엔진에 연결하지 못했습니다. 실행 상태를 확인하세요.")
 		return
@@ -183,7 +192,7 @@ func (a *appServer) singingRender(w http.ResponseWriter, r *http.Request) {
 	}
 	buf, e := io.ReadAll(io.LimitReader(res.Body, maxSingingWAV+1))
 	if e != nil || len(buf) > maxSingingWAV {
-		jsonError(w, 502, "WAV 응답을 읽지 못했거나 32MB를 초과했습니다.")
+		jsonError(w, 502, "WAV 응답을 읽지 못했거나 긴 곡 최대 160MiB를 초과했습니다.")
 		return
 	}
 	if !validSingingWAV(buf) {
