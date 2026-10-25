@@ -36,6 +36,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const cancelRef=useRef(null),stemExportCancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
  const [includeReferences,setIncludeReferences]=useState(false);
+ const [autoVirtualSinger,setAutoVirtualSinger]=useState(false);
  const [saveFullMovie,setSaveFullMovie]=useState(false),[fullMouth,setFullMouth]=useState(false);
  const [makeMp4,setMakeMp4]=useState(true),[exportWav,setExportWav]=useState(true);
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(false),[musicDuration,setMusicDuration]=useState(180);
@@ -150,7 +151,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    const [width,height]=String(imageSize).split('x').map(Number);
    const base={project,data,checkpoint,videoModel,port:Number(imagePort),session:session(),
      imageSteps:Number(imageSteps),width,height,frames:Number(videoFrames),fps:Number(videoFps),videoSteps:Number(videoSteps),
-     motion:Number(videoMotion),includeReferences,current,currentData:()=>dataRef.current,commit,signal:controller.signal};
+     motion:Number(videoMotion),includeReferences,autoVirtualSinger,current,currentData:()=>dataRef.current,commit,signal:controller.signal};
    if(saveFullMovie){
     // Create/resume AudioContext immediately during this user click, BEFORE the
     // potentially long model inference. WebView2 may otherwise block autoplay.
@@ -412,6 +413,12 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <Notice>동일 회차 신경망 MIDI 6악기가 모두 있어야 하며 WAV의 실제 PCM 길이·프레임·샘플레이트가 같아야 합니다. 대용량 3~6분 원천 WAV를 인코딩·잘라내지 않고 개별 보존합니다. 전체 ZIP은 같은 회차 6악기 전부의 PCM 길이·샘플레이트를 확인하고 원래 MIDI 음표 6개 파일을 함께 담아 로컬에서 생성합니다. 가져오기에서는 기존 음악을 덮어쓰지 않고 MIDI·WAV 신규 12트랙을 추가합니다.</Notice>
   </div>
   <label><input type="checkbox" disabled={busy} checked={includeReferences} onChange={e=>setIncludeReferences(e.target.checked)}/> 등록된 본인·허가받은 사람 사진·2D 캐릭터 원화 장면도 일괄 이미지·영상 생성에 포함</label>
+  <label><input type="checkbox" disabled={busy||project.videoMode!=='auto'||!!project.characterId||
+   (project.scenes||[]).some(s=>s.characterId||s.personMv||s.characterMv)}
+   checked={autoVirtualSinger} onChange={e=>setAutoVirtualSinger(e.target.checked)}/>
+   자료 없이 AI 자동 가수 첫 원화 생성 → 후속 장면에 같은 첫 원화를 참조해 실제 SD img2img·SVD로 연결
+  </label>
+  {autoVirtualSinger&&<p className="muted">등록된 사람·캐릭터가 없는 자동 MV 전용입니다. 기존에 수동으로 편집한 이미지·영상이 있는 프로젝트는 보존하고 이 기능을 거부합니다. 첫 생성 가수 이미지의 재사용은 외형 유지에 도움을 주지만 실제 동일 얼굴·의상은 보장하지 않으며 GPU 출력 확인이 필요합니다.</p>}
   <label><input type="checkbox" disabled={busy} checked={saveFullMovie} onChange={e=>setSaveFullMovie(e.target.checked)}/> 생성 후 음악·보컬·가사 포함 완성 MV WebM까지 한 번에 저장 (Windows WebView2 사용)</label>
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={exportWav} onChange={e=>setExportWav(e.target.checked)}/> 완성 음악·가창 믹스를 편집 가능한 16비트 스테레오 WAV로 함께 저장</label>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeMp4} onChange={e=>setMakeMp4(e.target.checked)}/> 완성 WebM과 함께 로컬 FFmpeg로 실제 MP4도 저장 (원본·립싱크 파일명 구분)</label>}
