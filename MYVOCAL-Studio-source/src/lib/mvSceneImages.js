@@ -19,10 +19,15 @@ export function buildSceneImageRequest(project,scene,character=null,direction=nu
  // Preserve exact Step77/78 fingerprints for legacy scenes; append a photo identity only for Step79 scenes.
  if(scene.personMv)fingerprint.push(scene.characterId||'',scene.personMv.personId||'',scene.personMv.referenceAssetId||'',scene.personMv.denoise??null);
  if(scene.characterMv)fingerprint.push('Step80-character',scene.characterId||'',scene.characterMv.characterId||'',scene.characterMv.referenceAssetId||'',scene.characterMv.denoise??null);
- if(autoReference&&!scene.personMv&&!scene.characterMv)fingerprint.push('registered-identity',character?.id||'',autoReference.kind,autoReference.assetId,autoReference.denoise);
+ const autoSinger=autoReference?.source==='project-generated-singer'&&autoReference.kind==='auto-generated';
+ if(autoSinger&&!scene.personMv&&!scene.characterMv)
+  fingerprint.push('project-generated-singer-v1',autoReference.assetId,autoReference.denoise);
+ else if(autoReference&&!scene.personMv&&!scene.characterMv)
+  fingerprint.push('registered-identity',character?.id||'',autoReference.kind,autoReference.assetId,autoReference.denoise);
  const key=JSON.stringify(fingerprint);
  const pieces=['High-quality cinematic music video storyboard still frame, detailed environment, coherent composition',
-  text(scene.description)||'music video scene',scene.personMv&&'Use the supplied real-person source photo as visual reference for this scene; preserve recognizable appearance where feasible',scene.characterMv&&'Use the supplied original 2D character artwork as the visual input; retain drawing style, clothing, colors and recognizable character features as far as the local model allows',autoReference&&!scene.personMv&&!scene.characterMv&&'Use the same registered authorized reference image for this character across all scenes; retain the original face, colors, outfit, and identity where feasible',scene.location&&`Setting: ${text(scene.location)}`,
+  text(scene.description)||'music video scene',scene.personMv&&'Use the supplied real-person source photo as visual reference for this scene; preserve recognizable appearance where feasible',scene.characterMv&&'Use the supplied original 2D character artwork as the visual input; retain drawing style, clothing, colors and recognizable character features as far as the local model allows',autoSinger&&'Use the same previously generated original virtual singer image as an img2img reference for every shot; preserve the singer face, hairstyle and clothing while adapting the scene, camera and expression where possible',
+  autoReference&&!autoSinger&&!scene.personMv&&!scene.characterMv&&'Use the same registered authorized reference image for this character across all scenes; retain the original face, colors, outfit, and identity where feasible',scene.location&&`Setting: ${text(scene.location)}`,
   charName&&`Character: ${charName}`,charDescription&&`Character concept: ${charDescription}`,appearance&&`Character appearance: ${appearance}`,scene.outfit&&`Outfit: ${text(scene.outfit)}`,
   scene.expression&&`Facial expression: ${text(scene.expression)}`,
   scene.action&&`Action: ${text(scene.action)}`,scene.camera&&`Camera: ${text(scene.camera)}`,
@@ -40,7 +45,7 @@ export function applySceneImage(project,sceneId,assetId,request,details={}){
  if(!scene)throw Error('생성 도중 장면이 삭제됐습니다.');
  if(!/^img_[A-Za-z0-9_-]{1,80}$/.test(assetId))throw Error('이미지 저장 ID가 올바르지 않습니다.');
  if(!request?.key||typeof request.key!=='string'||request.key.length>8192)throw Error('장면 생성 정보를 확인할 수 없습니다.');
- return {...project,scenes:project.scenes.map(s=>s.id===sceneId?{...s,imageAssetId:assetId,imageGeneration:{source:details.source==='person-img2img'?'ComfyUI local person img2img':details.source==='character-img2img'?'ComfyUI local character img2img':'ComfyUI local',key:request.key,seed:details.seed,checkpoint:text(details.checkpoint,220),createdAt:new Date().toISOString()}}:s)};
+ return {...project,scenes:project.scenes.map(s=>s.id===sceneId?{...s,imageAssetId:assetId,imageGeneration:{source:details.source==='person-img2img'?'ComfyUI local person img2img':details.source==='character-img2img'?'ComfyUI local character img2img':details.source==='auto-singer-anchor'?'ComfyUI local auto singer':details.source==='auto-singer-img2img'?'ComfyUI local auto singer img2img':'ComfyUI local',key:request.key,seed:details.seed,checkpoint:text(details.checkpoint,220),createdAt:new Date().toISOString()}}:s)};
 }
 export function isSceneImageStale(scene,request){return !!scene?.imageAssetId&&scene?.imageGeneration?.key!==request?.key;}
 export function validateGeneratedImage(blob){
