@@ -6,7 +6,7 @@ import {videoSourceKey,applySceneVideo,generateLocalVideoClip,readSourceFrame} f
 import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
 import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
 import {chooseSceneReference} from './characterSceneReference.js';
-import {autoSingerReference,autoSingerRequest} from './autoVirtualSingerImages.js';
+import {autoSingerReference,autoSingerRequest,validateAutoVirtualSinger,generateAutoSingerReferenceImage} from './autoVirtualSingerImages.js';
 import {buildMvDirectionPlan} from './mvDirection.js';
 import {inspectSvdClipDuration,assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
 import {getFile,putFilesAtomic} from './assetDb.js';
@@ -72,7 +72,7 @@ export async function regenerateNaturalMvScene(project,plan,characters,{
  frames=25,fps=8,videoSteps=20,motion=127,signal,current,
  currentCharacters=()=>characters,commit,loadFile=getFile,saveFiles=putFilesAtomic,
  newId=genId,generateImage=generateComfyImage,generatePerson=generatePersonMvImage,
- generateCharacter=generateCharacterMvImage,generateVideo=generateLocalVideoClip,
+ generateCharacter=generateCharacterMvImage,generateAutoSinger=generateAutoSingerReferenceImage,generateVideo=generateLocalVideoClip,
  sourceFrame=readSourceFrame,onProgress=()=>{}
 }={}){
  if(!project?.id||!Array.isArray(project.scenes)||!Array.isArray(characters)||
@@ -112,8 +112,18 @@ export async function regenerateNaturalMvScene(project,plan,characters,{
   const original=await loadFile(reference.assetId);guard();
   const imageData=await sourceFrame(original);guard();
   onProgress('사용 허가 원본으로 실제 로컬 SD img2img 생성 중');
-  image=await (reference.kind==='person'?generatePerson:generateCharacter)(
-   {...imageSettings,imageData,denoise:reference.denoise},session,signal);
+  if(reference.kind==='auto-generated'){
+   const anchor=validateAutoVirtualSinger(draft,{enabled:true}).anchor;
+   if(!anchor||anchor.sourceAssetId!==reference.assetId)
+    throw Error('실제 자동 가수의 첫 원본 이미지가 변경됐습니다.');
+   image=await generateAutoSinger({...imageSettings,imageData,denoise:reference.denoise,
+    sourceProjectId:project.id,sourceSceneId:anchor.sourceSceneId,
+    sourceAssetId:anchor.sourceAssetId,sourceKey:anchor.sourceKey},session,signal);
+  }else if(reference.kind==='person'){
+   image=await generatePerson({...imageSettings,imageData,denoise:reference.denoise},session,signal);
+  }else if(reference.kind==='character'){
+   image=await generateCharacter({...imageSettings,imageData,denoise:reference.denoise},session,signal);
+  }else throw Error('지원되지 않는 장면 참조 이미지 종류입니다.');
  }else{
   onProgress('실제 로컬 SD 장면 이미지 생성 중');
   image=await generateImage(imageSettings,session,signal);
