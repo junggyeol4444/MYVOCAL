@@ -2,6 +2,7 @@
 // 사용자 권한이 있는 한국어 음소 사전과 MIDI를 실제 DS 음소/F0 입력으로 변환한다.
 // 생성 음원은 로컬 신경망 모델에서만 오며 합성음 대체·가짜 모델은 사용하지 않는다.
 import {assertUsableSingingWav} from './singingOutputValidation.js';
+import {validatePhonemePlan} from './phonemePlan.js';
 const MAX_NOTES=2048,MAX_SECONDS=360;
 const windowsPython=x=>typeof x==='string'&&x.length<2048&&
  (/^[a-zA-Z]:[\\/]/.test(x)||/^\\\\[^\\]+\\/.test(x))&&/(?:^|[\\/])python\.exe$/i.test(x);
@@ -25,11 +26,21 @@ export function parseDiffSingerDictionary(contents){
  if(!dictionary.size)throw Error('DiffSinger 한국어 발음 사전의 음절·음소 목록이 없습니다.');
  return dictionary;
 }
-export function buildKoreanDiffSingerDS(alignment,dictionary,{timestep=.01}={}){
+export function buildKoreanDiffSingerDS(alignment,dictionary,{timestep=.01,phonemePlan=null}={}){
  if(!(dictionary instanceof Map)||!dictionary.size)throw Error('현재 학습 모델에 맞는 발음 사전을 선택하세요.');
  const cues=alignment?.cues;
  if(!Array.isArray(cues)||cues.length<1||cues.length>MAX_NOTES||!finite(timestep)||timestep<.005||timestep>.02)
   throw Error('현재 프로젝트의 한국어 가사·MIDI 음표가 필요합니다.');
+ if(phonemePlan)validatePhonemePlan(phonemePlan,alignment);
+ const cueDurations=new Map();
+ if(phonemePlan)for(const segment of phonemePlan.segments){
+  const label=/^c\\d+-u(\\d+)-p\\d+$/.exec(String(segment.id||''));
+  if(!label)continue;
+  const key=segment.cueIndex+':'+Number(label[1]);
+  const len=Number(segment.endSec)-Number(segment.startSec);
+  if(!finite(len)||len<=0)throw Error('발음 타임라인의 음절 길이가 잘못됐습니다.');
+  cueDurations.set(key,(cueDurations.get(key)||0)+len);
+ }
  let last=0;
  const prepared=cues.map((cue,index)=>{
   const text=normalizeWord(cue.lyric);
@@ -43,7 +54,10 @@ export function buildKoreanDiffSingerDS(alignment,dictionary,{timestep=.01}={}){
    cue.endSec-cue.startSec<.075||cue.endSec>MAX_SECONDS)
    throw Error((index+1)+'번 노랫말·음정·길이의 신경망 합성 조건이 올바르지 않습니다.');
   last=cue.endSec;
-  return {start:cue.startSec,end:cue.endSec,pitch:cue.pitch,phonemes};
+  const syllables=[...text];
+  const groups=syllables.map((ch,i)=>({count:(dictionary.get(ch)||[]).length,weight:cueDurations.get((index+1)+':'+i)||0}));
+  const good=groups.length&&groups.every(g=>g.count>0&&g.weight>0);
+  return {start:cue.startSec,end:cue.endSec,pitch:cue.pitch,phonemes,groups:good?groups:null};
  });
  const pieces=[];let current=[];
  const finish=()=>{
@@ -55,10 +69,17 @@ export function buildKoreanDiffSingerDS(alignment,dictionary,{timestep=.01}={}){
    const gap=cue.start-cursor;
    if(gap>.001){ph.push('SP');dur.push(gap);}
    const noteSec=cue.end-cue.start,n=cue.phonemes.length;
-   // 음소 지속 시간은 지정된 MIDI 음표를 균등 배분한 초기값이며 실제 노랫말의
-   // 자음 발음 타이밍은 숙련된 모델/음소 편집기로 보완해야 한다.
-   const unit=noteSec/n;
-   cue.phonemes.forEach((value,i)=>{ph.push(value);dur.push(i===n-1?noteSec-unit*(n-1):unit);});
+   if(cue.groups){
+    const sum=cue.groups.reduce((s,g)=>s+g.weight,0);
+    let index=0;
+    for(const group of cue.groups){
+     const part=noteSec*group.weight/sum;
+     for(let i=0;i<group.count;i++){ph.push(cue.phonemes[index++]);dur.push(part/group.count);}
+    }
+   }else{
+    const unit=noteSec/n;
+    cue.phonemes.forEach((value,i)=>{ph.push(value);dur.push(i===n-1?noteSec-unit*(n-1):unit);});
+   }
    cursor=cue.end;
   }
   const length=absoluteEnd-first;
@@ -82,7 +103,7 @@ export function buildKoreanDiffSingerDS(alignment,dictionary,{timestep=.01}={}){
  if(pieces.length>60)throw Error('신경망 합성 구간 수가 허용 범위를 초과했습니다.');
  return pieces;
 }
-export async function synthesizeDiffSingerWav(alignment,{python,root,experiment,dictionary,rightsConfirmed,
+export async function synthesizeDiffSingerWav(alignment,{python,root,experiment,dictionary,phonemePlan=null,rightsConfirmed,
  session=globalThis.window?.__MYVOCAL_SESSION_KEY,request=fetch,signal}={}){
  if(!windowsPython(python)||typeof root!=='string'||root.length>2048||
  !(/^[a-zA-Z]:[\\/]/.test(root)||/^\\\\[^\\]+\\/.test(root))||
@@ -90,7 +111,7 @@ export async function synthesizeDiffSingerWav(alignment,{python,root,experiment,
   throw Error('설치된 DiffSinger 경로, Python.exe 및 실제 학습 실험명을 지정하세요.');
  if(rightsConfirmed!==true)throw Error('가창 모델과 녹음·가사 사용 권한을 확인하세요.');
  if(typeof session!=='string'||session.length<8)throw Error('기존 Windows EXE에서만 로컬 가창 모델을 실행합니다.');
- const segments=buildKoreanDiffSingerDS(alignment,dictionary);
+ const segments=buildKoreanDiffSingerDS(alignment,dictionary,{phonemePlan});
  if(signal?.aborted)throw Error('가창 생성을 취소했습니다.');
  const response=await request('/api/singing/diffsinger',{method:'POST',
   headers:{'X-MYVOCAL-Session':session,'Content-Type':'application/json'},

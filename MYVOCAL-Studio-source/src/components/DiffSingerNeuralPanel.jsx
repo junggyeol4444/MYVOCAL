@@ -9,6 +9,8 @@ import {sha256File} from '../lib/voiceTraining.js';
 import {convertRegisteredRVC} from '../lib/rvcStoredConversion.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {convertLongSingingWithRVC} from '../lib/rvcLongConversion.js';
+import {isPhonemePlanStale} from '../lib/phonemePlan.js';
+import {isAlignmentStale} from '../lib/lyricAlignment';
 
 const KEY='MYVOCAL_NATIVE_DIFFSINGER_V1';
 const readPaths=()=>{try{const v=JSON.parse(window.localStorage.getItem(KEY)||'{}');
@@ -25,7 +27,7 @@ export default function DiffSingerNeuralPanel({project,onChange,notify,voice,reg
  useEffect(()=>{abort.current?.abort();setStatus('');setError('');setRights(false);},[project.id]);
  const aligned=project.vocalAlignment;
  const eligibleModels=registeredModels.filter(m=>m?.engineId==='rvc'&&m.voiceId===voice?.id&&m.assetId&&/^[a-f0-9]{64}$/i.test(String(m.sha256||'')));
- const alignment=aligned;
+ const alignment=aligned&&!isAlignmentStale(project,aligned)?aligned:null;
  const canRender=alignment?.format==='MYVOCAL_LYRIC_ALIGNMENT'&&
   Array.isArray(alignment.cues)&&alignment.cues.length>0&&['self','owned','licensed'].includes(voice?.rights);
  async function create(){
@@ -41,7 +43,8 @@ export default function DiffSingerNeuralPanel({project,onChange,notify,voice,reg
    if(controller.signal.aborted||latest.current!==before)throw Error('프로젝트가 변경됐습니다.');
    setStatus('로컬 DiffSinger 실제 Acoustic+Vocoder 음성 합성 중');
    const source=await synthesizeDiffSingerWav(alignment,{
-    python,root,experiment,dictionary,rightsConfirmed:rights,signal:controller.signal});
+    python,root,experiment,dictionary,phonemePlan:project.phonemePlan&&!isPhonemePlanStale(alignment,project.phonemePlan)?project.phonemePlan:null,
+    rightsConfirmed:rights,signal:controller.signal});
    let converted=null;
    if(alsoRvc){
     const saved=readRVCPreferences(window.localStorage);
@@ -118,7 +121,7 @@ export default function DiffSingerNeuralPanel({project,onChange,notify,voice,reg
    {eligibleModels.map(m=><option key={m.id} value={m.id}>{m.name||'등록 본인 가창 음색'} {m.indexAssetId?'· FAISS 인덱스 포함':''}</option>)}
   </select></Field>}
   <label className="check-item"><input type="checkbox" checked={rights} disabled={busy} onChange={e=>setRights(e.target.checked)}/>이 가창 모델·목소리·한국어 가사 사용 권한을 확인했습니다.</label>
-  <p className="muted">MIDI 음표 {alignment?.cues?.length||0}개 · 사용자 실제 학습 가창 모델과 일치하는 발음 사전이 필요합니다. 사전에 없는 글자는 임의로 대체하지 않고 오류로 알립니다. 음소 길이는 MIDI 기본 분할이며 자연스러운 발음을 보증하지 않습니다.</p>
+  <p className="muted">MIDI 음표 {alignment?.cues?.length||0}개 · 저장된 한국어 발음 타임라인이 있으면 음절별 길이를 실제 모델 입력에 적용합니다. 사전에 없는 글자는 임의로 대체하지 않습니다. 음소 내부 발음 배분은 실제 모델 품질에 따릅니다.</p>
   <div className="mv7-actions"><Button variant="primary" disabled={busy||!canRender||!dictionaryFile||!rights||!python||!root||!experiment} onClick={create}>{busy?'실제 가창 모델 실행 중':'한국어 신경망 Singing WAV 생성·편집 트랙 저장'}</Button>
    {busy&&<Button onClick={()=>abort.current?.abort()}>추론 취소</Button>}</div>
   {status&&<p role="status" className="muted">{status}</p>}
