@@ -94,7 +94,7 @@ export async function exportSingingTakeDataset(project,alignment,recording,dicti
  const phrases=planSingingTakePhrases(project,alignment,{recordingStartSec});
  const source=wav16(await recording.arrayBuffer());
  if(signal?.aborted)throw Error('데이터셋 만들기가 취소됐습니다.');
- const entries=[],manifest=[],maxSeconds=source.frames/source.rate;
+ const entries=[],manifest=[],transcriptions=['name,ph_seq,ph_dur'],maxSeconds=source.frames/source.rate;
  let size=0;
  for(const phrase of phrases){
   if(signal?.aborted)throw Error('데이터셋 만들기가 취소됐습니다.');
@@ -112,8 +112,9 @@ export async function exportSingingTakeDataset(project,alignment,recording,dicti
     startSec:round(c.startSec-phrase.startSec),endSec:round(c.endSec-phrase.startSec)})),
    phonemeTiming:'MIDI-derived, not audio forced-aligned',
    audioMetrics:audio.metrics};
-  const paths={audio:'audio/'+key+'.wav',label:'labels/'+key+'.json',score:'score/'+key+'.ds'};
+  const paths={audio:'wavs/'+key+'.wav',label:'labels/'+key+'.json',score:'score/'+key+'.ds'};
   const score={...ds[0],offset:0};
+  transcriptions.push([key,score.ph_seq,score.ph_dur].join(','));
   entries.push({name:paths.audio,data:audio.bytes},
    {name:paths.label,data:encoder.encode(JSON.stringify(label,null,2))},
    {name:paths.score,data:encoder.encode(JSON.stringify([score],null,2))});
@@ -128,8 +129,9 @@ export async function exportSingingTakeDataset(project,alignment,recording,dicti
   sampleRate:source.rate,channels:source.channels,rights:voice.rights,
   recordingStartSec,phrases:manifest,trained:false,
   note:'실제 노래 녹음에서 PCM 구간을 추출했습니다. 음소 시간은 가사·MIDI 추정이며 음성 강제 정렬/신경망 학습은 수행하지 않았습니다. 학습 전 수동 라벨 검수와 모델별 전처리가 필요합니다.'};
- entries.unshift({name:'manifest.json',data:encoder.encode(JSON.stringify(meta,null,2))},
-  {name:'README.txt',data:encoder.encode('MYVOCAL 한국어 가창 학습 데이터\n실제 사용자 녹음 WAV와 원곡 가사·MIDI 시간표를 페어로 저장합니다.\n음소 시간은 실제 발음 강제 정렬 결과가 아닙니다. 반드시 라벨을 검수하고 설치한 DiffSinger 버전에 맞게 전처리하세요.\n이 파일은 학습된 모델이나 합성된 노래가 아닙니다.\n')});
+ entries.unshift({name:'transcriptions.csv',data:encoder.encode(transcriptions.join('\n')+'\n')},
+  {name:'manifest.json',data:encoder.encode(JSON.stringify(meta,null,2))},
+  {name:'README.txt',data:encoder.encode('MYVOCAL 한국어 가창 학습 데이터\nDiffSinger acoustic 원시 데이터 레이아웃: wavs/*.wav + transcriptions.csv (name,ph_seq,ph_dur).\n실제 사용자 녹음 WAV와 원곡 가사·MIDI 시간표를 페어로 저장합니다.\n음소 시간은 실제 발음 강제 정렬 결과가 아닙니다. 반드시 라벨을 검수하고 설치한 DiffSinger 버전에 맞게 전처리하세요.\n이 파일은 학습된 모델이나 합성된 노래가 아닙니다.\n')});
  return {bytes:makeZip(entries),manifest:meta,
   fileName:'MYVOCAL-'+String(project.title||'singing').replace(/[^a-zA-Z0-9가-힣_-]/g,'_').slice(0,45)+'-가창학습데이터.zip'};
 }
