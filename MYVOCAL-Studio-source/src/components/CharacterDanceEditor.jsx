@@ -4,6 +4,7 @@ import {getFile} from '../lib/assetDb.js';
 import {downloadText} from '../lib/store.js';
 import {genreList} from '../lib/genres.js';
 import {createDancePlan,validateDancePlan,parseDanceLines,danceLines,danceAt,dancePose,danceReferences,saveDancePlan} from '../lib/characterDanceDirector.js';
+import {extractMotionCapture31,makeMotionCapture31} from '../lib/motionReferencePose31.js';
 const MOVES={groove:'그루브',step:'스텝',bounce:'바운스',sway:'스웨이',wave:'팔 흔들기',pose:'포즈'};
 export default function CharacterDanceEditor({character,projects=[],onSave,notify}){
  const existing=(()=>{try{return character.dance88?validateDancePlan(character,character.dance88):null;}catch{return null;}})();
@@ -16,6 +17,39 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
  const [lines,setLines]=useState(()=>danceLines(base));
  const [time,setTime]=useState(0),[videoUrl,setVideoUrl]=useState(''),[refError,setRefError]=useState('');
  const videoRef=useRef(null);const references=danceReferences(character);
+ const [posePython,setPosePython]=useState(''),[poseModel,setPoseModel]=useState('');
+ const [poseRights,setPoseRights]=useState(false),[poseRunning,setPoseRunning]=useState(false);
+ const [poseStatus,setPoseStatus]=useState('설치된 MediaPipe Task .task 모델 선택 필요');
+ const [poseDraft,setPoseDraft]=useState(null);
+ const poseAbort=useRef(null);
+ useEffect(()=>()=>poseAbort.current?.abort(),[]);
+ const extractPose=async()=>{
+  if(poseRunning)return;
+  setPoseDraft(null);const controller=new AbortController();poseAbort.current=controller;setPoseRunning(true);
+  setPoseStatus('본인 동작 영상에서 로컬 전신 관절 추출 중…');
+  try{
+   if(!referenceId)throw Error('먼저 등록된 동작 참고 영상을 선택하세요.');
+   const source=await getFile(referenceId);
+   if(!(source instanceof Blob))throw Error('등록 동작 참고 원본 영상을 찾지 못했습니다.');
+   const result=await extractMotionCapture31(source,{
+    python:posePython,model:poseModel,rightsConfirmed:poseRights,signal:controller.signal
+   });
+   if(controller.signal.aborted)throw Error('동작 참고 추출이 취소됐습니다.');
+   const captured=makeMotionCapture31(character,referenceId,result);
+   setPoseDraft(captured);
+   setPoseStatus('실제 영상 '+captured.frames.length+'개 자세 프레임 추출 완료 · 저장 전 원본 유지');
+  }catch(e){setPoseStatus('자세 추출 중단: '+e.message);}
+  finally{poseAbort.current=null;setPoseRunning(false);}
+ };
+ const savePose=()=>{
+  try{
+   if(!poseDraft||poseDraft.referenceAssetId!==referenceId||poseDraft.characterId!==character.id)
+    throw Error('현재 선택한 사람/캐릭터와 동작 참고 영상이 바뀌었습니다.');
+   onSave({...character,motionCaptured31:poseDraft,updatedAt:new Date().toISOString()});
+   setPoseDraft(null);
+   notify('실제 MediaPipe 영상 관절 동작을 캐릭터 3D VRM에 연결했습니다. 이전 본·음원·원본 영상은 보존합니다.');
+  }catch(e){notify('실제 동작 저장 실패: '+e.message);}
+ };
  useEffect(()=>{let gone=false,url='';setVideoUrl('');setRefError('');
   if(referenceId)(async()=>{try{const file=await getFile(referenceId);if(!file)throw Error('로컬 동작 참고 영상 원본 없음');url=URL.createObjectURL(file);if(!gone)setVideoUrl(url);}
    catch(e){if(!gone)setRefError(e.message);}})();
@@ -39,6 +73,21 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
   <Field label="권한이 있는 Motion Reference 영상 (선택)"><select value={referenceId} onChange={e=>setReferenceId(e.target.value)}><option value="">사용하지 않음</option>{references.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
   {refError&&<p role="alert">참고 영상 오류: {refError}</p>}
   {videoUrl&&<video ref={videoRef} controls preload="metadata" playsInline src={videoUrl} style={{width:'min(100%,420px)',maxHeight:230}} aria-label="원본 동작 참고 영상"/>}
+  <div className="mv7-item">
+   <strong>원본 31·32항 · 실제 동작 영상 자세 추출 → 3D VRM</strong>
+   <Field label="설치된 로컬 Python.exe 절대 경로"><input value={posePython} onChange={e=>setPosePython(e.target.value)} placeholder="C:\\Python311\\python.exe" disabled={poseRunning}/></Field>
+   <Field label="설치된 MediaPipe Pose .task 모델 절대 경로"><input value={poseModel} onChange={e=>setPoseModel(e.target.value)} placeholder="C:\\Models\\pose_landmarker.task" disabled={poseRunning}/></Field>
+   <label><input type="checkbox" checked={poseRights} disabled={poseRunning} onChange={e=>setPoseRights(e.target.checked)}/> 본인이 촬영했거나 동작 추출 및 사용 권한을 확보한 영상입니다.</label>
+   <div className="hstack">
+    <Button disabled={poseRunning||!referenceId||!poseRights||!posePython||!poseModel} onClick={extractPose}>{poseRunning?'실제 관절 분석 중…':'실제 MediaPipe 전신 자세 추출'}</Button>
+    {poseRunning&&<Button onClick={()=>poseAbort.current?.abort()}>추출 취소</Button>}
+    <Button variant="primary" disabled={!poseDraft||poseRunning} onClick={savePose}>추출 동작을 VRM에 저장</Button>
+   </div>
+   <p role="status">{poseStatus}</p>
+   {poseDraft&&<p>추출 자세 {poseDraft.frames.length}프레임 · 길이 {(poseDraft.durationMs/1000).toFixed(2)}초 · 원본 동영상은 기존 위치에 유지</p>}
+   {character.motionCaptured31&&<p>등록된 실제 동작: {character.motionCaptured31.frames?.length||0}프레임 · 기존 춤 계획과 별도 보관</p>}
+   <Notice>Windows EXE에 설치된 오프라인 MediaPipe Tasks·OpenCV·Pose Task 모델이 필요합니다. 모델은 자동 설치/다운로드되지 않습니다. 2D 영상에서 검출한 상대 관절 회전을 VRM 본에 적용하는 실제 추출 기능이며, 깊이까지 추정한 완전한 3D 모션캡처는 아닙니다.</Notice>
+  </div>
   <p><Button onClick={regenerate}>현재 음악 설정으로 동작 큐 생성</Button></p>
   <p>동작: {Object.entries(MOVES).map(([a,b])=>`${a}=${b}`).join(' · ')}</p>
   <Field label="춤 큐 편집: 시작초,종료초,동작,강도(0~1),참고영상 시작초(선택)"><textarea rows={11} spellCheck={false} value={lines} onChange={e=>setLines(e.target.value)}/></Field>
@@ -47,6 +96,6 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
    <p aria-live="polite">{time.toFixed(2)}초 · {now?`${now.section} / ${MOVES[now.move]} / 강도 ${Math.round(now.strength*100)}% / 박 ${now.beat.toFixed(2)}`:'동작 없음'} {pose?.referenceMs!=null?`· 참고 영상 ${ (pose.referenceMs/1000).toFixed(2)}초`:''}</p>
   </>}
   <div className="modal-actions"><Button disabled={!!error} onClick={exportJson}>춤 타임라인 JSON</Button><Button variant="primary" disabled={!!error} onClick={save}>춤 연출 저장</Button></div>
-  <Notice>참고 영상은 **원본 영상을 보며 사람이 동작 종류와 해당 시작초를 입력하는 방식**입니다. 시작초를 입력한 큐는 그 시점의 참조 구간과 시간상 연결되며, 수동으로 선택한 동작만 캐릭터에 적용됩니다. 자동 사람 동작 추출·전신 모션 캡처·영상 합성은 구현하지 않았습니다. 모션은 **동작이 호환되는 VRM 휴머노이드 본** 또는 2D 이미지 영역 근사로 보여 줍니다. 3D 공연 출력은 기존의 무음 WebM입니다.</Notice>
+  <Notice>STEP88 수동 춤 계획에서는 원본 영상을 보며 동작 종류와 해당 시작초를 입력합니다. 별도 STEP31/32 패널은 설치된 로컬 자세 모델로 실제 관절을 추출해 VRM에 연결합니다. 시작초를 입력한 큐는 그 시점의 참조 구간과 시간상 연결되며, 수동으로 선택한 동작만 캐릭터에 적용됩니다. 로컬 MediaPipe 모델을 통한 2D 전신 자세 추출은 제공하지만 영상 합성·완전한 3D 모션캡처는 아직 수행하지 않습니다. 모션은 **동작이 호환되는 VRM 휴머노이드 본** 또는 2D 이미지 영역 근사로 보여 줍니다. 3D 공연 출력은 기존의 무음 WebM입니다.</Notice>
  </div>;
 }
