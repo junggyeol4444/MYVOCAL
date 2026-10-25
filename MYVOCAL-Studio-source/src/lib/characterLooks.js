@@ -1,6 +1,6 @@
 // Step62: locally authored character look presets. No AI vision or identity recognition.
 export const LOOK_LIMIT=24;
-export const LOOK_FIELDS=['outfit','expression','pose','scene','accessories','notes'];
+export const LOOK_FIELDS=['outfit','hairStyle','expression','pose','scene','accessories','notes'];
 export const IDENTITY_FIELDS=['hair','eyes','body','palette'];
 const own=(v,k)=>Object.prototype.hasOwnProperty.call(v,k);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&Object.getPrototypeOf(v)===Object.prototype;

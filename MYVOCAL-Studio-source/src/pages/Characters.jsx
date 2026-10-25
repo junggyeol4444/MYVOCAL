@@ -22,6 +22,7 @@ import {putFile,removeFile} from '../lib/assetDb';
 import {downloadText} from '../lib/store';
 import {characterDependents} from '../lib/voiceDeletionSafety.js';
 import CharacterRestorePanel from '../components/CharacterRestorePanel.jsx';
+import CharacterOutfitStudio from '../components/CharacterOutfitStudio.jsx';
 import {LOOK_FIELDS,LOOK_LIMIT,addCharacterLook,approveCharacterLook,deleteCharacterLook,reviewCharacterLook,summarizeCharacterLooks,updateCharacterLook,exportCharacterLookPack,importCharacterLookPack} from '../lib/characterLooks.js';
 import {SHOT_LIMIT,CAMERA_CHOICES,addCharacterShot,updateCharacterShot,deleteCharacterShot,reviewCharacterShot,summarizeCharacterShots,exportCharacterShotPlan,importCharacterShotPlan,getCharacterShotTimeline,SHOT_IMPORT_MAX_BYTES} from '../lib/characterShots.js';
 import {buildCharacterCastTimeline,exportCharacterCastTimeline} from '../lib/characterCast.js';
@@ -34,7 +35,7 @@ const appearanceLabels={hair:'머리 / 헤어스타일',eyes:'눈 / 눈동자',o
 const roleLabels={portrait:'대표 이미지',front:'정면',side:'측면',back:'후면','full-body':'전신',expression:'표정 참고',outfit:'의상 참고','motion-reference':'동작 참고 영상',model:'3D 모델',other:'기타'};
 function possibleRoles(file){const type=inferCharacterAssetKind(file);return characterAssetRoles.filter(role=>{try{if(type==='unknown')return role==='other';validateCharacterAssetRole(role,type);return true;}catch{return false;}});}
 const blankAppearance=()=>Object.fromEntries(characterAppearanceFields.map(k=>[k,'']));
-const lookLabels={outfit:'의상',expression:'표정',pose:'포즈 / 동작',scene:'장면 / 배경',accessories:'장신구 변경',notes:'연출 메모'};
+const lookLabels={outfit:'의상',hairStyle:'헤어 변경',expression:'표정',pose:'포즈 / 동작',scene:'장면 / 배경',accessories:'장신구 변경',notes:'연출 메모'};
 const blankLook=()=>Object.fromEntries(LOOK_FIELDS.map(k=>[k,'']));
 const cameraLabels={wide:'와이드',medium:'미디엄','close-up':'클로즈업',profile:'측면',overhead:'탑뷰',tracking:'트래킹',other:'기타'};
 const blankShot=()=>({title:'',lookId:'',startSec:'0',endSec:'5',camera:'medium',direction:''});
@@ -58,7 +59,7 @@ export default function Characters({data,add,remove,notify,removeCharacterPersis
  const productionAudit=auditCharacterProduction(visibleCharacters);
  const [vocalFor,setVocalFor]=useState(null),[vocalEditing,setVocalEditing]=useState(null),[vocalDraft,setVocalDraft]=useState(blankVocalCue);
  const [shotFor,setShotFor]=useState(null),[shotEditing,setShotEditing]=useState(null),[shotDraft,setShotDraft]=useState(blankShot);
- const [lookEditing,setLookEditing]=useState(null);
+ const [lookEditing,setLookEditing]=useState(null),[lookStudio,setLookStudio]=useState(null);
  const [lookFor,setLookFor]=useState(null),[lookName,setLookName]=useState(''),[lookFields,setLookFields]=useState(blankLook),[lookAsset,setLookAsset]=useState('');
  const [open,setOpen]=useState(false),[editing,setEditing]=useState(null),[name,setName]=useState(''),[kind,setKind]=useState('character'),[rights,setRights]=useState('owned'),[rightsNote,setRightsNote]=useState(''),[description,setDescription]=useState(''),[appearance,setAppearance]=useState(blankAppearance),[existingAssets,setExistingAssets]=useState([]),[files,setFiles]=useState([]),[busy,setBusy]=useState(false);
  const close=(force=false)=>{if(busy&&!force)return;setOpen(false);setEditing(null);setName('');setKind('character');setRights('owned');setRightsNote('');setDescription('');setAppearance(blankAppearance());setExistingAssets([]);setFiles([]);};
@@ -269,7 +270,7 @@ export default function Characters({data,add,remove,notify,removeCharacterPersis
 <div className="look-overview"><small>룩 프리셋 {summarizeCharacterLooks(c).total}/{LOOK_LIMIT}개 · 재검토 {summarizeCharacterLooks(c).reviewRequired}개</small>
  {(c.looks||[]).map(look=>{const review=reviewCharacterLook(c,look);return <div className="look-row" key={look.id}>
   <div><strong>{look.name}</strong> · {look.outfit||look.expression||look.scene||'설정 기록'} <small>{review.reviewRequired?`기준 재검토 필요 (${review.changedFields.join(', ')||'자료 누락'})`:'기준 외형 일치 · 수동 검사'}</small></div>
-  <div className="look-actions">{review.reviewRequired&&<Button onClick={()=>approveLook(c,look.id)}>기준 재승인</Button>}<Button onClick={()=>beginLook(c,look)}>수정</Button><Button onClick={()=>removeLook(c,look.id)}>룩 삭제</Button></div>
+  <div className="look-actions">{review.reviewRequired&&<Button onClick={()=>approveLook(c,look.id)}>기준 재승인</Button>}<Button onClick={()=>beginLook(c,look)}>수정</Button><Button disabled={c.kind!=='character'||!eligibleLayerImages(c).length} onClick={()=>setLookStudio({characterId:c.id,lookId:look.id})}>의상·헤어·장신구 AI 이미지 4종 제작</Button><Button onClick={()=>removeLook(c,look.id)}>룩 삭제</Button></div>
  </div>;})}
  <div className="look-actions"><Button icon="plus" onClick={()=>beginLook(c)}>룩 추가</Button><Button onClick={()=>exportLooks(c)}>룩 JSON 저장</Button><label className="btn" style={{cursor:"pointer"}}>룩 JSON 가져오기<input type="file" accept=".json,application/json" style={{display:"none"}} onChange={e=>{const file=e.target.files?.[0];if(file)importLooks(c,file);e.target.value="";}}/></label></div></div>
  <div className="look-overview"><small>MV 컷 계획 {summarizeCharacterShots(c).total}/{SHOT_LIMIT}개 · 재검토 {summarizeCharacterShots(c).reviewRequired}개 · 수동 스토리보드</small>
@@ -291,7 +292,8 @@ export default function Characters({data,add,remove,notify,removeCharacterPersis
  </div>
  <div className="asset-footer"><span className="identity-label"><Icon name="lock" size={14}/> 수동 기준 기록 · 자동 일관성 미구현</span><Button icon="sliders" onClick={()=>begin(c)}>설정 편집</Button><button className="icon-btn danger" title="삭제" onClick={()=>deleteCharacter(c)}><Icon name="trash" size={17}/></button></div></div></div>;})}</div>:<Empty icon="user" title="아직 등록된 캐릭터가 없습니다" description="본인 자료나 사용 허가가 있는 사람·캐릭터 자료를 등록하세요." action={<Button variant="primary" icon="plus" onClick={()=>begin()}>첫 캐릭터 등록</Button>}/>}
  <Notice>MV 컷 계획은 시간 및 텍스트 메타데이터이며 비디오 프레임을 렌더링하지 않습니다. 외형 정보·룩 프리셋·기준 변화 감지는 사용자가 직접 입력한 텍스트를 비교합니다. 룩·컷·보컬 큐 JSON 가져오기는 동일 캐릭터 ID만 허용하고, 컷 ID·시간 충돌·누락된 룩을 검사한 뒤 전부 통과할 때만 저장합니다. 얼굴 인식·AI 캐릭터 생성·고급 3D 무대 자동 생성·자동 Identity Lock·립싱크는 아직 제공하지 않습니다. 기본 3D 모델 프리뷰는 STEP83에서 지원합니다. 원본 자료는 로컬 IndexedDB에 보관됩니다.</Notice>
- {modelFor&&<Modal title={`STEP83 · 3D 캐릭터 시스템 · ${modelFor.name}`} onClose={()=>setModelFor(null)}><Character3dEditor character={data.characters.find(c=>c.id===modelFor.id)||modelFor} onSave={profile=>{add('characters',profile);setModelFor(null);}} notify={notify}/></Modal>}
+ {lookStudio&&<Modal title="캐릭터 의상·머리·장신구 4종 로컬 AI 제작" onClose={()=>setLookStudio(null)}><CharacterOutfitStudio character={data.characters.find(c=>c.id===lookStudio.characterId)} lookId={lookStudio.lookId} onSave={updated=>{add('characters',updated);setLookStudio(null);}} notify={notify}/></Modal>}
+  {modelFor&&<Modal title={`STEP83 · 3D 캐릭터 시스템 · ${modelFor.name}`} onClose={()=>setModelFor(null)}><Character3dEditor character={data.characters.find(c=>c.id===modelFor.id)||modelFor} onSave={profile=>{add('characters',profile);setModelFor(null);}} notify={notify}/></Modal>}
  {performanceFor&&<Modal title={`STEP89 · 직접 연기 및 악기 연주 연결 · ${performanceFor.name}`} onClose={()=>setPerformanceFor(null)}><CharacterPerformance89Editor character={data.characters.find(c=>c.id===performanceFor.id)||performanceFor} projects={data.projects} onSave={profile=>{add('characters',profile);setPerformanceFor(null);}} notify={notify}/></Modal>}
  {danceFor&&<Modal title={`STEP88 · AI Dance Director · ${danceFor.name}`} onClose={()=>setDanceFor(null)}><CharacterDanceEditor character={data.characters.find(c=>c.id===danceFor.id)||danceFor} projects={data.projects} onSave={profile=>{add('characters',profile);setDanceFor(null);}} notify={notify}/></Modal>}
  {expressionFor&&<Modal title={`STEP87 · AI 표정 연출 · ${expressionFor.name}`} onClose={()=>setExpressionFor(null)}><CharacterExpressionEditor character={data.characters.find(c=>c.id===expressionFor.id)||expressionFor} onSave={profile=>{add('characters',profile);setExpressionFor(null);}} notify={notify}/></Modal>}
