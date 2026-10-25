@@ -40,14 +40,18 @@ export function mouthAtTime(overlay,sceneId,seconds){
  const time=Math.round(seconds*1000),cues=row.cues;
  let lo=0,hi=cues.length-1;
  while(lo<=hi){let mid=(lo+hi)>>1,c=cues[mid];if(time<c.startMs)hi=mid-1;else if(time>=c.endMs)lo=mid+1;
-  else {const w=Math.max(0,Math.min(1,(time-c.startMs)/60,(c.endMs-time)/60));return {viseme:c.viseme,weight:w,lyric:c.lyric,characterId:row.characterId};}}
+  else {let w=Math.max(0,Math.min(1,(time-c.startMs)/60,(c.endMs-time)/60));
+   if(overlay.duetAudioActivity&&row.role){const activity=overlay.duetAudioActivity;
+    w*=activity.levels?.[row.role]?.[Math.floor(time/activity.stepMs)]||0;}
+   return {viseme:c.viseme,weight:w,lyric:c.lyric,characterId:row.characterId};}}
  return null;
 }
 export function drawMvLipSyncOverlay(ctx,overlay,sceneId,seconds,width,height){
  const current=mouthAtTime(overlay,sceneId,seconds);
  if(!current||current.viseme==='sil'||current.weight<=0||!(width>0&&height>0))return false;
- const x=width*overlay.xPercent/100,y=height*overlay.yPercent/100;
- const r=width*overlay.sizePercent/200,weight=Math.min(1,current.weight),v=current.viseme;
+ const place=overlay.scenes?.[sceneId]?.placement||overlay;
+ const x=width*place.xPercent/100,y=height*place.yPercent/100;
+ const r=width*place.sizePercent/200,weight=Math.min(1,current.weight),v=current.viseme;
  const flat=v==='I'||v==='E'||v==='F',closed=v==='M';
  const halfW=closed?r*.9:flat?r*1.15:v==='U'?r*.43:v==='O'?r*.53:r*.85;
  const halfH=closed?Math.max(1,weight*1.5):flat?r*.2*Math.max(.2,weight):v==='U'?r*.45*Math.max(.2,weight):v==='O'?r*.6*Math.max(.2,weight):r*.7*Math.max(.2,weight);

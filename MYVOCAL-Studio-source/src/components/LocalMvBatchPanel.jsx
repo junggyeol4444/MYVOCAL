@@ -198,7 +198,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     if(fullMouth){
      const saved=readMvLipPlacement(window.localStorage,project.id);
      lipPlacement=Object.keys(saved).length?saved:reviewedCharacterMouthPlacement(current(),dataRef.current?.characters||[]);
-     if(!lipPlacement)throw Error('MV 입 위치 저장 또는 검토된 2D 캐릭터 입 영역이 필요합니다.');
+     if(!lipPlacement&&!(makeDuet||current()?.duetSingers?.version===1))
+       throw Error('MV 입 위치 저장 또는 검토된 2D 캐릭터 입 영역이 필요합니다.');
     }
     let movieProject=base.project;
     if(makeAutoScore){
@@ -381,7 +382,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      const place=reviewedCharacterMouthPlacement(movieProject,chars);
      if(place&&automaticSingingVisemes(movieProject,chars))lipPlacement=place;
     }
-    const result=await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,prewarmedAudioContext:warmed,onProgress:setMessage});
+    const result=await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,
+      duetPcmLip:fullMouth&&(makeDuet||movieProject?.duetSingers?.version===1),
+      prewarmedAudioContext:warmed,onProgress:setMessage});
     const outputName='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV';
     const finishedFiles=[];
     const download=(blob,ext,suffix='')=>{
@@ -562,7 +565,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <label><input type="checkbox" disabled={busy} checked={faceModelRights} onChange={e=>setFaceModelRights(e.target.checked)}/> Wav2Lip 학습 모델의 사용 라이선스를 확인했습니다.</label>
    <Notice>동일한 본인·허가받은 실제 사람으로 연결된 장면에만 적용합니다. 원본 MV WebM도 별도 보존하며, 실제 Wav2Lip 모델이 MP4를 생성하지 못하면 성공이라고 보고하지 않습니다.</Notice>
   </div>}
-  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 캐릭터 2D 립싱크 입 모양도 영상에 포함</label>}
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 2D 립싱크 입 모양 포함 (듀엣은 두 가수 실제 WAV PCM 사용)</label>}
   <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeSourceStems&&(!musicPython||!soundfontDll||!soundfontFile))||(makeNeuralAudioStems&&(!musicPython||!musicModelDir))||(makeNeuralSinging&&(!singingRights||!voices.length||(makeHarmony&&makeDuet&&(!duetVoiceId||!duetLeadCharacterId||!duetHarmonyCharacterId||duetLeadCharacterId===duetHarmonyCharacterId))))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))||(faceNeuralSync&&(!personId||!facePython||!faceRoot||!faceCheckpoint||!faceRights||!faceModelRights))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
   {busy&&<Button onClick={()=>cancelRef.current?.abort()}>이후 장면 생성 취소</Button>}
   {message&&<p role="status" className="muted">{message}</p>}
