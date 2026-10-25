@@ -12,8 +12,8 @@ export async function convertRegisteredRVC(file,{modelFile,indexFile=null,...set
  if(typeof session!=='string'||!session)throw Error('로컬 Windows EXE 세션에서만 등록 모델을 사용할 수 있습니다.');
  if(!(modelFile instanceof Blob)||modelFile.size<1024||modelFile.size>MAX_MODEL)throw Error('등록된 RVC 체크포인트 파일이 없거나 200MiB를 초과합니다.');
  if(indexFile!==null && (!(indexFile instanceof Blob)||indexFile.size<1024||indexFile.size>MAX_INDEX))throw Error('등록된 FAISS 인덱스가 없거나 96MiB를 초과합니다.');
- if(file.size>RVC_SOURCE_LIMIT)throw Error('원본 WAV는 한 구간당 24MiB를 초과할 수 없습니다.');
- assertUsableSingingWav(await file.arrayBuffer(),{maxDurationSec:300});
+ if(file.size>RVC_SOURCE_LIMIT)throw Error('원본 WAV는 한 구간당 128MiB를 초과할 수 없습니다.');
+ assertUsableSingingWav(await file.arrayBuffer(),{maxDurationSec:360});
  if(signal?.aborted)throw Error('등록 모델 RVC 변환을 취소했습니다.');
  const form=new FormData();
  form.set('audio',file,'MYVOCAL-source.wav');
@@ -25,8 +25,8 @@ export async function convertRegisteredRVC(file,{modelFile,indexFile=null,...set
  if(!response.ok){const data=await response.json().catch(()=>({error:'RVC 모델 실행 HTTP '+response.status}));throw Error(String(data.error||'등록 모델 RVC 변환 실패'));}
  if(response.headers?.get('Content-Type')?.split(';')[0]!=='audio/wav')throw Error('RVC가 실제 WAV를 반환하지 않았습니다.');
  const blob=await response.blob();
- if(blob.size>RVC_RESULT_LIMIT)throw Error('RVC 변환 결과가 48MiB를 초과했습니다.');
- assertUsableSingingWav(await blob.arrayBuffer(),{maxDurationSec:300});
+ if(blob.size>RVC_RESULT_LIMIT)throw Error('RVC 변환 결과가 160MiB를 초과했습니다.');
+ assertUsableSingingWav(await blob.arrayBuffer(),{maxDurationSec:360});
  if(signal?.aborted)throw Error('RVC 등록 모델 음색 변환을 취소했습니다.');
  return new File([blob],'MYVOCAL-등록모델-RVC-가창.wav',{type:'audio/wav'});
 }
