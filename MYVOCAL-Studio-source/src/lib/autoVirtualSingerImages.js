@@ -39,8 +39,10 @@ export function autoSingerFirstImageRequest(request){
 }
 
 export function recordAutoSingerFirstImage(project,sceneId,assetId,request){
- const plan=validateAutoVirtualSinger(project,{enabled:true});
- if(plan.anchor||!IMAGE_ID.test(assetId)||!request?.key)
+ if(!project?.id||project.videoMode!=='auto'||project.characterId||
+  !Array.isArray(project.scenes)||project.scenes.some(s=>!allowedScene(s))||
+  project.autoVirtualSingerImageV1||!IMAGE_ID.test(assetId)||!request?.key||
+  project.scenes.some(s=>s.id!==sceneId&&(s.imageAssetId||s.videoClipAssetId)))
   throw Error('자동 가수 첫 장면 원본은 기존 자료와 충돌 없이 한 번만 등록합니다.');
  const scene=project.scenes.find(s=>s.id===sceneId);
  if(!scene||scene.imageAssetId!==assetId||scene.imageGeneration?.source!==sourceKind||
