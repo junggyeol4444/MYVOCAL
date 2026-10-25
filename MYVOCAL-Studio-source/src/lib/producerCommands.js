@@ -1,5 +1,6 @@
 import {chordPitches} from './midiEngine.js';
 import {latestCompleteNeuralScore} from './neuralScoreBatch.js';
+import {applyNeuralWavClipNaturalEdit} from './neuralWavClipNaturalEdit.js';
 // Apply only explicitly supported music editing commands from the original
 // MYVOCAL Producer specification. These are real MIDI/chord edits, not LLM AI.
 // Original audio/image assets are never overwritten.
@@ -377,12 +378,14 @@ function applyProducerNeuralWav86(project,cmd){
   kind:'neural-wav-mix-86',changed:1};
 }
 
-export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['1절에서 멜로디를 세게 해줘','후렴에서 코드를 반음 올려줘','인트로에서 멜로디 빼줘','베이스 오디오 음량을 50%로 설정해줘','드럼 WAV 음소거 해줘','드럼 WAV 음소거 해제해줘','인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴에서 기타를 더 강하게 해줘','2절에서 피아노를 작게 해줘','브리지에서 스트링을 길게 해줘','2절에서 기타를 반음 내려줘','후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
+export const PRODUCER_COMMAND_EXAMPLES=Object.freeze(['1절에서 멜로디를 세게 해줘','후렴에서 코드를 반음 올려줘','인트로에서 멜로디 빼줘','베이스 오디오 음량을 50%로 설정해줘','드럼 WAV 음소거 해줘','드럼 WAV 음소거 해제해줘','기타 WAV 페이드인 2초로 설정해줘','베이스 WAV 페이드아웃 3초로 설정해줘','드럼 WAV 좌우 위치 -35%로 설정해줘','패드 WAV 클립 음량 125%로 설정해줘','멜로디 WAV 시작 4초 잘라줘','코드 WAV 재생 길이 170초로 설정해줘','인트로에서 드럼 빼줘','인트로에서 드럼 다시 넣어줘','후렴에서 기타를 더 강하게 해줘','2절에서 피아노를 작게 해줘','브리지에서 스트링을 길게 해줘','2절에서 기타를 반음 내려줘','후렴이 심심해','멜로디 변경','드럼 강화하기','베이스 강화','화음 추가','스트링 추가','후렴을 더 웅장하게','마지막 후렴만 반키 올려줘']);
 export function applyProducerCommand(project,rawCommand){
  if(!project?.id||!Array.isArray(project.tracks))throw Error('편집할 음악 프로젝트가 없습니다.');
  if(typeof rawCommand!=='string'||rawCommand.length>300)throw Error('300자 이하의 수정 요청을 입력하세요.');
  const cmd=trimCommand(rawCommand);
  if(!cmd||/[\u0000-\u001f\u007f]/u.test(cmd))throw Error('수정 요청을 확인해 주세요.');
+ const clipEdit=applyNeuralWavClipNaturalEdit(project,cmd);
+ if(clipEdit)return clipEdit;
  const neuralWav=applyProducerNeuralWav86(project,cmd);
  if(neuralWav)return neuralWav;
  const sectionRest=applyProducerSectionRest83(project,cmd);
