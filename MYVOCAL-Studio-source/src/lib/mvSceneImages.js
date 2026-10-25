@@ -5,7 +5,8 @@ const text=(v,max=320)=>String(v??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0
 export const MAX_SCENE_IMAGE_BYTES=12*1024*1024;
 export function buildSceneImageRequest(project,scene,character=null,direction=null,autoReference=null){
  if(!project||!scene||!scene.id)throw Error('장면 또는 프로젝트가 없습니다.');
- const detail=imageFields.map(k=>text(scene[k])).join('|');
+ const detail=imageFields.map(k=>text(scene[k])).join('|')+
+ (scene.characterLookId?'|look:'+text(scene.characterLookId,130)+'|hair:'+text(scene.characterLookHair,180)+'|accessories:'+text(scene.characterLookAccessories,180):'');
  const charName=character?text(character.name,160):'';
  const charDescription=character?text(character.description,550):'';
  const appearance=character?.appearance&&typeof character.appearance==='object'?Object.entries(character.appearance).filter(([k,v])=>['hair','eyes','outfit','palette','accessories','body'].includes(k)&&v).map(([k,v])=>`${k}: ${text(v,160)}`).join(', ').slice(0,750):'';
@@ -22,7 +23,10 @@ export function buildSceneImageRequest(project,scene,character=null,direction=nu
   charName&&`Character: ${charName}`,charDescription&&`Character concept: ${charDescription}`,appearance&&`Character appearance: ${appearance}`,scene.outfit&&`Outfit: ${text(scene.outfit)}`,
   scene.expression&&`Facial expression: ${text(scene.expression)}`,
   scene.action&&`Action: ${text(scene.action)}`,scene.camera&&`Camera: ${text(scene.camera)}`,
-  scene.lighting&&`Lighting: ${text(scene.lighting)}`,`Direction: ${text(role,90)}`,
+  scene.lighting&&`Lighting: ${text(scene.lighting)}`,
+  scene.characterLookId&&scene.characterLookHair&&`Selected hairstyle: ${text(scene.characterLookHair,180)}`,
+  scene.characterLookId&&scene.characterLookAccessories&&`Selected accessories: ${text(scene.characterLookAccessories,180)}`,
+  `Direction: ${text(role,90)}`,
   framing&&`Framing: ${text(framing,130)}`, 'single coherent shot, no captions, no watermark'];
  return {key,prompt:pieces.filter(Boolean).join('. ').slice(0,3000),negative:'low quality, blurry, distorted, duplicate body, watermark, text, logo'};
 }

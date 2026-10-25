@@ -9,6 +9,7 @@ import {regenerateNaturalMvScene,undoNeuralNaturalMvScene} from '../lib/mvNatura
 import {previewSectionNaturalEdit,applySectionNaturalEdit,undoSectionNaturalEdit,regenerateSectionNaturalMvScenes,undoSectionNaturalMvScenes} from '../lib/mvSectionNaturalEdit.js';
 import {prepareCharacterReplace94,applyCharacterReplace94,undoCharacterReplace94} from '../lib/characterReplace94.js';
 import {eligibleBandCharacters} from '../lib/virtualBand90.js';
+import {reviewCharacterLook} from '../lib/characterLooks.js';
 import {prepareRegeneration92,verifyRegeneration92,applyRegeneration92,undoRegeneration92} from '../lib/identityRegeneration92.js';
 import {genId} from '../lib/schema';
 import {downloadText} from '../lib/store';
@@ -60,6 +61,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  const [personBusy,setPersonBusy]=useState(false),[personStatus,setPersonStatus]=useState('실제 사람 사진 선택 필요'),[personSeed,setPersonSeed]=useState('');
  const personAbort=useRef(null);
  const [pvCharacterId,setPvCharacterId]=useState(''),[pvArtworkId,setPvArtworkId]=useState(''),[pvDenoise,setPvDenoise]=useState(0.3),[pvSeed,setPvSeed]=useState('');
+ const [selectedLookId,setSelectedLookId]=useState(''),[reviewedLook,setReviewedLook]=useState(null);
  const [pvBusy,setPvBusy]=useState(false),[pvStatus,setPvStatus]=useState('2D 캐릭터 그림 선택 필요');
  const pvAbort=useRef(null);
  const natural93Abort=useRef(null);
@@ -77,6 +79,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  const eligibleArtwork=data.characters.filter(c=>c.kind==='character'&&(c.rights==='owned'||c.rights==='self'||(c.rights==='licensed'&&c.rightsNote?.trim()))&&characterArtworkAssets(c).length);
  const pvCharacter=eligibleArtwork.find(c=>c.id===pvCharacterId)||null;
  const pvAssets=characterArtworkAssets(pvCharacter);
+ const availableLooks=(pvCharacter?.looks||[]).filter(l=>l.referenceAssetId&&pvAssets.some(a=>a.id===l.referenceAssetId)&&!reviewCharacterLook(pvCharacter,l).reviewRequired);
  const pvSelectedArtwork=pvAssets.some(a=>a.id===pvArtworkId)?pvArtworkId:pvAssets[0]?.id||'';
  const selectedPersonPhoto=availablePhotos.some(a=>a.id===personPhotoId)?personPhotoId:availablePhotos[0]?.id||'';
  let directionPlan=null,directionError='';
@@ -263,7 +266,60 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
    notify(`Step79: ${chosen.length}개 장면의 사진 기반 이미지 및 SVD 영상 클립을 저장했습니다.`);
   }catch(e){setPersonStatus('중지/오류: '+e.message);notify('Step79 Image-to-MV: '+e.message);}finally{personAbort.current=null;setPersonBusy(false);}
  };
- // Step80: registered original illustration -> local img2img still -> local SVD clip.
+ const inspectSceneLook=()=>{
+  try{
+   if(!p?.id||!current?.id||!pvCharacter?.id)throw Error('프로젝트·장면·2D 캐릭터를 선택하세요.');
+   const look=availableLooks.find(l=>l.id===selectedLookId);
+   if(!look)throw Error('검토한 의상/헤어/장신구 룩을 선택하세요.');
+   if((current.characterId&&current.characterId!==pvCharacter.id)||current.personMv)
+    throw Error('다른 사람이 이미 배치된 장면은 바꾸지 않습니다.');
+   if(p.outfitLock===true&&look.outfit&&look.outfit!==current.outfit)
+    throw Error('의상 잠금이 켜져 있습니다. 변경 전 잠금을 확인하세요.');
+   validateCharacterArtwork(pvCharacter,look.referenceAssetId);
+   setReviewedLook({id:look.id,assetId:look.referenceAssetId,sceneId:current.id,
+    characterId:pvCharacter.id,scenesSnapshot:JSON.stringify(p.scenes),
+    profileSnapshot:JSON.stringify([pvCharacter.assets,pvCharacter.looks]),
+    summary:look.name+' · '+(look.outfit||'기존 의상')+' · '+(look.hairStyle||'기존 헤어')+' · '+(look.accessories||'장신구 유지')});
+  }catch(e){setReviewedLook(null);notify('캐릭터 의상·헤어 룩 검토: '+e.message);}
+ };
+ const applySceneLook=()=>{
+  try{
+   const preview=reviewedLook;
+   if(!preview||preview.scenesSnapshot!==JSON.stringify(p.scenes)||pvCharacter?.id!==preview.characterId||
+     preview.profileSnapshot!==JSON.stringify([pvCharacter.assets,pvCharacter.looks]))
+    throw Error('미리보기 후 장면이나 캐릭터 룩이 변경됐습니다.');
+   const look=availableLooks.find(l=>l.id===preview.id);
+   if(!look||look.referenceAssetId!==preview.assetId||preview.sceneId!==current?.id)
+    throw Error('선택한 룩·장면이 변경됐습니다.');
+   if(p.outfitLock===true&&look.outfit&&look.outfit!==current.outfit)
+    throw Error('의상 잠금이 적용된 장면에는 의상을 변경할 수 없습니다.');
+   if((current.characterId&&current.characterId!==pvCharacter.id)||current.personMv)
+    throw Error('다른 사람의 기존 장면은 자동 교체할 수 없습니다.');
+   const linked=linkCharacterToMvScene(p,preview.sceneId,pvCharacter,look.referenceAssetId,Number(pvDenoise));
+   const oldScene=current;
+   const updatedScene={...linked.scenes.find(s=>s.id===oldScene.id),characterLookId:look.id,
+    characterLookHair:look.hairStyle||'',characterLookAccessories:look.accessories||'',
+    ...(look.outfit?{outfit:look.outfit}:{})};
+   const next={...linked,scenes:linked.scenes.map(s=>s.id===oldScene.id?updatedScene:s),
+    mvLookHistory:{version:1,history:[...(p.mvLookHistory?.history||[]),
+     {sceneId:oldScene.id,before:oldScene,after:JSON.stringify(updatedScene)}].slice(-12)}};
+   latestProject.current=next;onChange(next);setPvArtworkId(look.referenceAssetId);setReviewedLook(null);
+   notify('캐릭터 스튜디오에서 생성한 룩 원화를 MV 장면의 실제 SD/SVD 입력에 연결했습니다. 영상 생성 버튼을 실행하세요.');
+  }catch(e){setReviewedLook(null);notify('캐릭터 룩 장면 연결 실패: '+e.message);}
+ };
+ const undoSceneLook=()=>{
+  try{
+   const old=p?.mvLookHistory?.history||[],record=old.at(-1);
+   const scene=p?.scenes?.find(s=>s.id===record?.sceneId);
+   if(!record||!scene||JSON.stringify(scene)!==record.after)
+    throw Error('룩 연결 이후 장면 내용이 변경돼 자동 복원할 수 없습니다.');
+   const next={...p,scenes:p.scenes.map(s=>s.id===record.sceneId?record.before:s),
+    mvLookHistory:{version:1,history:old.slice(0,-1)}};
+   latestProject.current=next;onChange(next);setReviewedLook(null);
+   notify('기존 룩·원화 장면 연결을 복원했습니다. 이미지·영상 파일은 유지됩니다.');
+  }catch(e){notify('이전 룩 연결 복원 실패: '+e.message);}
+ };
+  // Step80: registered original illustration -> local img2img still -> local SVD clip.
  // Source artwork remains untouched. Project tracks and existing scene media are not deleted.
  const createCharacterPv=async(allScenes=false)=>{
   if(pvBusy||personBusy||imageBusy||videoBusy||!p)return;
@@ -502,10 +558,18 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  </Panel>
  <Panel title="Step80 · Character-to-MV · 내 2D 캐릭터 애니메이션 PV" description="직접 등록한 PNG/JPEG 2D 캐릭터 그림 → 로컬 ComfyUI img2img 장면 이미지 → Step78 SVD 짧은 움직이는 WebP 클립. 기존 원본과 프로젝트를 유지합니다.">
  <div className="hstack" style={{gap:10,flexWrap:'wrap'}}>
- <Field label="내 2D 캐릭터"><select aria-label="Character-to-MV 캐릭터" value={pvCharacterId} onChange={e=>{setPvCharacterId(e.target.value);setPvArtworkId('');}}><option value="">2D 캐릭터 선택</option>{eligibleArtwork.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+ <Field label="내 2D 캐릭터"><select aria-label="Character-to-MV 캐릭터" value={pvCharacterId} onChange={e=>{setPvCharacterId(e.target.value);setPvArtworkId('');setSelectedLookId('');setReviewedLook(null);}}><option value="">2D 캐릭터 선택</option>{eligibleArtwork.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
  <Field label="등록 일러스트"><select aria-label="Character-to-MV 등록 그림" value={pvSelectedArtwork} onChange={e=>setPvArtworkId(e.target.value)}><option value="">원본 그림 선택</option>{pvAssets.map(a=><option key={a.id} value={a.id}>{a.role} · {a.name}</option>)}</select></Field>
  <Field label="그림 보존 강도"><select aria-label="캐릭터 그림 변환 강도" value={pvDenoise} onChange={e=>setPvDenoise(Number(e.target.value))}><option value={0.2}>0.20 · 원본 우선</option><option value={0.3}>0.30 · 기본</option><option value={0.45}>0.45 · 스타일 변화</option><option value={0.6}>0.60 · 변화 큼</option></select></Field>
  <Field label="시드 (비우면 자동)"><input aria-label="Character-to-MV 시드" value={pvSeed} onChange={e=>setPvSeed(e.target.value)} style={{maxWidth:140}} placeholder="자동"/></Field></div>
+ <div className="hstack" style={{gap:9,flexWrap:'wrap'}}>
+  <Field label="캐릭터 스튜디오에서 제작한 룩"><select aria-label="등록 캐릭터 룩" value={selectedLookId} onChange={e=>{setSelectedLookId(e.target.value);setReviewedLook(null);}}>
+   <option value="">검토된 룩 선택</option>{availableLooks.map(l=><option key={l.id} value={l.id}>{l.name} · {l.outfit||l.hairStyle||l.accessories||'원화 참조'}</option>)}</select></Field>
+  <Button disabled={!selectedLookId||pvBusy||personBusy} onClick={inspectSceneLook}>룩 장면 연결 검토</Button>
+  <Button variant="primary" disabled={!reviewedLook||pvBusy||personBusy} onClick={applySceneLook}>검토된 룩을 SD/SVD 입력으로 연결</Button>
+  <Button disabled={!p.mvLookHistory?.history?.length||pvBusy||personBusy} onClick={undoSceneLook}>직전 룩 연결 복원</Button>
+ </div>
+ {reviewedLook&&<p className="muted">대기 중: {reviewedLook.summary} · 영상/원본 삭제 없음</p>}
  {pvSelectedArtwork&&<div style={{maxWidth:320}}><SceneImage assetId={pvSelectedArtwork} alt="Step80 직접 등록한 원본 캐릭터 일러스트"/></div>}
  <p className="muted">캐릭터가 배치된 스토리보드 장면의 시간과 음악 프로젝트 구성을 그대로 사용합니다. 원본 그림을 실제 img2img 입력으로 사용하며, 전체 순차 제작은 캐릭터 미지정 또는 선택한 캐릭터가 배치된 장면만 처리합니다. 3D VRM, 실제 사람, Reference 전용 자료는 이 모드에서 사용할 수 없습니다.</p>
  <p className="muted">이미지 SD: {checkpoint||'선택 필요'} · 영상 SVD: {videoModel||'선택 필요'} · 총 {p.scenes.length}장면 · 별도로 설치된 로컬 모델이 필요합니다.</p>
