@@ -13,6 +13,7 @@ import {SINGING_STYLES,assertSingingStyleSupported} from '../lib/singingStyleCon
 import {renderLongSinging} from '../lib/longSingingRender.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {exportDuetVocalWav} from '../lib/duetVocalExport.js';
+import {exportDuetVocalBundle} from '../lib/duetVocalBundle.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
 import {replaceProjectVoice54} from '../lib/voiceReplace54Neural.js';
 import EngineManager from './EngineManager';
@@ -245,6 +246,12 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   setStatus((role==='lead'?'주보컬':'화음 보컬')+' 실제 독립 WAV '+result.durationSec.toFixed(2)+'초 내보내기');
   notify('원본을 변경하지 않고 두 가수 중 선택한 실제 WAV를 내보냈습니다.');
  });
+ const exportDuetBundle=()=>run(async()=>{
+  const result=await exportDuetVocalBundle(p,{current:()=>latestProject.current,onProgress:setStatus});
+  download(result.file,result.file.name);
+  setStatus('두 가수 독립 신경망 보컬 WAV '+result.stems+'개 · '+result.durationSec.toFixed(2)+'초 ZIP 내보내기');
+  notify('기존 두 가수 실제 보컬 WAV와 역할·Voice·캐릭터 연결을 단일 ZIP으로 저장했습니다.');
+ });
  const renderRealAdlib=()=>run(async()=>{
   if(!alignment||!voice)throw Error('실제 신경망 Ad-lib에는 원곡 한국어 가사·MIDI와 등록 목소리가 필요합니다.');
   const number=safePort(port),model=capability?.models?.find(m=>m.id===engineModelId);
@@ -352,6 +359,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
     {p.duetSingers?.version===1&&<div className="mv7-actions">
      <Button disabled={busy} onClick={()=>exportDuetStem('lead')}>주보컬 실제 독립 WAV 내보내기</Button>
      <Button disabled={busy} onClick={()=>exportDuetStem('harmony')}>화음 보컬 실제 독립 WAV 내보내기</Button>
+     <Button disabled={busy} onClick={exportDuetBundle}>두 가수 실제 독립 WAV 2개 ZIP 내보내기</Button>
     </div>}
    </Panel>
    <Panel title="VOICE REPLACE · 원본 54항" description="실제 새 Singing 음색 WAV가 생성·저장된 뒤에만 선택한 보컬 트랙을 음소거합니다. 이전 WAV·사진·캐릭터·MV 장면은 삭제하지 않습니다.">
