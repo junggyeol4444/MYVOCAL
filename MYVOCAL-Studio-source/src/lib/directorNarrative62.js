@@ -89,13 +89,16 @@ export function applyOriginalNarrative62(project,plan,library){
  const change=new Map(actual.changes.map(row=>[row.sceneId,row]));
  const before={voiceId:project.voiceId,characterId:project.characterId,
   scenes:project.scenes,sceneIds:project.scenes.map(s=>s.id)};
+ const newScenes=project.scenes.map(scene=>{
+  const row=change.get(scene.id);if(!row)return scene;
+  return {...scene,characterId:plan.characterId,location:row.location,action:row.action,
+   camera:row.camera,lighting:row.lighting};
+ });
  const result={...project,voiceId:plan.voiceId,characterId:plan.characterId,
-  scenes:project.scenes.map(s=>{const row=change.get(s.id);if(!row)return s;
-   return {...s,characterId:plan.characterId,location:row.location,action:row.action,
-    camera:row.camera,lighting:row.lighting};}),
+  scenes:newScenes,
   directorNarrative62:{version:1,needsNeuralSinging:true,needsMvRegeneration:true,
    history:[...(project.directorNarrative62?.history||[]),
-    {before,characterId:plan.characterId,voiceId:plan.voiceId,
+    {before,after:JSON.stringify(newScenes),characterId:plan.characterId,voiceId:plan.voiceId,
      at:new Date().toISOString()}].slice(-8)}};
  return result;
 }
@@ -105,8 +108,9 @@ export function undoOriginalNarrative62(project){
   throw Error('되돌릴 이전 음악/영상 전체 연출이 없습니다.');
  const changed=project.scenes||[];
  if(changed.length!==last.before.scenes.length||
-    changed.some((scene,index)=>scene.id!==last.before.sceneIds[index]))
-  throw Error('연출 후 추가/삭제한 장면이 있어 자동 되돌리기를 중단했습니다.');
+    changed.some((scene,index)=>scene.id!==last.before.sceneIds[index])||
+    typeof last.after!=='string'||JSON.stringify(changed)!==last.after)
+  throw Error('연출 후 추가·수정·삭제된 장면이 있어 사용자 변경을 보호하기 위해 되돌리기를 중단했습니다.');
  if(project.voiceId!==last.voiceId||project.characterId!==last.characterId)
   throw Error('이후 가수 또는 목소리가 다시 변경되어 자동 되돌리기를 중단했습니다.');
  return {...project,voiceId:last.before.voiceId,characterId:last.before.characterId,
