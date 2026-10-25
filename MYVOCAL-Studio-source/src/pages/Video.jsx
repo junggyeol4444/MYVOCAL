@@ -18,6 +18,7 @@ import {getFile,putFile} from '../lib/assetDb.js';
 import {buildSceneImageRequest,applySceneImage,isSceneImageStale,checkComfy,generateComfyImage} from '../lib/mvSceneImages.js';
 import {videoSourceKey,applySceneVideo,isSceneVideoStale,checkLocalVideoEngine,generateLocalVideoClip,readSourceFrame} from '../lib/mvSceneVideos.js';
 import {personPhotoAssets,validatePersonSource,linkPersonToMvScene,personSceneImageRequest,generatePersonMvImage,personMvSceneStatus} from '../lib/imageToMv.js';
+import {chooseSceneReference} from '../lib/characterSceneReference.js';
 import {characterArtworkAssets,validateCharacterArtwork,linkCharacterToMvScene,characterSceneImageRequest,generateCharacterMvImage,characterMvSceneStatus} from '../lib/characterToMv.js';
 import {auditMvStoryboard,exportMvStoryboard,exportMvCutCsv,snapMvSceneToBeat} from '../lib/mvStoryboard.js';
 import {inspectMvStoryboardImport,restoreMvStoryboard,MV_STORYBOARD_IMPORT_MAX_BYTES} from '../lib/mvStoryboardImport.js';
@@ -60,11 +61,11 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  const [videoModels,setVideoModels]=useState([]),[videoModel,setVideoModel]=useState(''),[videoBusy,setVideoBusy]=useState(false),[videoStatus,setVideoStatus]=useState('로컬 SVD 영상 모델 확인 필요');
  const [videoFrames,setVideoFrames]=useState(14),[videoFps,setVideoFps]=useState(6),[videoSteps,setVideoSteps]=useState(20),[videoMotion,setVideoMotion]=useState(127),[videoSeed,setVideoSeed]=useState('');
  const [personId,setPersonId]=useState(''),[personPhotoId,setPersonPhotoId]=useState(''),[personDenoise,setPersonDenoise]=useState(0.35);
- const [personBusy,setPersonBusy]=useState(false),[personStatus,setPersonStatus]=useState('실제 사람 사진 선택 필요'),[personSeed,setPersonSeed]=useState('');
+ const [personBusy,setPersonBusy]=useState(false),[personStatus,setPersonStatus]=useState('실제 사람 사진 선택 필요'),[personSeed,setPersonSeed]=useState(''),[autoPersonReference,setAutoPersonReference]=useState(false);
  const personAbort=useRef(null);
  const [pvCharacterId,setPvCharacterId]=useState(''),[pvArtworkId,setPvArtworkId]=useState(''),[pvDenoise,setPvDenoise]=useState(0.3),[pvSeed,setPvSeed]=useState('');
  const [selectedLookId,setSelectedLookId]=useState(''),[reviewedLook,setReviewedLook]=useState(null);
- const [pvBusy,setPvBusy]=useState(false),[pvStatus,setPvStatus]=useState('2D 캐릭터 그림 선택 필요');
+ const [pvBusy,setPvBusy]=useState(false),[pvStatus,setPvStatus]=useState('2D 캐릭터 그림 선택 필요'),[autoCharacterReference,setAutoCharacterReference]=useState(false);
  const pvAbort=useRef(null);
  const natural93Abort=useRef(null);
  const sectionAbort=useRef(null);
@@ -214,22 +215,32 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
    if(!allScenes&&current.characterId&&current.characterId!==selectedPerson.id&&!confirm('이 장면에 지정된 다른 캐릭터 대신 선택한 실제 사람을 연결할까요? 기존 이미지와 영상 파일은 삭제되지 않습니다.'))return;
    if(allScenes&&!confirm(`${chosen.length}개 장면에 선택한 사람의 사진을 연결해 이미지 및 SVD 클립을 순차 생성할까요? 기존 저장 파일은 삭제하지 않습니다. 긴 작업이 될 수 있습니다.`))return;
    const photo=await getFile(selectedPersonPhoto);if(!photo)throw Error('등록된 사람 사진 원본을 찾을 수 없습니다.');
-   const imageData=await readSourceFrame(photo);
+   const personDefaultData=await readSourceFrame(photo);
+   const personReferenceCache=new Map([[selectedPersonPhoto,personDefaultData]]);
    const baseSeed=personSeed.trim()?Number(personSeed):Math.floor(Math.random()*2000000000);
    if(!Number.isSafeInteger(baseSeed)||baseSeed<0||baseSeed>9007199254720000)throw Error('시드 범위 오류');
    const [width,height]=imageSize.split('x').map(Number),frames=Number(videoFrames),fps=Number(videoFps);
-   const projectId=p.id,photoId=selectedPersonPhoto,personIdentity=selectedPerson.id;
+   const projectId=p.id,personIdentity=selectedPerson.id;
    setPersonBusy(true);
    for(let i=0;i<chosen.length;i++){
     if(controller.signal.aborted)throw Error('사용자 요청으로 작업 중단');
     const targetId=chosen[i].id;
     const person=latestCharacters.current.find(c=>c.id===personIdentity);
-    validatePersonSource(person,photoId);
+    if(!person)throw Error('등록된 실제 사람 프로필이 삭제됐습니다.');
     const base=latestProject.current;
     if(!base||base.id!==projectId)throw Error('프로젝트가 변경되어 작업을 중단했습니다.');
     const prior=base.scenes.find(s=>s.id===targetId);
     if(!prior)throw Error('대상 장면이 삭제되었습니다.');
     if(allScenes&&prior.characterId&&prior.characterId!==personIdentity)throw Error('다른 사람으로 바뀐 장면은 덮어쓰지 않습니다.');
+    const photoId=autoPersonReference?chooseSceneReference(person,prior,selectedPersonPhoto).assetId:selectedPersonPhoto;
+    validatePersonSource(person,photoId);
+    let imageData=personReferenceCache.get(photoId);
+    if(!imageData){
+     const source=await getFile(photoId);
+     if(!source)throw Error('선택된 장면 인물 참조 원본 파일이 없습니다.');
+     imageData=await readSourceFrame(source);personReferenceCache.set(photoId,imageData);
+    }
+    if(controller.signal.aborted)throw Error('실제 사람 영상 제작이 취소됐습니다.');
     const linked=linkPersonToMvScene(base,targetId,person,photoId,Number(personDenoise));
     let direction=null;try{direction=buildMvDirectionPlan(linked,latestCharacters.current).scenes.find(x=>x.id===targetId);}catch{}
     const linkedScene=linked.scenes.find(x=>x.id===targetId);
@@ -339,22 +350,32 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
    if(!allScenes&&current.characterId&&current.characterId!==pvCharacter.id&&!confirm('현재 장면의 다른 인물을 선택한 2D 캐릭터로 교체할까요? 원본과 기존 장면 이미지·영상 파일은 삭제하지 않습니다.'))return;
    if(allScenes&&!confirm(`${eligible.length}개 장면에 등록된 2D 캐릭터 그림을 연결하고 짧은 SVD 애니메이션 클립을 순서대로 만들까요? 기존 파일은 삭제하지 않습니다.`))return;
    const artwork=await getFile(pvSelectedArtwork);if(!artwork)throw Error('등록된 캐릭터 원본 그림 파일을 찾지 못했습니다.');
-   const imageData=await readSourceFrame(artwork);
+   const characterDefaultData=await readSourceFrame(artwork);
+   const characterReferenceCache=new Map([[pvSelectedArtwork,characterDefaultData]]);
    const baseSeed=pvSeed.trim()?Number(pvSeed):Math.floor(Math.random()*2000000000);
    if(!Number.isSafeInteger(baseSeed)||baseSeed<0||baseSeed>9007199254720000-eligible.length-10001)throw Error('시드 범위 오류');
    const [width,height]=imageSize.split('x').map(Number),frames=Number(videoFrames),fps=Number(videoFps);
-   const projectId=p.id,characterId=pvCharacter.id,artId=pvSelectedArtwork;
+   const projectId=p.id,characterId=pvCharacter.id;
    setPvBusy(true);
    for(let i=0;i<eligible.length;i++){
     if(controller.signal.aborted)throw Error('사용자가 제작을 중단했습니다.');
     const targetId=eligible[i].id;
     const character=latestCharacters.current.find(c=>c.id===characterId);
-    validateCharacterArtwork(character,artId);
+    if(!character)throw Error('등록된 캐릭터 프로필이 삭제됐습니다.');
     const before=latestProject.current;
     if(!before||before.id!==projectId)throw Error('프로젝트가 변경되어 중단했습니다.');
     const prior=before.scenes.find(s=>s.id===targetId);
     if(!prior)throw Error('대상 장면이 삭제됐습니다.');
     if(allScenes&&prior.characterId&&prior.characterId!==characterId)throw Error('다른 캐릭터가 지정된 장면은 덮어쓰지 않습니다.');
+    const artId=autoCharacterReference?chooseSceneReference(character,prior,pvSelectedArtwork).assetId:pvSelectedArtwork;
+    validateCharacterArtwork(character,artId);
+    let imageData=characterReferenceCache.get(artId);
+    if(!imageData){
+     const source=await getFile(artId);
+     if(!source)throw Error('선택된 장면 캐릭터 원본 그림이 없습니다.');
+     imageData=await readSourceFrame(source);characterReferenceCache.set(artId,imageData);
+    }
+    if(controller.signal.aborted)throw Error('캐릭터 영상 제작이 취소됐습니다.');
     const linked=linkCharacterToMvScene(before,targetId,character,artId,Number(pvDenoise));
     const linkedScene=linked.scenes.find(s=>s.id===targetId);
     let direction=null;try{direction=buildMvDirectionPlan(linked,latestCharacters.current).scenes.find(s=>s.id===targetId);}catch{}
@@ -584,6 +605,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  <Field label="사진 변환 강도"><select aria-label="사진 변환 강도" value={personDenoise} onChange={e=>setPersonDenoise(Number(e.target.value))}><option value={0.2}>0.20 · 원본 보존 우선</option><option value={0.35}>0.35 · 기본</option><option value={0.5}>0.50 · 연출 변화</option><option value={0.65}>0.65 · 변화 큼</option></select></Field>
  <Field label="시드 (비우면 자동)"><input aria-label="Image-to-MV 시드" value={personSeed} onChange={e=>setPersonSeed(e.target.value)} style={{maxWidth:120}} placeholder="자동"/></Field></div>
  {selectedPersonPhoto&&<div style={{maxWidth:280}}><SceneImage assetId={selectedPersonPhoto} alt="Step79 등록된 실제 사람 참고 사진"/></div>}
+ <label className="check-item"><input type="checkbox" checked={autoPersonReference} disabled={personBusy} onChange={e=>setAutoPersonReference(e.target.checked)}/> 원본 49항 · 인물의 정면·측면·전신·표정 등록 사진을 장면마다 선택해 실제 SD 입력에 사용 (모델 학습 아님)</label>
  <p className="muted">선택 장면과 인물 미지정 장면에 적용할 수 있습니다. 다른 캐릭터가 지정된 장면은 전체 순차 제작에서 제외됩니다. 사진은 PC 내 등록 자료로만 로컬 ComfyUI에 전달됩니다. 컴퓨터에 ComfyUI 이미지 및 SVD 모델이 각각 필요합니다.</p>
  <p className="muted">이미지: {checkpoint||'Step77 이미지 모델 미선택'} · 영상: {videoModel||'Step78 SVD 모델 미선택'} · 장면 {p.scenes.length}개 · 처리 결과는 각각 기존 프로젝트에 자동 저장됩니다.</p>
  <div className="hstack" style={{gap:10,flexWrap:'wrap'}}><Button variant="primary" disabled={personBusy||pvBusy||imageBusy||videoBusy||!selectedPersonPhoto||!checkpoint||!videoModel} onClick={()=>createPersonMv(false)}>{personBusy?'생성 중…':'선택 장면 사진→MV 클립 생성'}</Button><Button disabled={personBusy||pvBusy||imageBusy||videoBusy||!selectedPersonPhoto||!checkpoint||!videoModel} onClick={()=>createPersonMv(true)}>전체 해당 장면 순차 생성</Button>{personBusy&&<Button onClick={()=>personAbort.current?.abort()}>진행 중 생성 요청 중단</Button>}</div>
@@ -605,6 +627,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  </div>
  {reviewedLook&&<p className="muted">대기 중: {reviewedLook.summary} · 영상/원본 삭제 없음</p>}
  {pvSelectedArtwork&&<div style={{maxWidth:320}}><SceneImage assetId={pvSelectedArtwork} alt="Step80 직접 등록한 원본 캐릭터 일러스트"/></div>}
+ <label className="check-item"><input type="checkbox" checked={autoCharacterReference} disabled={pvBusy} onChange={e=>setAutoCharacterReference(e.target.checked)}/> 원본 48항 · 정면·측면·후면·전신·표정 원화를 각 장면마다 선택해 실제 SD 입력에 사용 (모델 학습 아님)</label>
  <p className="muted">캐릭터가 배치된 스토리보드 장면의 시간과 음악 프로젝트 구성을 그대로 사용합니다. 원본 그림을 실제 img2img 입력으로 사용하며, 전체 순차 제작은 캐릭터 미지정 또는 선택한 캐릭터가 배치된 장면만 처리합니다. 3D VRM, 실제 사람, Reference 전용 자료는 이 모드에서 사용할 수 없습니다.</p>
  <p className="muted">이미지 SD: {checkpoint||'선택 필요'} · 영상 SVD: {videoModel||'선택 필요'} · 총 {p.scenes.length}장면 · 별도로 설치된 로컬 모델이 필요합니다.</p>
  <div className="hstack" style={{gap:10,flexWrap:'wrap'}}><Button variant="primary" disabled={pvBusy||personBusy||imageBusy||videoBusy||!pvSelectedArtwork||!checkpoint||!videoModel} onClick={()=>createCharacterPv(false)}>{pvBusy?'PV 생성 중…':'선택 장면 캐릭터→PV 클립 생성'}</Button><Button disabled={pvBusy||personBusy||imageBusy||videoBusy||!pvSelectedArtwork||!checkpoint||!videoModel} onClick={()=>createCharacterPv(true)}>전체 해당 장면 순차 제작</Button>{pvBusy&&<Button onClick={()=>pvAbort.current?.abort()}>진행 중 생성 요청 중단</Button>}</div>
