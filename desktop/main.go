@@ -117,6 +117,7 @@ func (a *appServer) routes() *http.ServeMux {
 	mux.HandleFunc("/api/images/generate", a.imageGenerate)
 	mux.HandleFunc("/api/person-mv/generate", a.personMVGenerate)
 	mux.HandleFunc("/api/character-mv/generate", a.characterMVGenerate)
+	mux.HandleFunc("/api/auto-singer-mv/generate", a.autoSingerMVGenerate)
 	mux.HandleFunc("/api/video/health", a.videoHealth)
 	mux.HandleFunc("/api/video/generate", a.videoGenerate)
 	mux.HandleFunc("/api/video/mp4/status", a.mvMP4Status)
