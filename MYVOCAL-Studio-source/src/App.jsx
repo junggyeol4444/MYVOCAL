@@ -54,7 +54,15 @@ export default function App(){
   return result;
  };
  const editProject=project=>setData(d=>projectUpdate(d,project));
- const createProject=(options)=>{let project=newProject(options);if(options.pipeline97){const plan=planCreateSongVideo97(project,options.options);project=applyCreateSongVideo97(project,plan);}setData(d=>updateEntity(d,'projects',project));navigate('workspace',project.id);notify(options.pipeline97?'가사·MIDI·영상 장면 초안을 만들었습니다. 편집기에서 재생·수정하세요. AI 가창·영상 생성은 아직 미연결입니다.':'빈 프로젝트를 만들었습니다.');return project;};
+ const createProject=(options)=>{let project=newProject(options);if(options.pipeline97){const plan=planCreateSongVideo97(project,options.options);project=applyCreateSongVideo97(project,plan);}
+  // 사용자가 곡+MV 동시 제작 시작을 명시한 경우에만 기존 영상 제작 GUI로 이동.
+  // 로컬 모델 인증·출연 허가는 생성 버튼에서 다시 확인하며 원본은 변경하지 않는다.
+  const quickMv=options.openMv===true&&options.withVideo===true&&options.options?.musicVideo===true;
+  if(quickMv)project={...project,productionLaunch55:{version:1,requested:{...project.options},from:'user-create-song-video'}};
+  setData(d=>updateEntity(d,'projects',project));navigate(quickMv?'video':'workspace',project.id);
+  notify(quickMv?'가사·MIDI·장면 초안을 보존하고 기존 로컬 신경망 음악·MV 제작 화면을 열었습니다. 설치 모델과 권한을 확인한 뒤 실제 생성을 실행하세요.':
+   options.pipeline97?'가사·MIDI·영상 장면 초안을 만들었습니다. 기존 제작 화면에서 설치한 로컬 가창·MV 모델로 실제 영상을 제작할 수 있습니다.':'빈 프로젝트를 만들었습니다.');
+  return project;};
  const current=data.projects.find(p=>p.id===route.projectId);
  const recover=()=>{
   if(!confirm('손상된 데이터를 별도 복구 키에 보존한 다음 새 작업 공간으로 초기화합니다. 계속할까요?'))return;
