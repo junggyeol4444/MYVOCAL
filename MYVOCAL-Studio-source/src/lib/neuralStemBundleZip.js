@@ -112,7 +112,7 @@ export async function exportOriginalNeuralWavBundle(project,{
  checkAlive(signal,current,project);
  const manifest={
   format:'MYVOCAL_ORIGINAL_NEURAL_6_STEMS',version:1,engine:'MusicGen independent per instrument',
-  projectId:project.id,source:'musicgen-independent-audio',
+  projectId:project.id,source:'musicgen-independent-audio',bpm:Number(project.bpm),
   durationSec:baseline.durationSec,sampleRate:baseline.rate,
   channels:baseline.channels,bits:baseline.bits,frames:baseline.frames,stems:validated,midi:midiEntries
  };
