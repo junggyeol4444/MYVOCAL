@@ -20,8 +20,25 @@ function inv(m){const a=m.slice(),b=I(); // Gauss-Jordan in row-oriented scratch
 }
 const lerp=(a,b,t)=>a+(b-a)*t;
 function sample(s,t,path,weightCount=0){const n=s.times.length;if(!n)return null;let k=0;while(k<n-2&&s.times[k+1]<t)k++;const last=s.interpolation==='STEP'||k>=n-1||t<=s.times[k]?0:Math.max(0,Math.min(1,(t-s.times[k])/(s.times[k+1]-s.times[k]||1)));
- if(s.interpolation==='CUBICSPLINE')return null; // explicitly unsupported
- const width=path==='weights'?weightCount:s.components;const start=k*width,next=Math.min(k+1,n-1)*width;
+ const width=path==='weights'?weightCount:s.components;
+ if(s.interpolation==='CUBICSPLINE'){
+  // glTF/VRM 원본 모션의 실제 Hermite 접선 보간. 키마다 입력접선·값·출력접선 순서다.
+  if(!Number.isInteger(width)||width<1||s.values.length!==n*width*3)
+   throw Error('VRM CUBICSPLINE 애니메이션의 키프레임·모프 개수가 일치하지 않습니다.');
+  const key=(index,part)=>Array.from({length:width},(_,i)=>s.values[(index*3+part)*width+i]);
+  const edge=t<=s.times[0]?0:t>=s.times[n-1]?n-1:-1;
+  if(edge>=0||n===1){const value=key(Math.max(0,edge),1);return path==='rotation'?qnormalize(value):value;}
+  const delta=s.times[k+1]-s.times[k];
+  if(!Number.isFinite(delta)||delta<=0)throw Error('VRM CUBICSPLINE 애니메이션의 시간이 올바르지 않습니다.');
+  const u=Math.max(0,Math.min(1,(t-s.times[k])/delta)),u2=u*u,u3=u2*u;
+  const h00=2*u3-3*u2+1,h10=u3-2*u2+u,h01=-2*u3+3*u2,h11=u3-u2;
+  const first=key(k,1),last=key(k+1,1),out=key(k,2),incoming=key(k+1,0);
+  // 같은 회전을 나타내는 반대 부호 쿼터니언에서 불필요한 뒤집힘을 방지한다.
+  const sign=path==='rotation'&&first.reduce((sum,v,i)=>sum+v*last[i],0)<0?-1:1;
+  const values=first.map((v,i)=>h00*v+h10*delta*out[i]+h01*sign*last[i]+h11*delta*sign*incoming[i]);
+  if(values.some(v=>!Number.isFinite(v)))throw Error('VRM 모션 보간 결과가 올바르지 않습니다.');
+  return path==='rotation'?qnormalize(values):values;
+ }const start=k*width,next=Math.min(k+1,n-1)*width;
  const values=Array.from({length:width},(_,i)=>lerp(s.values[start+i],s.values[next+i],last));return path==='rotation'?qnormalize(values):values;
 }
 export function calculateRigPose(model,settings,time,dancePlan){return calculateRigPoseWithPerformance(model,settings,time,dancePlan,null);}
