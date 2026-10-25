@@ -33,7 +33,7 @@ export function buildKoreanDiffSingerDS(alignment,dictionary,{timestep=.01}={}){
  let last=0;
  const prepared=cues.map((cue,index)=>{
   const text=normalizeWord(cue.lyric);
-  const phonemes=[...text].flatMap(ch=>{
+  const phonemes=(text==='—'||text==='-'||text==='_'||text==='SP')?['SP']:[...text].flatMap(ch=>{
    const found=dictionary.get(ch);
    if(!found)throw Error((index+1)+'번 MIDI 음표의 음절 '+ch+'가 현재 가수 모델 발음 사전에 없습니다.');
    return found;
@@ -66,7 +66,7 @@ export function buildKoreanDiffSingerDS(alignment,dictionary,{timestep=.01}={}){
   const f0=Array.from({length:frames},(_,i)=>{
    const t=first+i*timestep;
    const c=current.find(x=>t>=x.start&&t<x.end);
-   return c?Math.round(440*2**((c.pitch-69)/12)*100)/100:0;
+   return c&&c.phonemes[0]!=='SP'?Math.round(440*2**((c.pitch-69)/12)*100)/100:0;
   });
   // acoustic model actually consumes ph_seq/ph_dur and f0_seq.
   pieces.push({offset:outputNumber(first),ph_seq:ph.join(' '),

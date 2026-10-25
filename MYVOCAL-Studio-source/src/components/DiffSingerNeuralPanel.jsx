@@ -4,7 +4,9 @@ import {parseDiffSingerDictionary,synthesizeDiffSingerWav} from '../lib/diffSing
 import {readAudioInfo} from '../lib/audioEngine';
 import {makeImportedVocalTrack} from '../lib/lyricAlignment';
 import {genId} from '../lib/schema';
-import {putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb';
+import {putFilesAtomic,deleteFilesAtomic,getFile} from '../lib/assetDb';
+import {sha256File} from '../lib/voiceTraining.js';
+import {convertRegisteredRVC} from '../lib/rvcStoredConversion.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {convertLongSingingWithRVC} from '../lib/rvcLongConversion.js';
 
@@ -12,16 +14,18 @@ const KEY='MYVOCAL_NATIVE_DIFFSINGER_V1';
 const readPaths=()=>{try{const v=JSON.parse(window.localStorage.getItem(KEY)||'{}');
  return {python:String(v.python||''),root:String(v.root||''),experiment:String(v.experiment||'')};
  }catch{return {python:'',root:'',experiment:''}}};
-export default function DiffSingerNeuralPanel({project,onChange,notify,voice}){
+export default function DiffSingerNeuralPanel({project,onChange,notify,voice,registeredModels=[]}){
  const [initial]=useState(readPaths);
  const [python,setPython]=useState(initial.python),[root,setRoot]=useState(initial.root),
   [experiment,setExperiment]=useState(initial.experiment),[dictionaryFile,setDictionaryFile]=useState(null),
-  [rights,setRights]=useState(false),[alsoRvc,setAlsoRvc]=useState(false),
+  [rights,setRights]=useState(false),[alsoRvc,setAlsoRvc]=useState(false),[registeredRvcId,setRegisteredRvcId]=useState(''),
   [busy,setBusy]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState('');
  const latest=useRef(project),abort=useRef(null);latest.current=project;
  useEffect(()=>()=>abort.current?.abort(),[]);
  useEffect(()=>{abort.current?.abort();setStatus('');setError('');setRights(false);},[project.id]);
- const alignment=project.vocalAlignment;
+ const aligned=project.vocalAlignment;
+ const eligibleModels=registeredModels.filter(m=>m?.engineId==='rvc'&&m.voiceId===voice?.id&&m.assetId&&/^[a-f0-9]{64}$/i.test(String(m.sha256||'')));
+ const alignment=aligned;
  const canRender=alignment?.format==='MYVOCAL_LYRIC_ALIGNMENT'&&
   Array.isArray(alignment.cues)&&alignment.cues.length>0&&['self','owned','licensed'].includes(voice?.rights);
  async function create(){
@@ -43,9 +47,33 @@ export default function DiffSingerNeuralPanel({project,onChange,notify,voice}){
     const saved=readRVCPreferences(window.localStorage);
     if(!saved)throw Error('기존 RVC 패널에서 본인 모델 .pth와 Python 실행 경로를 먼저 저장하세요.');
     setStatus('신경망 한국어 가창 WAV를 본인 RVC 모델로 실제 음색 변환 중');
-    converted=await convertLongSingingWithRVC(source,{...saved,rightsConfirmed:true},{
+    const preferred=eligibleModels.find(m=>m.id===registeredRvcId);
+    const rvcOptions={
      session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal,
-     onProgress:(done,total)=>setStatus('본인 음색 RVC 추론 '+done+'/'+total+' 구간')});
+     onProgress:(done,total)=>setStatus('본인 음색 RVC 추론 '+done+'/'+total+' 구간')
+    };
+    let settings={...saved,rightsConfirmed:true};
+    if(preferred){
+     const modelFile=await getFile(preferred.assetId);
+     if(!(modelFile instanceof Blob)||await sha256File(modelFile)!==preferred.sha256)
+      throw Error('등록된 본인 RVC 모델이 없거나 파일 해시가 일치하지 않습니다.');
+     let indexFile=null;
+     if(preferred.indexAssetId){
+      indexFile=await getFile(preferred.indexAssetId);
+      if(!(indexFile instanceof Blob)||!preferred.indexSha256||
+       await sha256File(indexFile)!==preferred.indexSha256)
+       throw Error('등록된 본인 RVC 인덱스가 없거나 파일 해시가 일치하지 않습니다.');
+     }
+     if(Number(saved.indexRate)>0&&!indexFile)
+      throw Error('등록된 본인 RVC 인덱스가 없으면 적용 비율을 0으로 변경하세요.');
+     settings={root:saved.root,python:saved.python,f0:saved.f0,pitch:saved.pitch,
+      indexRate:saved.indexRate,rightsConfirmed:true};
+     rvcOptions.convert=(part,opts,extra)=>
+      convertRegisteredRVC(part,{...opts,modelFile,indexFile},extra);
+    }
+    if(controller.signal.aborted||latest.current!==before)
+     throw Error('본인 음색 모델 연결 중 프로젝트가 변경됐습니다.');
+    converted=await convertLongSingingWithRVC(source,settings,rvcOptions);
    }
    if(controller.signal.aborted||latest.current!==before)throw Error('생성이 취소됐거나 프로젝트가 변경됐습니다.');
    const files=converted?[source,converted]:[source],entries=[],newTracks=[];
@@ -84,7 +112,11 @@ export default function DiffSingerNeuralPanel({project,onChange,notify,voice}){
    <Field label="학습 모델의 한국어 발음 사전"><input type="file" accept=".txt,text/plain" disabled={busy} onChange={e=>setDictionaryFile(e.target.files?.[0]||null)}/></Field>
   </div>
   <div className="mv7-actions"><Button disabled={busy} onClick={()=>{try{window.localStorage.setItem(KEY,JSON.stringify({python,root,experiment}));notify('DiffSinger 실행 경로만 현재 PC에 저장했습니다. 원본 모델·녹음은 저장하지 않았습니다.')}catch(e){setError(e.message)}}}>로컬 가창 모델 경로 기억</Button></div>
-  <label className="check-item"><input type="checkbox" checked={alsoRvc} disabled={busy} onChange={e=>setAlsoRvc(e.target.checked)}/>합성한 실제 가창 WAV를 등록한 본인 RVC 모델로 연속 음색 변환</label>
+  <label className="check-item"><input type="checkbox" checked={alsoRvc} disabled={busy} onChange={e=>setAlsoRvc(e.target.checked)}/>합성한 신경망 가창을 실제 본인 RVC 음색 모델로 추가 변환</label>
+  {alsoRvc&&eligibleModels.length>0&&<Field label="프로젝트에 저장한 본인 RVC 체크포인트"><select disabled={busy} value={registeredRvcId} onChange={e=>setRegisteredRvcId(e.target.value)}>
+   <option value="">기존 RVC 설정의 로컬 .pth 모델 파일 사용</option>
+   {eligibleModels.map(m=><option key={m.id} value={m.id}>{m.name||'등록 본인 가창 음색'} {m.indexAssetId?'· FAISS 인덱스 포함':''}</option>)}
+  </select></Field>}
   <label className="check-item"><input type="checkbox" checked={rights} disabled={busy} onChange={e=>setRights(e.target.checked)}/>이 가창 모델·목소리·한국어 가사 사용 권한을 확인했습니다.</label>
   <p className="muted">MIDI 음표 {alignment?.cues?.length||0}개 · 사용자 실제 학습 가창 모델과 일치하는 발음 사전이 필요합니다. 사전에 없는 글자는 임의로 대체하지 않고 오류로 알립니다. 음소 길이는 MIDI 기본 분할이며 자연스러운 발음을 보증하지 않습니다.</p>
   <div className="mv7-actions"><Button variant="primary" disabled={busy||!canRender||!dictionaryFile||!rights||!python||!root||!experiment} onClick={create}>{busy?'실제 가창 모델 실행 중':'한국어 신경망 Singing WAV 생성·편집 트랙 저장'}</Button>
