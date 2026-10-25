@@ -3,6 +3,7 @@
 // 원화/룩/프로젝트/기존 미디어/모델은 삭제하거나 덮어쓰지 않는다.
 import {validateCharacterArtwork,generateCharacterMvImage,characterArtworkAssets} from './characterToMv.js';
 import {readSourceFrame} from './mvSceneVideos.js';
+import {validatePersonSource,generatePersonMvImage,personPhotoAssets} from './imageToMv.js';
 import {checkComfy,validateGeneratedImage} from './mvSceneImages.js';
 import {getFile,putFileNew,removeFile} from './assetDb.js';
 import {genId} from './schema.js';
@@ -11,15 +12,17 @@ import {MAX_CHARACTER_ASSETS} from './characterIdentity.js';
 
 const CATEGORY={outfit:'의상',hair:'머리 모양',accessories:'장신구'};
 const TEXT_LIMIT=230;
-const eligible=character=>character?.kind==='character'&&['self','owned','licensed'].includes(character.rights)&&
+const eligible=character=>['character','person'].includes(character?.kind)&&
+ (character.kind==='person'?['self','licensed'].includes(character.rights):['self','owned','licensed'].includes(character.rights))&&
  (character.rights!=='licensed'||!!String(character.rightsNote||'').trim());
 const safeString=x=>typeof x==='string'&&!!x.trim()&&x.length<=TEXT_LIMIT&&!/[\u0000-\u001f\u007f]/.test(x);
-export function validateNeuralLookRequest(character,lookId,{sourceAssetId,category,description,port,checkpoint,denoise,seed}={}){
- if(!eligible(character)||!character?.id)throw Error('사용 권한이 확인된 2D 캐릭터만 제작합니다.');
+export function validateNeuralLookRequest(character,lookId,{sourceAssetId,category,description,port,checkpoint,denoise,seed,consent=false}={}){
+ if(!eligible(character)||!character?.id)throw Error('본인 또는 사용 허가된 2D 캐릭터·실제 사람만 제작합니다.');
+ if(character.kind==='person'&&consent!==true)throw Error('실제 사람 사진 및 생성 이미지 이용 권한을 확인하세요.');
  const look=character.looks?.find(l=>l.id===lookId);
  if(!look)throw Error('기존 캐릭터 룩 프리셋이 없습니다.');
  if(reviewCharacterLook(character,look).reviewRequired)throw Error('현재 룩의 원본 외형·참고 자료를 먼저 재검토하세요.');
- validateCharacterArtwork(character,sourceAssetId);
+ if(character.kind==='person')validatePersonSource(character,sourceAssetId);else validateCharacterArtwork(character,sourceAssetId);
  if(!Object.hasOwn(CATEGORY,category)||!safeString(description))
   throw Error('의상·머리·장신구 종류와 230자 이하 제작 지시를 입력하세요.');
  if(!Number.isInteger(port)||port<1024||port>65535||port===58319||
@@ -29,7 +32,7 @@ export function validateNeuralLookRequest(character,lookId,{sourceAssetId,catego
   throw Error('설치된 로컬 SD 모델·포트·이미지 변환 강도를 확인하세요.');
  if((character.assets||[]).length>=MAX_CHARACTER_ASSETS)
   throw Error('캐릭터 자료 저장 한도 64개입니다. 기존 자산은 삭제하지 않습니다.');
- return {look,source:characterArtworkAssets(character).find(a=>a.id===sourceAssetId)};
+ return {look,source:(character.kind==='person'?personPhotoAssets(character):characterArtworkAssets(character)).find(a=>a.id===sourceAssetId)};
 }
 export function neuralLookPrompt(character,category,description){
  if(!eligible(character)||!Object.hasOwn(CATEGORY,category)||!safeString(description))
@@ -41,7 +44,7 @@ export function neuralLookPrompt(character,category,description){
  const wardrobe=category==='outfit'?'change clothing only':category==='hair'?
   'change hairstyle only, keep eye color and face':'add accessories only, keep outfit and hairstyle';
  const prompt=[
-  '2D animation character design sheet, real user-supplied source illustration img2img',
+  character.kind==='person'?'photorealistic portrait or full-body photograph of the same consented subject using their exact registered photo as img2img source':'2D animation character design sheet, real user-supplied source illustration img2img',
   'same character, maintain recognizable face, body proportions, art style, palette and identity',
   'subject: '+String(character.name||'character').slice(0,120),
   ...basis,wardrobe,'requested '+CATEGORY[category]+': '+description.trim(),
@@ -71,11 +74,12 @@ export async function generateNeuralLookCandidates(character,lookId,options,{
  const imageData=await toImageData(original);guard();
  const {prompt,negative}=neuralLookPrompt(character,options.category,options.description);
  const candidates=[];
+ const visualGenerate=character.kind==='person'?generatePersonMvImage:generate;
  for(let i=0;i<4;i++){
   guard();
   onProgress(i,4,'로컬 SD에서 실제 '+CATEGORY[options.category]+' 이미지 '+(i+1)+'/4 생성 중');
   const seed=options.seed+i;
-  const image=await generate({
+  const image=await visualGenerate({
    port:options.port,checkpoint:options.checkpoint,prompt,negative,
    imageData,width:768,height:768,steps:20,seed,denoise:options.denoise
   },session,signal);
@@ -100,7 +104,8 @@ export async function saveSelectedNeuralLook(character,generated,selectedIndex,{
  if(!same())throw Error('후보 생성 후 캐릭터가 변경됐습니다. 다시 생성하세요.');
  const selected=generated.candidates[selectedIndex];
  validateGeneratedImage(selected.image);
- validateCharacterArtwork(character,selected.sourceAssetId);
+ if(character.kind==='person')validatePersonSource(character,selected.sourceAssetId);
+ else validateCharacterArtwork(character,selected.sourceAssetId);
  if((character.assets||[]).length>=MAX_CHARACTER_ASSETS)throw Error('캐릭터 자료 64개 한도 초과');
  const id=newId('asset');
  if(typeof id!=='string'||!/^asset_[A-Za-z0-9_-]{1,90}$/.test(id)||
@@ -108,7 +113,7 @@ export async function saveSelectedNeuralLook(character,generated,selectedIndex,{
  const ext=selected.image.type==='image/jpeg'?'jpg':'png';
  const filename='MYVOCAL-캐릭터-'+selected.category+'-'+selected.seed+'.'+ext;
  const file=new File([selected.image],filename,{type:selected.image.type});
- const role=selected.category==='outfit'?'outfit':'other';
+ const role=character.kind==='person'?'front':selected.category==='outfit'?'outfit':'other';
  const asset={id,name:filename,type:file.type,size:file.size,role,
   generatedBy:'installed-local-comfy-img2img',visualCategory:selected.category,
   sourceAssetId:selected.sourceAssetId,seed:selected.seed,checkpoint:selected.checkpoint};

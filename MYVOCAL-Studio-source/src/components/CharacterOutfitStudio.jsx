@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Field,Notice,Panel,AssetPreview} from './UI';
 import {characterArtworkAssets} from '../lib/characterToMv.js';
+import {personPhotoAssets} from '../lib/imageToMv.js';
 import {checkComfy} from '../lib/mvSceneImages.js';
 import {generateNeuralLookCandidates,saveSelectedNeuralLook} from '../lib/characterLookNeural.js';
 
@@ -9,13 +10,13 @@ export default function CharacterOutfitStudio({character,lookId,onSave,notify}){
  const [category,setCategory]=useState('outfit'),[description,setDescription]=useState('');
  const [sourceId,setSourceId]=useState(''),[port,setPort]=useState('8188');
  const [checkpoints,setCheckpoints]=useState([]),[checkpoint,setCheckpoint]=useState('');
- const [denoise,setDenoise]=useState(.35),[seed,setSeed]=useState('');
+ const [denoise,setDenoise]=useState(.35),[seed,setSeed]=useState(''),[personConsent,setPersonConsent]=useState(false);
  const [candidates,setCandidates]=useState([]),[bundle,setBundle]=useState(null),[selected,setSelected]=useState(-1);
  const [busy,setBusy]=useState(false),[status,setStatus]=useState('');
  const current=useRef(character);current.current=character;
  const abort=useRef(null),urls=useRef(new Set());
  useEffect(()=>()=>{abort.current?.abort();for(const u of urls.current)URL.revokeObjectURL(u);urls.current.clear();},[]);
- const sources=characterArtworkAssets(character||{}),look=character?.looks?.find(l=>l.id===lookId);
+ const sources=character?.kind==='person'?personPhotoAssets(character):characterArtworkAssets(character||{}),look=character?.looks?.find(l=>l.id===lookId);
  const actualSource=sourceId||look?.referenceAssetId||sources[0]?.id||'';
  const clear=()=>{setBundle(null);setCandidates([]);setSelected(-1);};
  const readSession=()=>globalThis.window?.__MYVOCAL_SESSION_KEY||'';
@@ -37,7 +38,7 @@ export default function CharacterOutfitStudio({character,lookId,onSave,notify}){
   setBusy(true);clear();
   try{
    const result=await generateNeuralLookCandidates(character,lookId,{
-    sourceAssetId:actualSource,category,description,port:Number(port),checkpoint,denoise,
+    sourceAssetId:actualSource,category,description,port:Number(port),checkpoint,denoise,consent:personConsent,
     seed:seed.trim()?Number(seed):Math.floor(Math.random()*2000000000)
    },{
     session:readSession(),signal:controller.signal,current:()=>current.current,
@@ -64,6 +65,7 @@ export default function CharacterOutfitStudio({character,lookId,onSave,notify}){
  return <Panel title="원본 44·45항 · 실제 캐릭터 의상·머리·장신구 AI 제작"
   description="기존 Windows EXE에 연결된 ComfyUI img2img로 등록 원화를 참조해 후보 4개를 실제 생성합니다. 선택한 1개만 새 자산으로 저장합니다.">
   <Notice>외형 유지 명령은 SD 모델의 목표이며 얼굴·눈·체형·색상의 실제 일관성을 보장하지 않습니다. 기존 파일·룩·프로젝트는 덮어쓰지 않습니다.</Notice>
+  {character.kind==='person'&&<label><input type="checkbox" checked={personConsent} disabled={busy} onChange={e=>{setPersonConsent(e.target.checked);clear();}}/> 본인 또는 사용 허가된 실제 사람 사진과 생성 이미지의 사용 권한을 확인했습니다.</label>}
   <Field label="변경 유형"><select disabled={busy} value={category} onChange={e=>{setCategory(e.target.value);clear();}}>
    {CATEGORY.map(([v,t])=><option value={v} key={v}>{t}</option>)}</select></Field>
   <Field label="한국어 제작 지시"><textarea value={description} maxLength={230} rows={3} disabled={busy}
@@ -82,7 +84,7 @@ export default function CharacterOutfitStudio({character,lookId,onSave,notify}){
    onChange={e=>{setCheckpoint(e.target.value);clear();}}>
    <option value="">먼저 모델 확인</option>{checkpoints.map(x=><option value={x} key={x}>{x}</option>)}</select></Field>
   <div className="look-actions">
-   <Button variant="primary" disabled={busy||!description.trim()||!actualSource||!checkpoint} onClick={generate}>
+   <Button variant="primary" disabled={busy||!description.trim()||!actualSource||!checkpoint||(character.kind==='person'&&!personConsent)} onClick={generate}>
     {busy?'로컬 이미지 처리 중':'실제 4개 AI 후보 생성'}</Button>
    {busy&&<Button onClick={()=>abort.current?.abort()}>생성 취소</Button>}
   </div>

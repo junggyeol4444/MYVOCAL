@@ -12,6 +12,7 @@ import {performance89Status} from '../lib/characterPerformance89.js';
 import {danceStatus} from '../lib/characterDanceDirector.js';
 import {expressionPlanStatus} from '../lib/characterExpressionDirector.js';
 import {personVideoAssets} from '../lib/personLipSync.js';
+import {personPhotoAssets} from '../lib/imageToMv.js';
 import {modelAssets,rigStatus} from '../lib/character3d.js';
 import {stageStatus} from '../lib/characterStage3d.js';
 import {animationStatus} from '../lib/characterAnimation2d.js';
@@ -270,7 +271,7 @@ export default function Characters({data,add,remove,notify,removeCharacterPersis
 <div className="look-overview"><small>룩 프리셋 {summarizeCharacterLooks(c).total}/{LOOK_LIMIT}개 · 재검토 {summarizeCharacterLooks(c).reviewRequired}개</small>
  {(c.looks||[]).map(look=>{const review=reviewCharacterLook(c,look);return <div className="look-row" key={look.id}>
   <div><strong>{look.name}</strong> · {look.outfit||look.expression||look.scene||'설정 기록'} <small>{review.reviewRequired?`기준 재검토 필요 (${review.changedFields.join(', ')||'자료 누락'})`:'기준 외형 일치 · 수동 검사'}</small></div>
-  <div className="look-actions">{review.reviewRequired&&<Button onClick={()=>approveLook(c,look.id)}>기준 재승인</Button>}<Button onClick={()=>beginLook(c,look)}>수정</Button><Button disabled={c.kind!=='character'||!eligibleLayerImages(c).length} onClick={()=>setLookStudio({characterId:c.id,lookId:look.id})}>의상·헤어·장신구 AI 이미지 4종 제작</Button><Button onClick={()=>removeLook(c,look.id)}>룩 삭제</Button></div>
+  <div className="look-actions">{review.reviewRequired&&<Button onClick={()=>approveLook(c,look.id)}>기준 재승인</Button>}<Button onClick={()=>beginLook(c,look)}>수정</Button><Button disabled={!((c.kind==='character'&&eligibleLayerImages(c).length)||(c.kind==='person'&&personPhotoAssets(c).length))} onClick={()=>setLookStudio({characterId:c.id,lookId:look.id})}>의상·헤어·장신구 AI 이미지 4종 제작</Button><Button onClick={()=>removeLook(c,look.id)}>룩 삭제</Button></div>
  </div>;})}
  <div className="look-actions"><Button icon="plus" onClick={()=>beginLook(c)}>룩 추가</Button><Button onClick={()=>exportLooks(c)}>룩 JSON 저장</Button><label className="btn" style={{cursor:"pointer"}}>룩 JSON 가져오기<input type="file" accept=".json,application/json" style={{display:"none"}} onChange={e=>{const file=e.target.files?.[0];if(file)importLooks(c,file);e.target.value="";}}/></label></div></div>
  <div className="look-overview"><small>MV 컷 계획 {summarizeCharacterShots(c).total}/{SHOT_LIMIT}개 · 재검토 {summarizeCharacterShots(c).reviewRequired}개 · 수동 스토리보드</small>
