@@ -30,10 +30,29 @@ type personMVRequest struct {
 	Seed           int64   `json:"seed"`
 	Denoise        float64 `json:"denoise"`
 	RightsAttested bool    `json:"rightsAttested"`
+	// 원본 13·58항: 모델이 MYVOCAL에서 실제 생성한 첫 가수 이미지만 자동 재참조.
+	// 실존 인물의 사진 권한 동의와 자동 생성 원본 출처는 섞어 취급하지 않는다.
+	GeneratedInProject bool `json:"generatedInProject"`
+	SourceProjectID string `json:"sourceProjectId"`
+	SourceSceneID string `json:"sourceSceneId"`
+	SourceAssetID string `json:"sourceAssetId"`
+	SourceKey string `json:"sourceKey"`
 }
 
-func validatePersonMVRequest(x personMVRequest) ([]byte, string, error) {
-	if !x.RightsAttested {
+func validatePersonMVRequest(x personMVRequest, automatic bool) ([]byte, string, error) {
+	if automatic {
+		validOrigin := func(s string) bool {
+			if len(s)<1||len(s)>120 {return false}
+			for _,r:=range s {if !(r>='a'&&r<='z'||r>='A'&&r<='Z'||r>='0'&&r<='9'||r=='_'||r=='-') {return false}}
+			return true
+		}
+		if x.RightsAttested||!x.GeneratedInProject||!validOrigin(x.SourceProjectID)||
+			!validOrigin(x.SourceSceneID)||!strings.HasPrefix(x.SourceAssetID,"img_")||
+			!validOrigin(x.SourceAssetID)||len(x.SourceKey)<1||len(x.SourceKey)>8192||
+			strings.ContainsAny(x.SourceKey,"\x00\r\n") {
+			return nil,"",errors.New("자동 생성 가수의 프로젝트·첫 이미지 출처와 장면 식별 정보를 확인하세요")
+		}
+	} else if !x.RightsAttested {
 		return nil, "", errors.New("본인 또는 사용 허가를 받은 사진임을 확인해야 합니다")
 	}
 	if err := validateImageRequest(imageGenerationRequest{Port: x.Port, Checkpoint: x.Checkpoint, Prompt: x.Prompt, Negative: x.Negative, Width: x.Width, Height: x.Height, Steps: x.Steps, Seed: x.Seed}); err != nil {
@@ -101,12 +120,17 @@ func personImageOutput(raw []byte, id string) (string, string, bool, error) {
 // Both Step79 and Step80 use the same validated local img2img transport.
 // Character mode has its own route and SaveImage prefix; existing Step79 behavior is unchanged.
 func (a *appServer) personMVGenerate(w http.ResponseWriter, r *http.Request) {
-	a.referenceMVGenerate(w, r, false)
+	a.referenceMVGenerate(w, r, false, false)
 }
 func (a *appServer) characterMVGenerate(w http.ResponseWriter, r *http.Request) {
-	a.referenceMVGenerate(w, r, true)
+	a.referenceMVGenerate(w, r, true, false)
 }
-func (a *appServer) referenceMVGenerate(w http.ResponseWriter, r *http.Request, character bool) {
+// AI 자동 가수 이미지는 사용자 사진·등록 캐릭터 권한을 허위 확인하지 않는다.
+// 본인 프로젝트의 생성 이력이 연결된 이미지에만 이 전용 경로를 사용한다.
+func (a *appServer) autoSingerMVGenerate(w http.ResponseWriter, r *http.Request) {
+	a.referenceMVGenerate(w, r, false, true)
+}
+func (a *appServer) referenceMVGenerate(w http.ResponseWriter, r *http.Request, character, automatic bool) {
 	if r.Method != http.MethodPost {
 		jsonError(w, 405, "POST 요청만 지원합니다")
 		return
@@ -122,7 +146,7 @@ func (a *appServer) referenceMVGenerate(w http.ResponseWriter, r *http.Request, 
 		jsonError(w, 400, "Image-to-MV 요청 JSON 또는 크기 오류")
 		return
 	}
-	rawImage, mime, err := validatePersonMVRequest(x)
+	rawImage, mime, err := validatePersonMVRequest(x,automatic)
 	if err != nil {
 		jsonError(w, 400, err.Error())
 		return
@@ -169,6 +193,9 @@ func (a *appServer) referenceMVGenerate(w http.ResponseWriter, r *http.Request, 
 	if character {
 		clientID = "MYVOCAL_Step80"
 		workflow["9"].(map[string]any)["inputs"].(map[string]any)["filename_prefix"] = "MYVOCAL_Step80"
+	} else if automatic {
+		clientID = "MYVOCAL_AutoSinger"
+		workflow["9"].(map[string]any)["inputs"].(map[string]any)["filename_prefix"] = "MYVOCAL_AutoSinger"
 	}
 	payload, _ := json.Marshal(map[string]any{"prompt": workflow, "client_id": clientID})
 	body, status, err := videoComfyCall(ctx, x.Port, "POST", "/prompt", "application/json", payload)
