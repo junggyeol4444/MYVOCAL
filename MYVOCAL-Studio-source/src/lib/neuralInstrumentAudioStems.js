@@ -7,6 +7,7 @@ import {latestCompleteNeuralScore,NEURAL_SCORE_ROLES} from './neuralScoreBatch.j
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 import {analyzeNeuralStemPcm,assertDistinctNeuralStems} from './neuralStemPcmIntegrity.js';
 import {planScoreMatchedMusicGenSegments} from './neuralStemScoreTiming.js';
+import {analyzeNeuralMidiWavAlignment} from './neuralStemMidiPcmAlignment.js';
 
 const INSTRUMENT={
  melody:['lead melody','멜로디'],chords:['piano chord progression','코드'],
@@ -108,6 +109,8 @@ export async function renderAndStoreNeuralAudioStems(project,{
   const pcm=await rendered.arrayBuffer();
   assertUsableSingingWav(pcm,{maxDurationSec:360});
   const profile=analyzeNeuralStemPcm(pcm);
+  const midiAlignment=analyzeNeuralMidiWavAlignment(
+   pcm,latestCompleteNeuralScore(project).get(role).midiNotes,Number(project.bpm),{signal});
   for(const previous of integrity)assertDistinctNeuralStems(profile,previous.profile,role,previous.role);
   integrity.push({role,profile});
   // 실제 신경망이 만든 WAV에서 직접 읽은 수치만 기록한다.
@@ -141,7 +144,7 @@ export async function renderAndStoreNeuralAudioStems(project,{
    sourceRole:role,sourceMidiTrackId:latestCompleteNeuralScore(project).get(role).id,
    sourceRoleSeed:roleSeed,sourceBpm:Number(project.bpm),
    sourceScoreDurationSec:timing.targetSec,
-   sourcePcmAnalysis:{...profile.quality}});
+   sourcePcmAnalysis:{...profile.quality},sourceScorePcmAlignment:midiAlignment});
  }
  alive(project,current,signal);
  let stored=false;
@@ -151,7 +154,8 @@ export async function renderAndStoreNeuralAudioStems(project,{
   await Promise.resolve(onChange(changed));stored=false;
   return {project:changed,assets:tracks.length,tracks:tracks.length,roles:selectedRoles,
    durationSec:baseline,source:'real-musicgen-independent',
-   pcmAnalysis:integrity.map(({role,profile})=>({role,...profile.quality}))};
+   pcmAnalysis:integrity.map(({role,profile})=>({role,...profile.quality})),
+   midiWavAlignment:tracks.map(t=>({role:t.sourceRole,...t.sourceScorePcmAlignment}))};
  }catch(e){
   if(stored&&current()===project){
    try{await remove(entries.map(([id])=>id));}

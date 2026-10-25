@@ -79,6 +79,8 @@ export default function MusicGenPanel({project,onChange,notify}){
     save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setProgress
    });
    notify('기존 프로젝트에 MusicGen 원천 독립 악기 '+result.roles.join('·')+' '+result.tracks+'개 WAV 트랙을 새로 추가했습니다. MIDI 원곡 '+result.durationSec.toFixed(2)+'초에 동기화했습니다. 기존 트랙은 유지됩니다.');
+   notify('실제 MIDI/WAV 표본 진단 '+result.midiWavAlignment.map(x=>x.role+': '+x.notesInspected+'음표').join(' · ')+
+    '을 새 트랙에 기록했습니다. 음정 품질 인증은 아닙니다.');
   }catch(e){setError(e.message)}
   finally{active.current=null;setBusy(false);setProgress('')}
  };
@@ -271,6 +273,19 @@ export default function MusicGenPanel({project,onChange,notify}){
      {Object.entries(NEURAL_STEM_EXPORT_LABELS).map(([role,label])=><option key={role} value={role}>{label} · 최신 생성 WAV</option>)}
     </select></Field>
     <div className="mv7-actions"><Button disabled={busy} onClick={exportNeuralStem}>선택한 독립 악기 원본 WAV 저장</Button></div>
+    <div className="mv7-actions"><Button disabled={busy} onClick={()=>{
+     try{
+      const audits=(latest.current.tracks||[]).filter(t=>t.generatedBy==='musicgen-independent-audio'&&t.sourceScorePcmAlignment)
+       .map(t=>({trackId:t.id,role:t.sourceRole,diagnosis:t.sourceScorePcmAlignment}));
+      if(!audits.length)throw Error('먼저 실제 독립 악기 WAV를 생성해야 합니다.');
+      const json=JSON.stringify({projectId:latest.current.id,audits},null,2);
+      const url=URL.createObjectURL(new Blob([json],{type:'application/json;charset=utf-8'}));
+      const anchor=document.createElement('a');anchor.href=url;anchor.download='MYVOCAL-실제WAV-MIDI표본대조.json';
+      anchor.click();setTimeout(()=>URL.revokeObjectURL(url),3000);
+      notify('실제 악기 WAV와 MIDI 표본 대조표를 JSON으로 내보냈습니다.');
+     }catch(e){setError(e.message)}
+    }}>저장된 독립 악기 WAV·MIDI 대조표 JSON 내보내기</Button></div>
+    <p className="muted">실제 WAV PCM에서 음표별 시작 에너지·주파수 근거를 측정합니다. 다성음 및 드럼에서는 정확도 보증이 아닙니다.</p>
     <p className="muted">이미 프로젝트에 저장한 MusicGen 악기 PCM만 내보냅니다. 모델을 다시 실행하지 않으며 같은 MIDI 악기를 재생성했다면 가장 최근 WAV를 선택합니다.</p>
    </div>}
    <div className="mv7-item">
