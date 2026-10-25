@@ -6,6 +6,7 @@ import {videoSourceKey,applySceneVideo,generateLocalVideoClip,readSourceFrame} f
 import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
 import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
 import {chooseSceneReference} from './characterSceneReference.js';
+import {autoSingerReference,autoSingerRequest} from './autoVirtualSingerImages.js';
 import {buildMvDirectionPlan} from './mvDirection.js';
 import {inspectSvdClipDuration,assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
 import {getFile,putFilesAtomic} from './assetDb.js';
@@ -86,7 +87,10 @@ export async function regenerateNaturalMvScene(project,plan,characters,{
  if(characterId&&(!character||!RIGHTS.has(character.rights)||
  (character.rights==='licensed'&&!String(character.rightsNote||'').trim())))
   throw Error('등록 인물·캐릭터 사용 권한이 확인되지 않았습니다.');
- const reference=sourceReference(scene,character);
+ if(draft.autoVirtualSingerImageV1?.sourceSceneId===scene.id)
+  throw Error('AI 자동 가수의 첫 원화는 후속 장면의 외형 기준입니다. 다른 장면을 수정하거나 새로운 자동 MV 프로젝트를 제작하세요.');
+ const reference=sourceReference(scene,character)||
+  autoSingerReference(draft,scene,{enabled:!!draft.autoVirtualSingerImageV1});
  if(reference&&(!Number.isFinite(reference.denoise)||reference.denoise<.15||reference.denoise>.75))
   throw Error('등록 사진·원화 변환 강도 오류');
  const scenesSnapshot=JSON.stringify(project.scenes),charactersSnapshot=JSON.stringify(characters);
@@ -98,8 +102,9 @@ export async function regenerateNaturalMvScene(project,plan,characters,{
  };
  guard();
  const direction=buildMvDirectionPlan(draft,characters).scenes.find(s=>s.id===scene.id);
- const request=buildSceneImageRequest(draft,scene,character,direction,
-  reference?.source==='registered-identity'?reference:null);
+ const request=autoSingerRequest(draft,scene,buildSceneImageRequest(draft,scene,character,direction,
+  ['registered-identity','project-generated-singer'].includes(reference?.source)?reference:null),
+  {enabled:!!draft.autoVirtualSingerImageV1});
  const seed=Math.floor(Math.random()*1999999000)+1;
  const imageSettings={port,checkpoint,prompt:request.prompt,negative:request.negative,width,height,steps:imageSteps,seed};
  let image;
@@ -119,7 +124,8 @@ export async function regenerateNaturalMvScene(project,plan,characters,{
   throw Error('새 이미지 ID 오류');
  const withImage=applySceneImage(draft,scene.id,imageId,request,{
   seed,checkpoint,source:reference?.kind==='person'?'person-img2img':
-  reference?.kind==='character'?'character-img2img':'plain'});
+  reference?.kind==='character'?'character-img2img':
+  reference?.kind==='auto-generated'?'auto-singer-img2img':'plain'});
  const imageScene=withImage.scenes.find(s=>s.id===scene.id);
  const sourceKey=videoSourceKey(withImage,imageScene,request);
  const fullSong=scene.generatedBy==='full-song-auto-scene';
