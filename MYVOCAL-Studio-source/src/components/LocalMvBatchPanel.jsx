@@ -36,11 +36,11 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const cancelRef=useRef(null),stemExportCancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
  const [includeReferences,setIncludeReferences]=useState(false);
- const [autoVirtualSinger,setAutoVirtualSinger]=useState(false);
- const [saveFullMovie,setSaveFullMovie]=useState(false),[fullMouth,setFullMouth]=useState(false);
+ const [autoVirtualSinger,setAutoVirtualSinger]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true&&project.videoMode==='auto'&&!project.characterId);
+ const [saveFullMovie,setSaveFullMovie]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true),[fullMouth,setFullMouth]=useState(false);
  const [makeMp4,setMakeMp4]=useState(true),[exportWav,setExportWav]=useState(true);
- const [makeNeuralMusic,setMakeNeuralMusic]=useState(false),[musicDuration,setMusicDuration]=useState(180);
- const [makeNeuralSinging,setMakeNeuralSinging]=useState(false),[singingPort,setSingingPort]=useState('7867');
+ const [makeNeuralMusic,setMakeNeuralMusic]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.composition===true||project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.arrangement===true),[musicDuration,setMusicDuration]=useState(180);
+ const [makeNeuralSinging,setMakeNeuralSinging]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.singing===true),[singingPort,setSingingPort]=useState('7867');
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
  const [singingStyle,setSingingStyle]=useState(project.singingStyle||'Natural');
  const [makeHarmony,setMakeHarmony]=useState(false),[harmonyDirection,setHarmonyDirection]=useState('above');
@@ -397,6 +397,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   }catch(e){setError(e.message);notify('장면별 자동 생성 중단: '+e.message)}finally{try{await warmed?.close()}catch{}cancelRef.current=null;setBusy(false)}
  };
  return <Panel title="실제 로컬 AI 이미지 → SVD 영상 일괄 생성" description="사용자가 설치한 ComfyUI SD 이미지 모델과 SVD 동영상 모델을 사용합니다. 각 빈 장면에서 실제 이미지와 짧은 영상 파일을 생성하고 기존 프로젝트에 저장합니다.">
+  {project.productionLaunch55?.version===1&&<Notice>새 곡 화면에서 선택한 자동 제작 항목을 불러왔습니다. 원본 프로젝트와 등록된 권한 자료는 보존합니다. 모델·권한·이미지 참조 설정을 확인한 뒤 아래 실제 생성 버튼을 누르세요. 모델이 준비되지 않았다면 생성 성공으로 처리하지 않습니다.</Notice>}
   <p className="muted">생성 대상 {info.total}개 · 이미 영상이 있는 장면 {info.already}개 · 등록된 사람·캐릭터 연결 장면 {info.linked}개</p>
   <div className="mv7-item">
    <strong>원천 MusicGen 신경망 6악기 · 편집 가능한 WAV 개별 저장</strong>
