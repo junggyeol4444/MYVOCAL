@@ -21,8 +21,10 @@ import (
 	"time"
 )
 
-const maxRVCInputBytes = 24 << 20
-const maxRVCResponseBytes = 48 << 20
+// 3~6분 48kHz 스테레오 PCM 가창도 원본 WAV 그대로 추론에 전달한다.
+// 데이터는 기존 격리 임시 폴더에서만 처리하며 사용자 파일을 덮어쓰지 않는다.
+const maxRVCInputBytes = 128 << 20
+const maxRVCResponseBytes = 160 << 20
 const maxRVCRequestBytes = maxRVCInputBytes + (1 << 20)
 const maxRegisteredRVCRequestBytes = maxRVCInputBytes + maxRVCTrainedModel + (96 << 20) + (2 << 20)
 
@@ -203,7 +205,7 @@ func (a *appServer) rvcConvertWithMode(w http.ResponseWriter,r *http.Request,run
  }
 	hdr := r.MultipartForm.File["audio"][0]
 	if hdr.Size < 48 || hdr.Size > maxRVCInputBytes {
-		jsonError(w, 400, "원본 WAV는 24MB 이하이어야 합니다")
+		jsonError(w, 400, "원본 가창 WAV는 최대 128MiB까지 지원합니다")
 		return
 	}
 	stream, err := hdr.Open()
@@ -247,7 +249,7 @@ func (a *appServer) rvcConvertWithMode(w http.ResponseWriter,r *http.Request,run
 		jsonError(w, 500, "임시 원본 기록 실패")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Minute)
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
 	defer cancel()
 	if err = runner(ctx, o, input, output); err != nil {
 		jsonError(w, 502, err.Error())
