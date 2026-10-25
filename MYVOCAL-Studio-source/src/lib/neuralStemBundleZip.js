@@ -4,6 +4,8 @@
 import {getFile} from './assetDb.js';
 import {identifyOriginalNeuralWavTracks,NEURAL_STEM_EXPORT_LABELS} from './neuralStemWavExport.js';
 import {inspectGeneratedMusicPcm} from './musicProductionPcmSync.js';
+import {latestCompleteNeuralScore} from './neuralScoreBatch.js';
+import {createMidiFile} from './midiFile.js';
 
 const ROLE_ORDER=['melody','chords','bass','drums','guitar','pad'];
 const ENCODER=new TextEncoder();
@@ -55,7 +57,9 @@ export async function exportOriginalNeuralWavBundle(project,{
  const tracks=identifyOriginalNeuralWavTracks(project,{requireAll:true});
  if(tracks.length!==6||tracks.some((stem,i)=>stem.role!==ROLE_ORDER[i]))
   throw Error('같은 MIDI 회차의 원천 신경망 악기 6개를 확인할 수 없습니다.');
- const validated=[],zipParts=[],centralParts=[];let offset=0,centralSize=0;
+ const score=latestCompleteNeuralScore(project);
+ if(!score)throw Error('현재 원곡의 실제 신경망 6악기 MIDI가 없습니다.');
+ const validated=[],midiEntries=[],zipParts=[],centralParts=[];let offset=0,centralSize=0;
  const append=async(name,blob)=>{
   if(!(blob instanceof Blob)||!blob.size||blob.size>0xffffffff)
    throw Error('ZIP 악기 원본 파일 크기가 잘못됐습니다.');
@@ -87,28 +91,44 @@ export async function exportOriginalNeuralWavBundle(project,{
   validated.push({role:stem.role,assetId:stem.assetId,trackId:stem.track.id,
    sourceMidiTrackId:stem.track.sourceMidiTrackId,
    bytes:wav.size,crc32:crc.toString(16).padStart(8,'0')});
-  onProgress(i+1,7,NEURAL_STEM_EXPORT_LABELS[stem.role]+' 실제 원본 PCM 검사·보관');
+  onProgress(i+1,13,NEURAL_STEM_EXPORT_LABELS[stem.role]+' 실제 원본 PCM 검사·보관');
+ }
+ // 같은 MIDI 회차의 각 악기 음표를 그대로 Type-1 MIDI 파일로 내보낸다.
+ // 원본 음표를 추정·생성·변환하지 않으며 기존 편집 트랙은 그대로 유지한다.
+ for(const [i,stem] of tracks.entries()){
+  checkAlive(signal,current,project);
+  const midiSource=score.get(stem.role);
+  if(!midiSource||midiSource.id!==stem.track.sourceMidiTrackId||
+   !Array.isArray(midiSource.midiNotes)||!midiSource.midiNotes.length)
+   throw Error('신경망 악기 WAV와 원래 MIDI 참조가 다릅니다.');
+  const midi=createMidiFile({...project,tracks:[midiSource]});
+  if(!(midi instanceof Blob)||midi.size<32||midi.size>4*1024*1024)
+   throw Error(NEURAL_STEM_EXPORT_LABELS[stem.role]+' 원곡 MIDI 파일 길이가 잘못됐습니다.');
+  const crc=await append('midi/'+stem.role+'.mid',midi);
+  midiEntries.push({role:stem.role,trackId:midiSource.id,notes:midiSource.midiNotes.length,
+   bytes:midi.size,crc32:crc.toString(16).padStart(8,'0')});
+  onProgress(i+7,13,NEURAL_STEM_EXPORT_LABELS[stem.role]+' 원곡 MIDI 추가');
  }
  checkAlive(signal,current,project);
  const manifest={
   format:'MYVOCAL_ORIGINAL_NEURAL_6_STEMS',version:1,engine:'MusicGen independent per instrument',
   projectId:project.id,source:'musicgen-independent-audio',
   durationSec:baseline.durationSec,sampleRate:baseline.rate,
-  channels:baseline.channels,bits:baseline.bits,frames:baseline.frames,stems:validated
+  channels:baseline.channels,bits:baseline.bits,frames:baseline.frames,stems:validated,midi:midiEntries
  };
  const meta=new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'});
  await append('stems/manifest.json',meta);
- onProgress(7,7,'원곡 MIDI 참조와 PCM 길이 기록');
+ onProgress(13,13,'원곡 6악기 MIDI와 원천 6악기 WAV 정보 기록');
  checkAlive(signal,current,project);
  if(offset+centralSize+22>MAX_ARCHIVE||offset+centralSize+22>0xffffffff)
   throw Error('6악기 ZIP 전체 크기가 제한을 초과합니다.');
  const end=new Uint8Array(22);
- u32(end,0,0x06054b50);u16(end,8,7);u16(end,10,7);
+ u32(end,0,0x06054b50);u16(end,8,13);u16(end,10,13);
  u32(end,12,centralSize);u32(end,16,offset);
  const title=String(project.title||'원곡').replace(/[^\p{L}\p{N}_-]/gu,'_').slice(0,40);
  const archive=new File([...zipParts,...centralParts,end],
-  'MYVOCAL-'+title+'-원천신경망6악기.zip',{type:'application/zip'});
+  'MYVOCAL-'+title+'-원천신경망6악기-MIDI-WAV.zip',{type:'application/zip'});
  checkAlive(signal,current,project);
  return {file:archive,roles:[...ROLE_ORDER],durationSec:baseline.durationSec,
-  sampleRate:baseline.rate,frames:baseline.frames,manifest};
+  sampleRate:baseline.rate,frames:baseline.frames,midiTracks:6,manifest};
 }
