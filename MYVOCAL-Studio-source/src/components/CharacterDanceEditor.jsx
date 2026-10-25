@@ -1,6 +1,9 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Field,Notice} from './UI';
-import {getFile} from '../lib/assetDb.js';
+import {getFile,putFileNew,removeFile} from '../lib/assetDb.js';
+import {genId} from '../lib/schema.js';
+import {MAX_CHARACTER_ASSETS,validateCharacterFile,validateCharacterAssetRole} from '../lib/characterIdentity.js';
+import {recordWebcamMotion32} from '../lib/webcamMotionRecording32.js';
 import {downloadText} from '../lib/store.js';
 import {genreList} from '../lib/genres.js';
 import {createDancePlan,validateDancePlan,parseDanceLines,danceLines,danceAt,dancePose,danceReferences,saveDancePlan} from '../lib/characterDanceDirector.js';
@@ -22,6 +25,42 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
  const [poseStatus,setPoseStatus]=useState('설치된 MediaPipe Task .task 모델 선택 필요');
  const [poseDraft,setPoseDraft]=useState(null);
  const poseAbort=useRef(null);
+ const [cameraDuration,setCameraDuration]=useState(10),[cameraBusy,setCameraBusy]=useState(false);
+ const [cameraStatus,setCameraStatus]=useState('웹캠 사용 권한을 허용하면 로컬 WebM을 녹화할 수 있습니다.');
+ const cameraAbort=useRef(null);
+ useEffect(()=>()=>cameraAbort.current?.abort(),[]);
+ const recordCamera=async()=>{
+  if(cameraBusy||poseRunning)return;
+  const controller=new AbortController();cameraAbort.current=controller;setCameraBusy(true);
+  let stagedId='';
+  try{
+   if(!poseRights)throw Error('본인 영상 사용 권한에 동의한 뒤 녹화하세요.');
+   if((character.assets||[]).length>=MAX_CHARACTER_ASSETS)
+    throw Error('캐릭터 자료 64개 한도이므로 새 동작 영상을 추가할 수 없습니다.');
+   const movie=await recordWebcamMotion32({
+    durationSec:Number(cameraDuration),signal:controller.signal,onProgress:setCameraStatus
+   });
+   if(controller.signal.aborted)throw Error('웹캠 영상 촬영이 취소됐습니다.');
+   validateCharacterFile(movie);validateCharacterAssetRole('motion-reference','video');
+   stagedId=genId('asset');
+   if((character.assets||[]).some(a=>a.id===stagedId))throw Error('새 동작 영상 자산 ID 충돌');
+   const asset={id:stagedId,name:movie.name,type:movie.type,size:movie.size,role:'motion-reference'};
+   await putFileNew(stagedId,movie);
+   try{
+    if(controller.signal.aborted)throw Error('촬영 후 저장이 취소됐습니다.');
+    await Promise.resolve(onSave({...character,assets:[...(character.assets||[]),asset],updatedAt:new Date().toISOString()}));
+   }catch(error){
+    await removeFile(stagedId);
+    stagedId='';
+    throw error;
+   }
+   setReferenceId(stagedId);setPoseDraft(null);
+   setCameraStatus('실제 웹캠 동작 영상 '+Math.ceil(movie.size/1024)+'KB를 기존 캐릭터에 신규 추가 저장했습니다.');
+   notify('본인 동작 영상 등록 완료. 위의 MediaPipe 실제 자세 추출을 사용할 수 있습니다.');
+  }catch(e){setCameraStatus('카메라 동작 녹화 중단: '+e.message);}
+  finally{setCameraBusy(false);cameraAbort.current=null;}
+ };
+
  useEffect(()=>()=>poseAbort.current?.abort(),[]);
  const extractPose=async()=>{
   if(poseRunning)return;
@@ -73,6 +112,16 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
   <Field label="권한이 있는 Motion Reference 영상 (선택)"><select value={referenceId} onChange={e=>setReferenceId(e.target.value)}><option value="">사용하지 않음</option>{references.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
   {refError&&<p role="alert">참고 영상 오류: {refError}</p>}
   {videoUrl&&<video ref={videoRef} controls preload="metadata" playsInline src={videoUrl} style={{width:'min(100%,420px)',maxHeight:230}} aria-label="원본 동작 참고 영상"/>}
+  <div className="mv7-item">
+   <strong>원본 32항 · Windows 카메라로 실제 본인 동작 녹화</strong>
+   <Field label="실제 녹화 길이 (2~30초)"><input type="number" min="2" max="30" step="1" value={cameraDuration} disabled={cameraBusy} onChange={e=>setCameraDuration(Number(e.target.value))}/></Field>
+   <div className="hstack">
+    <Button disabled={!poseRights||cameraBusy||poseRunning} onClick={recordCamera}>{cameraBusy?'실제 웹캠 녹화 중…':'카메라로 동작 촬영·등록'}</Button>
+    {cameraBusy&&<Button onClick={()=>cameraAbort.current?.abort()}>카메라 촬영 취소</Button>}
+   </div>
+   <p role="status">{cameraStatus}</p>
+   <Notice>카메라는 이 Windows 앱의 사용자 동의 후에만 열립니다. 녹화한 WebM은 기존 캐릭터의 동작 참고 영상으로 별도 저장합니다. 외부 업로드·원본 삭제·다른 캐릭터 덮어쓰기는 수행하지 않습니다.</Notice>
+  </div>
   <div className="mv7-item">
    <strong>원본 31·32항 · 실제 동작 영상 자세 추출 → 3D VRM</strong>
    <Field label="설치된 로컬 Python.exe 절대 경로"><input value={posePython} onChange={e=>setPosePython(e.target.value)} placeholder="C:\\Python311\\python.exe" disabled={poseRunning}/></Field>
