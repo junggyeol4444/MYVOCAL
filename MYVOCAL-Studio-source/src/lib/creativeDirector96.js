@@ -65,11 +65,11 @@ export function previewCreativeDirection96(project,command){
   const m=text.match(/^가사(?:를|을)?\s*(.+?)\s*(?:으로|로)\s*(?:바꿔|변경해)(?:줘|주세요)?[.!]?$/u);
   if(!m||m[1].trim().length>300)throw Error('가사 수정 범위를 확인하세요.');
   action={domain:'music',field:'lyrics',value:m[1].trim(),summary:'가사 전체 교체 — 적용 전 확인 필요'};
- }else if(/(?:WAV|오디오).*(?:음량|음소거|소리)/iu.test(text)){
+ }else if(/(?:WAV|오디오).*(?:음량|음소거|소리|페이드인|페이드아웃|좌우\s*위치|시작|재생\s*길이)/iu.test(text)){
   // 같은 기존 프로젝트의 실제 독립 MusicGen WAV 믹스 변경을 검토한다.
   // 미리보기 단계에서 새 프로젝트를 저장하거나 원본 WAV를 수정하지 않는다.
   const result=applyProducerCommand(project,text);
-  if(result.kind!=='neural-wav-mix-86')throw Error('신경망 WAV 트랙 편집 명령만 지원합니다.');
+  if(!['neural-wav-mix-86','neural-wav-clip-10'].includes(result.kind))throw Error('신경망 WAV 트랙·클립 편집 명령만 지원합니다.');
   action={domain:'music',field:'neuralWav',value:text,summary:result.response};
  }else if(producerMidi96.test(text)){
   // 기존 AI Producer의 실제 MIDI 편집 함수를 재사용한다. 새 모델·가짜 출력 없음.
@@ -130,7 +130,7 @@ export function applyCreativeDirection96(project,plan){
   updated=applyMvInstruction93(project,validation);
  }else if(action.domain==='music'&&action.field==='neuralWav'&&action.value===plan.command){
   const result=applyProducerCommand(project,plan.command);
-  if(result.kind!=='neural-wav-mix-86'||result.response!==plan.summary)
+  if(!['neural-wav-mix-86','neural-wav-clip-10'].includes(result.kind)||result.response!==plan.summary)
    throw Error('신경망 WAV 미리보기와 적용 결과가 다릅니다. 다시 검토하세요.');
   updated=result.project;
  }else if(action.domain==='music'&&action.field==='midi'&&action.value===plan.command){
@@ -144,4 +144,4 @@ export function applyCreativeDirection96(project,plan){
  const audit={command:plan.command,domain:action.domain,summary:plan.summary,at:new Date().toISOString()};
  return {...updated,creativeDirector96:{version:1,history:[...(project.creativeDirector96?.history||[]),audit].slice(-30)}};
 }
-export function directorCapabilities96(){return {music:['BPM 설정','가사 전체 수정','신경망 WAV 트랙 음량·음소거','구간별 MIDI 악기 쉼표·복원·강약·길이·음높이·후렴 편곡'],video:['장면 번호·정확한 제목으로 배경·의상·카메라·표정·동작·조명 변경','장면 시간(0~360초) 이동·겹침 방지','그리고로 음악·영상 명령 동시 적용'],unavailable:['자유 대화 AI','모델 미설치 시 영상 픽셀 생성','학습되지 않은 가창 모델 추론']};}
+export function directorCapabilities96(){return {music:['BPM 설정','가사 전체 수정','신경망 WAV 트랙 음량·음소거 및 클립 페이드·팬·음량·트림','구간별 MIDI 악기 쉼표·복원·강약·길이·음높이·후렴 편곡'],video:['장면 번호·정확한 제목으로 배경·의상·카메라·표정·동작·조명 변경','장면 시간(0~360초) 이동·겹침 방지','그리고로 음악·영상 명령 동시 적용'],unavailable:['자유 대화 AI','모델 미설치 시 영상 픽셀 생성','학습되지 않은 가창 모델 추론']};}
