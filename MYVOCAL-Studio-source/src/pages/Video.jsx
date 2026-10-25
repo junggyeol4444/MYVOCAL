@@ -536,11 +536,12 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
   <p className="muted">설치된 로컬 SD 모델로 수정된 장면 이미지를 새로 만들고 SVD 모델로 실제 움직이는 클립을 생성합니다. 등록된 인물·캐릭터는 먼저 허가된 사진·원화를 장면에 연결해야 합니다. 이전 이미지·영상은 덮어쓰지 않고 복원 이력에 남깁니다. GPU가 필요하며 짧은 SVD 클립은 장면 길이 동안 반복됩니다.</p>
   {review93&&<p className="muted">적용 대기 · {review93.summary} · 다른 장면이나 원본 영상은 변경하지 않습니다.</p>}
  <p className="muted">지원: 배경/장소, 의상/옷, 카메라, 표정/감정, 동작/행동, 조명 변경. 장면 타임라인·원본 사진·영상은 보존합니다. 잠긴 속성과 지원하지 않는 지시는 거부됩니다.</p>
+ <p className="muted">추가 지시 예시: “이 장면만 비 오는 밤으로 바꿔”, “여기서는 카메라가 캐릭터 주변을 돌게 해”, “이 부분에서 주인공이 울지 말고 웃게 해”. 얼굴을 유지한 의상 변경은 등록 인물·캐릭터 원본이 연결된 장면에서만 검토할 수 있으며, 실제 얼굴 일치도는 로컬 모델 결과를 확인해야 합니다.</p>
  </Panel>
- <Panel title="STEP93 · 곡 구간 자연어 편집·실제 SD/SVD" description="기존 곡 BPM·마디 구간을 기준으로 후렴·절·브리지·전체 장면의 배경·의상·카메라·표정·동작·조명을 함께 수정합니다.">
+ <Panel title="STEP93 · 곡 구간 자연어 편집·실제 SD/SVD" description="기존 곡 BPM·마디 구간을 기준으로 후렴·절·브리지·전체 장면의 배경·의상·카메라·표정·동작·조명을 함께 수정합니다. “후렴에서 캐릭터를 더 많이 보여줘”는 이미 캐릭터가 배정된 후렴의 카메라·동작을 인물 중심으로 수정합니다. 실제 출연 화면 비중은 생성 결과 확인이 필요합니다.">
   <Field label="구간 자연어 지시"><input aria-label="구간 장면 자연어 지시" maxLength={500} value={sectionCommand}
    onChange={e=>{setSectionCommand(e.target.value);setSectionPlan(null);}}
-   placeholder="후렴 장면들의 배경을 밤거리로 바꿔 그리고 조명을 푸른빛으로 바꿔"/></Field>
+   placeholder="후렴에서 캐릭터를 더 많이 보여줘"/></Field>
   <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
    <Button disabled={sectionBusy} onClick={reviewSection93}>구간 변경 검토</Button>
    <Button disabled={!sectionPlan||sectionBusy} onClick={applySection93}>검토한 구간 설명 일괄 적용</Button>
