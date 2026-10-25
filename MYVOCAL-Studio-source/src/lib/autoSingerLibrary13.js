@@ -58,3 +58,36 @@ export async function registerGeneratedSinger13(project,name,{
   throw error;
  }
 }
+
+// 원본 25·26항: 앞에서 실제 저장한 캐릭터와 기존 허가 Voice를 가상 가수로 연결.
+// 등록 정보만 별도로 추가하며 Singing 모델이 없다면 가창 가능이라고 표시하지 않는다.
+export function prepareAutoSingerVoiceLink26(character,voice,{
+ name='',singingStyle='Natural',modelId='',models=[],existing=[],confirmed=false,newId=genId
+}={}){
+ if(!character?.id||character.autoSinger13?.version!==1||
+  !character.assets?.some(a=>a.id===character.autoSinger13.copiedAssetId))
+  throw Error('실제 자동 생성 가수 첫 원화를 캐릭터 라이브러리에 먼저 등록하세요.');
+ if(!voice?.id||!['self','owned','licensed'].includes(voice.rights)||
+   voice.rights==='licensed'&&!String(voice.rightsNote||'').trim()||
+   confirmed!==true)
+  throw Error('사용 권한이 확인된 기존 목소리와 가상 가수 연결 동의가 필요합니다.');
+ if(!Array.isArray(existing)||existing.some(v=>
+   v.characterId===character.id&&v.voiceId===voice.id))
+  throw Error('이미 같은 목소리와 가수로 등록한 가상 가수 프로필이 존재합니다.');
+ if(!['Natural','Ballad','Soft','Power','Rock','Whisper','Falsetto','Emotional'].includes(singingStyle))
+  throw Error('지원하는 Singing Style을 선택하세요.');
+ const model=modelId?models.find(m=>m.id===modelId):null;
+ if(modelId&&(!model||model.voiceId!==voice.id||model.engineId==='sampler'||
+    !model.assetId))
+  throw Error('등록한 실제 RVC/가창 음색 모델만 선택할 수 있으며 샘플 미리보기는 사용할 수 없습니다.');
+ const profileName=String(name||character.name||'').trim();
+ if(!safeName(profileName))throw Error('등록할 가상 가수의 이름을 확인하세요.');
+ const now=new Date().toISOString();
+ return {id:newId('profile'),name:profileName,characterId:character.id,
+  voiceId:voice.id,modelId:model?.id||'',style:singingStyle,
+  createdAt:now,updatedAt:now,
+  autoSingerVoice26:{version:1,confirmed:true,characterImageAssetId:character.autoSinger13.copiedAssetId,
+   voiceModelConnected:!!model,neuralSingingRendered:false,
+   note:model?'등록된 로컬 모델을 선택한 상태이며 실제 가창은 별도 실행 필요':
+    '기존 목소리 데이터만 연결했습니다. 신경망 Singing 학습/가창은 실행되지 않았습니다.'}};
+}
