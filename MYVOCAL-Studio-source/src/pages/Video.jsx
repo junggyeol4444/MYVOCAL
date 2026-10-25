@@ -3,6 +3,7 @@ import {Button,Empty,Field,Icon,Notice,Panel,SectionHead,Modal} from '../compone
 import VirtualBand90Editor from '../components/VirtualBand90Editor.jsx';
 import LocalAiStoryboardPanel from '../components/LocalAiStoryboardPanel.jsx';
 import LocalMvBatchPanel from '../components/LocalMvBatchPanel.jsx';
+import AutoSingerRegisterPanel from '../components/AutoSingerRegisterPanel.jsx';
 import Pv95Editor from '../components/Pv95Editor.jsx';
 import {interpretMvInstruction93,applyMvInstruction93,undoMvInstruction93} from '../lib/mvNaturalEdit93.js';
 import {regenerateNaturalMvScene,undoNeuralNaturalMvScene} from '../lib/mvNaturalMediaRegeneration.js';
@@ -51,7 +52,7 @@ function SceneVideoClip({assetId,mime,title}){
  return mime==='video/mp4'?<video src={url} controls loop playsInline style={{width:'100%',maxHeight:410,background:'#111'}} aria-label={title||'생성된 영상 클립'}/>:
   <img src={url} alt={title||'SVD 애니메이션 WebP 영상'} style={{display:'block',width:'100%',maxHeight:410,objectFit:'contain',background:'#111'}}/>;
 }
-export default function Video({data,project,onChange,navigate,notify,mode='video',embedded=false,focusSceneId=''}){
+export default function Video({data,project,onChange,navigate,notify,add,mode='video',embedded=false,focusSceneId=''}){
  const p=project||data.projects[0];const [selected,setSelected]=useState(focusSceneId||'');const [pendingImport,setPendingImport]=useState(null);const [animaticPosition,setAnimaticPosition]=useState(0);const [animaticPlaying,setAnimaticPlaying]=useState(false);const [animaticSpeed,setAnimaticSpeed]=useState(1);const [shotSheetPage,setShotSheetPage]=useState(1);const animaticLastTick=useRef(null);
  const [imagePort,setImagePort]=useState('8188');const [checkpoints,setCheckpoints]=useState([]);const [checkpoint,setCheckpoint]=useState('');
  const [natural93,setNatural93]=useState(''),[review93,setReview93]=useState(null),[natural93Busy,setNatural93Busy]=useState(false),[natural93Status,setNatural93Status]=useState(''),[replace94Id,setReplace94Id]=useState(''),[review94,setReview94]=useState(null),[replace94All,setReplace94All]=useState(false);
@@ -528,6 +529,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  return <>{!embedded&&<SectionHead eyebrow={mode==='pv'?'VOCAL SYNTH PV':'STORYBOARD EDITOR'} title={mode==='pv'?'Vocal Synth PV':'Music Video Studio'} description="곡에 맞춰 장면을 편집하고, 실제 화면과 음악을 이어 WebM 뮤직비디오로 저장합니다." action={<Button icon="folder" onClick={()=>navigate('projects')}>프로젝트 보기</Button>}/>}
  <div className="video-project-banner"><Icon name="music" size={20}/><strong>{p.title}</strong><span>·</span><span>{p.bpm} BPM</span><span className="banner-stretch"/><span>Step78 로컬 SVD 장면별 영상 클립 연결</span></div>
  <LocalAiStoryboardPanel project={p} onChange={onChange} notify={notify}/>
+ {typeof add==='function'&&p?.autoVirtualSingerImageV1&&<AutoSingerRegisterPanel project={p} characters={data.characters} onRegister={profile=>add('characters',profile)} notify={notify}/>}
  <LocalMvBatchPanel project={p} data={data} checkpoint={checkpoint} videoModel={videoModel} imagePort={imagePort} imageSteps={imageSteps} imageSize={imageSize} videoFrames={videoFrames} videoFps={videoFps} videoSteps={videoSteps} videoMotion={videoMotion} current={()=>latestProject.current} commit={next=>{latestProject.current=next;onChange(next)}} session={readSession} notify={notify}/>
  <Panel title="STEP93 · AI 영상 자연어 수정" description="로컬 명령 문법으로 선택한 장면의 속성 하나 또는 서로 다른 두 속성을 함께 검토·편집합니다. 미리보기·확인 후 적용하며 AI 모델 추론이 아닙니다.">
  <Field label="장면 자연어 명령"><input aria-label="Step93 자연어 명령" maxLength={500} value={natural93} onChange={e=>{setNatural93(e.target.value);setReview93(null);}} placeholder="배경을 비 오는 밤거리로 바꿔 그리고 조명을 네온 불빛으로 바꿔"/></Field>
