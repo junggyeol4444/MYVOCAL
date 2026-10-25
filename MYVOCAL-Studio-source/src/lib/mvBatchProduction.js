@@ -9,6 +9,7 @@ import {genId} from './schema.js';
 import {assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
 import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
 import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
+import {chooseSceneReference} from './characterSceneReference.js';
 // A registered character reuses the SAME sampling seed in each scene.
 // img2img still uses the original authorized reference; seed consistency
 // reduces variation but does not guarantee neural identity equivalence.
@@ -41,8 +42,11 @@ export function authorizedAutoSceneReference(scene,character,{includeReferences=
   const first=personPhotoAssets(character).find(a=>['portrait','front'].includes(a.role))||
    personPhotoAssets(character)[0];
   if(!first)return null;
-  validatePersonSource(character,first.id);
-  return {assetId:first.id,denoise:.25,kind:'person',source:'registered-identity'};
+  // 장면의 실제 카메라·동작 문구에 맞는 같은 인물의 정면/측면/전신 사진 사용.
+  const chosen=chooseSceneReference(character,scene,first.id);
+  validatePersonSource(character,chosen.assetId);
+  return {assetId:chosen.assetId,denoise:.25,kind:'person',source:'registered-identity',
+   cameraView:chosen.view,referenceRole:chosen.role,sourceProfileId:chosen.sourceProfileId};
  }
  if(character.kind==='character'){
   if(!['self','owned'].includes(character.rights)&&
@@ -50,8 +54,11 @@ export function authorizedAutoSceneReference(scene,character,{includeReferences=
   const first=characterArtworkAssets(character).find(a=>['portrait','front'].includes(a.role))||
    characterArtworkAssets(character)[0];
   if(!first)return null;
-  validateCharacterArtwork(character,first.id);
-  return {assetId:first.id,denoise:.25,kind:'character',source:'registered-identity'};
+  // 해당 캐릭터의 여러 원화 중 장면 시점에 맞는 것을 실제 img2img에 전달.
+  const chosen=chooseSceneReference(character,scene,first.id);
+  validateCharacterArtwork(character,chosen.assetId);
+  return {assetId:chosen.assetId,denoise:.25,kind:'character',source:'registered-identity',
+   cameraView:chosen.view,referenceRole:chosen.role,sourceProfileId:chosen.sourceProfileId};
  }
  return null;
 }
