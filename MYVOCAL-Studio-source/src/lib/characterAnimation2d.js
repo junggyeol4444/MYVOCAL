@@ -63,8 +63,10 @@ export function animationManifest(character,settings){
 }
 const sin=Math.sin,PI=Math.PI;
 const safeTime=(t,d)=>Math.max(0,Math.min(d,Number.isFinite(t)?t:0));
-export function animationPose(time,settings){
- const t=safeTime(time,settings.durationSec);
+export function animationPose(time,settings,{continuous=false}={}){
+ // 긴 공연에서는 기존 프리셋의 실제 Canvas 동작을 전곡 시각으로 반복한다.
+ // 짧은 단독 미리보기의 기존 종료 시각 동작은 유지한다.
+ const t=continuous?Math.max(0,Number.isFinite(time)?time:0):safeTime(time,settings.durationSec);
  const phase=2*PI*t/settings.durationSec;
  // Blink starts a short distance into its cycle, with a deterministic close/open pulse.
  const blinkPhase=(t*settings.blinkRate+.76)%1;
@@ -104,10 +106,10 @@ function featureCrop(ctx,img,r,verticalScale){
  ctx.restore();
 }
 /** Draw one real frame on Canvas. The source image is always read-only. */
-export function drawAnimationFrame(ctx,img,plan,settings,time,outWidth,outHeight,lipSync=null,expressionPlan=null,character=null,dancePlan=null,performancePlan=null){
+export function drawAnimationFrame(ctx,img,plan,settings,time,outWidth,outHeight,lipSync=null,expressionPlan=null,character=null,dancePlan=null,performancePlan=null,continuousStage=false){
  if(!ctx||!img||!plan)throw Error('Canvas·원본 이미지·레이어 계획이 필요합니다.');
  if(!Number.isInteger(outWidth)||!Number.isInteger(outHeight)||outWidth<1||outHeight<1||outWidth*outHeight>2_000_000)throw Error('출력 영상 해상도가 허용 범위를 초과했습니다.');
- const p=animationPose(time,settings),w=plan.width,h=plan.height;
+ const p=animationPose(time,settings,{continuous:continuousStage}),w=plan.width,h=plan.height;
  const dance=dancePlan?dancePose(dancePlan,time):null;
  const acting=performancePlan?performancePose(performancePlan,time):null;
  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,outWidth,outHeight);
