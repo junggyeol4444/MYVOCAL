@@ -4,12 +4,12 @@
 import {buildSingingRequest} from './singingBridge.js';
 import {phonemeSourceKey,validatePhonemePlan} from './phonemePlan.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
-import {smoothSingingPcm16ChunkEdges} from './singingChunkSeam.js';
+import {smoothSingingPcmChunkEdges} from './singingChunkSeam.js';
 
 const MAX_SECONDS=360;
 const MAX_CUES=2048;
-// 48kHz 16bit stereo, 360 seconds requires 69,120,044 bytes.
-const MAX_WAV_BYTES=90*1024*1024;
+// 48kHz float32 stereo 360초는 약 132MiB. Windows 로컬 엔진 160MiB 한도와 일치시킨다.
+const MAX_WAV_BYTES=160*1024*1024;
 const rd=(value)=>Math.round(value*1000)/1000;
 export function planLongSingingChunks(alignment,{maxSeconds=80,maxCues=128}={}){
  const cues=alignment?.cues;
@@ -65,7 +65,7 @@ export function combineSingingWavChunks(parts,durationSec){
   if(!format){format=decoded.format;
    frames=Math.ceil(durationSec*format.rate);
    const size=44+frames*format.align;
-   if(!Number.isSafeInteger(size)||size>MAX_WAV_BYTES)throw Error('완성 보컬 WAV가 90MiB를 초과했습니다.');
+   if(!Number.isSafeInteger(size)||size>MAX_WAV_BYTES)throw Error('완성 보컬 WAV가 160MiB를 초과했습니다.');
    output=new Uint8Array(size);
   }else if(Object.keys(format).some(k=>format[k]!==decoded.format[k]))throw Error('엔진이 분할 요청마다 서로 다른 WAV 포맷을 반환했습니다.');
   if(!Number.isFinite(part.startSec)||part.startSec<0||part.startSec>=durationSec)throw Error('분할 WAV의 시작 시간이 올바르지 않습니다.');
@@ -77,10 +77,9 @@ export function combineSingingWavChunks(parts,durationSec){
   const required=part.requiredDurationSec??0;
   if(info.durationSec+0.025<required)throw Error('엔진 WAV가 입력 MIDI 음표보다 짧게 생성됐습니다.');
   output.set(decoded.data.subarray(0,maxFrames*format.align),44+from*format.align);
-  if(format.codec===1&&format.bits===16)
-   smoothSingingPcm16ChunkEdges(output,{startFrame:from,frames:maxFrames,
-    sampleRate:format.rate,channels:format.channels,
-    fadeIn:partIndex>0,fadeOut:partIndex<parts.length-1});
+  smoothSingingPcmChunkEdges(output,{startFrame:from,frames:maxFrames,
+   sampleRate:format.rate,channels:format.channels,encoding:format.codec,bits:format.bits,
+   fadeIn:partIndex>0,fadeOut:partIndex<parts.length-1});
   lastLimit=next;
  }
  const view=new DataView(output.buffer);
