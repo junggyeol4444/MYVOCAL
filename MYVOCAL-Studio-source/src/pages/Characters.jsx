@@ -24,6 +24,7 @@ import {downloadText} from '../lib/store';
 import {characterDependents} from '../lib/voiceDeletionSafety.js';
 import CharacterRestorePanel from '../components/CharacterRestorePanel.jsx';
 import CharacterOutfitStudio from '../components/CharacterOutfitStudio.jsx';
+import CharacterStyleTransferStudio from '../components/CharacterStyleTransferStudio.jsx';
 import {LOOK_FIELDS,LOOK_LIMIT,addCharacterLook,approveCharacterLook,deleteCharacterLook,reviewCharacterLook,summarizeCharacterLooks,updateCharacterLook,exportCharacterLookPack,importCharacterLookPack} from '../lib/characterLooks.js';
 import {SHOT_LIMIT,CAMERA_CHOICES,addCharacterShot,updateCharacterShot,deleteCharacterShot,reviewCharacterShot,summarizeCharacterShots,exportCharacterShotPlan,importCharacterShotPlan,getCharacterShotTimeline,SHOT_IMPORT_MAX_BYTES} from '../lib/characterShots.js';
 import {buildCharacterCastTimeline,exportCharacterCastTimeline} from '../lib/characterCast.js';
@@ -60,7 +61,7 @@ export default function Characters({data,add,remove,notify,removeCharacterPersis
  const productionAudit=auditCharacterProduction(visibleCharacters);
  const [vocalFor,setVocalFor]=useState(null),[vocalEditing,setVocalEditing]=useState(null),[vocalDraft,setVocalDraft]=useState(blankVocalCue);
  const [shotFor,setShotFor]=useState(null),[shotEditing,setShotEditing]=useState(null),[shotDraft,setShotDraft]=useState(blankShot);
- const [lookEditing,setLookEditing]=useState(null),[lookStudio,setLookStudio]=useState(null);
+ const [lookEditing,setLookEditing]=useState(null),[lookStudio,setLookStudio]=useState(null),[styleTransferFor,setStyleTransferFor]=useState(null);
  const [lookFor,setLookFor]=useState(null),[lookName,setLookName]=useState(''),[lookFields,setLookFields]=useState(blankLook),[lookAsset,setLookAsset]=useState('');
  const [open,setOpen]=useState(false),[editing,setEditing]=useState(null),[name,setName]=useState(''),[kind,setKind]=useState('character'),[rights,setRights]=useState('owned'),[rightsNote,setRightsNote]=useState(''),[description,setDescription]=useState(''),[appearance,setAppearance]=useState(blankAppearance),[existingAssets,setExistingAssets]=useState([]),[files,setFiles]=useState([]),[busy,setBusy]=useState(false);
  const close=(force=false)=>{if(busy&&!force)return;setOpen(false);setEditing(null);setName('');setKind('character');setRights('owned');setRightsNote('');setDescription('');setAppearance(blankAppearance());setExistingAssets([]);setFiles([]);};
@@ -260,6 +261,8 @@ export default function Characters({data,add,remove,notify,removeCharacterPersis
   <small>듀엣 표시는 동시 출연의 시간 정보이며, 음성 배정·립싱크·영상 제작을 자동 수행하지 않습니다.</small>
  </section>}
  {data.characters.length?<div className="asset-grid">{data.characters.map(c=>{const summary=getCharacterReferenceSummary(c),art=c.assets?.find(a=>a.type?.startsWith('image/'));return <div className="asset-card" key={c.id}><div className="character-art">{art?<AssetPreview id={art.id}/>:<Icon name="user" size={45}/>}<span className="char-type">{c.kind==='person'?'PERSON':c.kind==='3d'?'3D MODEL':'CHARACTER'}</span></div><div className="asset-body"><span className="eyebrow">IDENTITY REFERENCE</span><h3>{c.name}</h3><p>{c.description||'설명 없음'}</p><small>첨부 {summary.total}개 · 외형 항목 {summary.described}/7개 · {rightsOptions.find(x=>x.value===c.rights)?.label||'권한 미확인'}</small> <div className="look-overview"><small>STEP81 · 2D 레이어: {layerPlanStatus(c).message}</small>
+ {((c.kind==='person'&&personPhotoAssets(c).length>0)||(c.kind==='character'&&eligibleLayerImages(c).length>0))&&
+ <div className="look-actions"><Button disabled={busy} onClick={()=>setStyleTransferFor(c.id)}>{c.kind==='person'?'원본 42항 · 사람을 캐릭터화':'원본 43항 · 캐릭터 실사풍 변환'}</Button></div>}
  {(modelAssets(c).length>0||layerPlanStatus(c).status==='ready'||(c.kind==='person'&&personVideoAssets(c).length>0))&&<div className="look-actions"><Button onClick={()=>setLipFor(c)}>STEP85 · 캐릭터 Lip Sync</Button></div>}
  {c.kind==='person'&&personVideoAssets(c).length>0&&<div className="look-actions"><Button disabled={!c.lipSync?.cues?.length} onClick={()=>setPersonLipFor(c)}>STEP86 · 실제 사람 Lip Sync</Button><small>먼저 STEP85 음소·가창 시간표를 저장하세요.</small></div>}
  {(modelAssets(c).length>0||layerPlanStatus(c).status==='ready')&&<div className="look-actions"><Button disabled={!c.lipSync?.cues?.length} onClick={()=>setExpressionFor(c)}>STEP87 · AI 표정 연출</Button><small>{expressionPlanStatus(c)} · 먼저 STEP85 가사 시간표 저장</small></div>}
@@ -293,6 +296,7 @@ export default function Characters({data,add,remove,notify,removeCharacterPersis
  </div>
  <div className="asset-footer"><span className="identity-label"><Icon name="lock" size={14}/> 수동 기준 기록 · 자동 일관성 미구현</span><Button icon="sliders" onClick={()=>begin(c)}>설정 편집</Button><button className="icon-btn danger" title="삭제" onClick={()=>deleteCharacter(c)}><Icon name="trash" size={17}/></button></div></div></div>;})}</div>:<Empty icon="user" title="아직 등록된 캐릭터가 없습니다" description="본인 자료나 사용 허가가 있는 사람·캐릭터 자료를 등록하세요." action={<Button variant="primary" icon="plus" onClick={()=>begin()}>첫 캐릭터 등록</Button>}/>}
  <Notice>MV 컷 계획은 시간 및 텍스트 메타데이터이며 비디오 프레임을 렌더링하지 않습니다. 외형 정보·룩 프리셋·기준 변화 감지는 사용자가 직접 입력한 텍스트를 비교합니다. 룩·컷·보컬 큐 JSON 가져오기는 동일 캐릭터 ID만 허용하고, 컷 ID·시간 충돌·누락된 룩을 검사한 뒤 전부 통과할 때만 저장합니다. 얼굴 인식·AI 캐릭터 생성·고급 3D 무대 자동 생성·자동 Identity Lock·립싱크는 아직 제공하지 않습니다. 기본 3D 모델 프리뷰는 STEP83에서 지원합니다. 원본 자료는 로컬 IndexedDB에 보관됩니다.</Notice>
+ {styleTransferFor&&<Modal title="사람·캐릭터 AI 변환" onClose={()=>setStyleTransferFor(null)}><CharacterStyleTransferStudio profile={data.characters.find(c=>c.id===styleTransferFor)} existingIds={data.characters.flatMap(c=>[c.id,...(c.assets||[]).map(a=>a.id)])} onSave={next=>{add('characters',next);setStyleTransferFor(null);}} notify={notify}/></Modal>}
  {lookStudio&&<Modal title="캐릭터 의상·머리·장신구 4종 로컬 AI 제작" onClose={()=>setLookStudio(null)}><CharacterOutfitStudio character={data.characters.find(c=>c.id===lookStudio.characterId)} lookId={lookStudio.lookId} onSave={updated=>{add('characters',updated);setLookStudio(null);}} notify={notify}/></Modal>}
   {modelFor&&<Modal title={`STEP83 · 3D 캐릭터 시스템 · ${modelFor.name}`} onClose={()=>setModelFor(null)}><Character3dEditor character={data.characters.find(c=>c.id===modelFor.id)||modelFor} onSave={profile=>{add('characters',profile);setModelFor(null);}} notify={notify}/></Modal>}
  {performanceFor&&<Modal title={`STEP89 · 직접 연기 및 악기 연주 연결 · ${performanceFor.name}`} onClose={()=>setPerformanceFor(null)}><CharacterPerformance89Editor character={data.characters.find(c=>c.id===performanceFor.id)||performanceFor} projects={data.projects} onSave={profile=>{add('characters',profile);setPerformanceFor(null);}} notify={notify}/></Modal>}
