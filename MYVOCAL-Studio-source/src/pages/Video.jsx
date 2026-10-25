@@ -16,6 +16,7 @@ import {genId} from '../lib/schema';
 import {downloadText} from '../lib/store';
 import {getFile,putFile} from '../lib/assetDb.js';
 import {buildSceneImageRequest,applySceneImage,isSceneImageStale,checkComfy,generateComfyImage} from '../lib/mvSceneImages.js';
+import {currentAutoSingerImageRequest} from '../lib/autoVirtualSingerImages.js';
 import {videoSourceKey,applySceneVideo,isSceneVideoStale,checkLocalVideoEngine,generateLocalVideoClip,readSourceFrame} from '../lib/mvSceneVideos.js';
 import {personPhotoAssets,validatePersonSource,linkPersonToMvScene,personSceneImageRequest,generatePersonMvImage,personMvSceneStatus} from '../lib/imageToMv.js';
 import {chooseSceneReference} from '../lib/characterSceneReference.js';
@@ -91,8 +92,11 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  if(p)try{directionPlan=buildMvDirectionPlan(p,data.characters);}catch(err){directionError=err.message;}
  const currentDirection=directionPlan?.scenes.find(s=>s.id===current?.id);
  const imageCharacter=data.characters.find(c=>c.id===(current?.characterId||p?.characterId))||null;
- const sceneImageRequest=current?buildSceneImageRequest(p,current,imageCharacter,currentDirection):null;
- const imageStale=current&&isSceneImageStale(current,sceneImageRequest);
+ let sceneImageRequest=null,sceneImageRequestError='';
+ if(current)try{sceneImageRequest=currentAutoSingerImageRequest(p,current,imageCharacter,currentDirection);}
+ catch(e){sceneImageRequestError=e.message;}
+ const autoSingerBatchOnly=!!p?.autoVirtualSingerImageV1;
+ const imageStale=!!current&&(!!sceneImageRequestError||isSceneImageStale(current,sceneImageRequest));
  let currentVideoKey='';try{if(current?.imageAssetId&&sceneImageRequest)currentVideoKey=videoSourceKey(p,current,sceneImageRequest);}catch{}
  const videoStale=current&&isSceneVideoStale(current,currentVideoKey);
  const storyboardAudit=p?auditMvStoryboard(p,data.characters):null;
@@ -120,6 +124,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
   const initialId=current.id,initialProject=p.id,request=sceneImageRequest;
   try{
    const session=readSession();if(!session)throw Error('Windows EXE에서 실행해야 실제 AI 이미지 생성이 가능합니다.');
+   if(autoSingerBatchOnly)throw Error('동일 가수 원화를 유지해야 하므로 AI 자동 가수의 장면 이미지는 일괄 MV 제작 화면에서 생성하세요.');
    if(current.personMv)throw Error('이 장면은 실제 사람 사진과 연결되어 있습니다. 사진 기반 생성은 Step79 패널을 이용하세요.');
    if(current.characterMv)throw Error('이 장면은 캐릭터 그림과 연결되어 있습니다. Step80 Character-to-MV 패널을 이용하세요.');
    if(imageCharacter?.rights==='reference')throw Error('참고용으로만 등록된 캐릭터는 직접 생성에 사용할 수 없습니다. 사용 권한을 먼저 확인하세요.');
@@ -135,7 +140,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
    const scene=latest.scenes.find(s=>s.id===initialId);
    const character=latestCharacters.current.find(c=>c.id===(scene?.characterId||latest.characterId));
    let direction=null;try{direction=buildMvDirectionPlan(latest,latestCharacters.current).scenes.find(s=>s.id===initialId);}catch{}
-   if(!scene||buildSceneImageRequest(latest,scene,character,direction).key!==request.key)throw Error('생성 중 장면·캐릭터·연출이 변경됐습니다. 기존 이미지를 유지했습니다.');
+   if(!scene||currentAutoSingerImageRequest(latest,scene,character,direction).key!==request.key)throw Error('생성 중 장면·캐릭터·연출이 변경됐습니다. 기존 이미지를 유지했습니다.');
    const assetId=genId('img');const ext=blob.type==='image/jpeg'?'jpg':'png';
    await putFile(assetId,new File([blob],`MYVOCAL-${initialId}-${seed}.${ext}`,{type:blob.type}));
    onChange(applySceneImage(latest,initialId,assetId,request,{seed,checkpoint}));
@@ -190,7 +195,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
    const scene=latest.scenes.find(x=>x.id===sceneId);
    const character=latestCharacters.current.find(c=>c.id===(scene?.characterId||latest.characterId));
    let direction=null;try{direction=buildMvDirectionPlan(latest,latestCharacters.current).scenes.find(x=>x.id===sceneId);}catch{}
-   const newImageRequest=scene&&buildSceneImageRequest(latest,scene,character,direction);
+   const newImageRequest=scene&&currentAutoSingerImageRequest(latest,scene,character,direction);
    if(!scene||videoSourceKey(latest,scene,newImageRequest)!==sourceKey)throw Error('장면·이미지·캐릭터·연출 변경을 감지했습니다. 기존 영상을 보존했습니다.');
    const assetId=genId('vid'),ext=blob.type==='video/mp4'?'mp4':'webp';
    await putFile(assetId,new File([blob],`MYVOCAL-${sceneId}-${seed}.${ext}`,{type:blob.type}));
@@ -640,8 +645,10 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
 
  {current&&<Panel title="Step77 · AI 장면 이미지 생성" description="실제 사용자 설치 로컬 ComfyUI + SD 체크포인트로 선택 장면 정지 이미지를 생성합니다. 인터넷 전송 없음. 모델은 ZIP/EXE에 포함되지 않습니다. 영상 생성은 아래 Step78에서 별도로 실행합니다.">
   <div className="hstack" style={{gap:9,flexWrap:'wrap'}}><Field label="ComfyUI 로컬 포트"><input aria-label="ComfyUI 포트" type="number" min="1024" max="65535" value={imagePort} onChange={e=>{setImagePort(e.target.value);setCheckpoint('');setCheckpoints([]);}} style={{maxWidth:110}}/></Field><Button onClick={testImageEngine} disabled={imageBusy}>로컬 AI 엔진 연결 확인</Button><Field label="모델 (Checkpoint)"><select aria-label="ComfyUI 이미지 모델" value={checkpoint} onChange={e=>setCheckpoint(e.target.value)}><option value="">모델 선택</option>{checkpoints.map(n=><option key={n} value={n}>{n}</option>)}</select></Field></div>
-  <div className="hstack" style={{gap:10,flexWrap:'wrap',margin:'12px 0'}}><Field label="이미지 해상도"><select aria-label="생성 이미지 해상도" value={imageSize} onChange={e=>setImageSize(e.target.value)}><option value="512x512">512 × 512 · 정방형</option><option value="768x448">768 × 448 · 가로형</option><option value="1024x576">1024 × 576 · 16:9</option></select></Field><Field label="생성 스텝"><input type="number" min="1" max="50" value={imageSteps} onChange={e=>setImageSteps(e.target.value)} style={{maxWidth:85}}/></Field><Field label="시드 (비우면 자동)"><input value={imageSeed} onChange={e=>setImageSeed(e.target.value)} placeholder="자동" style={{maxWidth:145}}/></Field><Button variant="primary" disabled={imageBusy||pvBusy||personBusy||!checkpoint} onClick={renderSceneImage}>{imageBusy?'이미지 생성 중…':'현재 장면 AI 이미지 생성'}</Button></div>
+  <div className="hstack" style={{gap:10,flexWrap:'wrap',margin:'12px 0'}}><Field label="이미지 해상도"><select aria-label="생성 이미지 해상도" value={imageSize} onChange={e=>setImageSize(e.target.value)}><option value="512x512">512 × 512 · 정방형</option><option value="768x448">768 × 448 · 가로형</option><option value="1024x576">1024 × 576 · 16:9</option></select></Field><Field label="생성 스텝"><input type="number" min="1" max="50" value={imageSteps} onChange={e=>setImageSteps(e.target.value)} style={{maxWidth:85}}/></Field><Field label="시드 (비우면 자동)"><input value={imageSeed} onChange={e=>setImageSeed(e.target.value)} placeholder="자동" style={{maxWidth:145}}/></Field><Button variant="primary" disabled={imageBusy||pvBusy||personBusy||!checkpoint||autoSingerBatchOnly} onClick={renderSceneImage}>{imageBusy?'이미지 생성 중…':'현재 장면 AI 이미지 생성'}</Button></div>
   <p className="muted">엔진 상태: {imageStatus} · {imageSize.replace('x','×')} PNG/JPEG · 프롬프트는 장면 설명/배경/인물 이름/의상/표정/행동/카메라/조명과 Step76 연출을 사용합니다.</p>
+  {autoSingerBatchOnly&&<p className="muted">AI 자동 가수 원본이 연결된 프로젝트입니다. 가수 이미지의 외형 출처를 유지하려면 위의 일괄 MV 제작에서 SD 이미지를 재생성하세요. 기존 저장 영상·사진은 유지합니다.</p>}
+  {sceneImageRequestError&&<p role="alert" className="muted">생성 이미지 원본 확인: {sceneImageRequestError}</p>}
   <Field label="생성에 보낼 장면 프롬프트 (읽기 전용)"><textarea rows={4} readOnly value={sceneImageRequest?.prompt||''}/></Field>
   {current.imageAssetId?<><SceneImage assetId={current.imageAssetId} alt={current.title+' 생성 장면 이미지'}/><p className="muted">{imageStale?'장면/연출이 변경되어 저장된 이미지와 현재 설정이 다릅니다. 재생성 전 기존 이미지 유지.':'현재 장면의 저장된 이미지'} · {current.imageGeneration?.source||'기존 첨부 자료'} · 모델 {current.imageGeneration?.checkpoint||'미확인'}</p><Button icon="download" onClick={exportSceneImage}>현재 장면 이미지 PNG/JPG 저장</Button></>:<p className="muted">아직 이 장면에 연결된 이미지가 없습니다. 설치된 로컬 이미지 모델이 없으면 AI 생성은 실행되지 않습니다.</p>}
  </Panel>}
