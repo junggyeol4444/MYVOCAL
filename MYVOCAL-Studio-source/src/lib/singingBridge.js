@@ -30,7 +30,7 @@ export function buildSingingRequest(port,p,alignment,voice,model,phonemePlan=nul
  if(!alignment||!Array.isArray(alignment.cues)||!alignment.cues.length)throw Error('가사·MIDI 싱크가 필요합니다.');
  if(phonemePlan){validatePhonemePlan(phonemePlan,alignment);}
  const style=normalizeSingingStyle(p?.singingStyle);
- return {port,format:'MYVOCAL_SINGING_REQUEST',version:1,project:p.title,voice:{id:voice.id,name:voice.name,rights:voice.rights},checkpoint:model?{id:model.id,name:model.name,engineId:model.engineId}:null,bpm:alignment.bpm,
+ return {port,format:'MYVOCAL_SINGING_REQUEST',version:1,...(alignment.longForm===true?{longForm:true}:{}),project:p.title,voice:{id:voice.id,name:voice.name,rights:voice.rights},checkpoint:model?{id:model.id,name:model.name,engineId:model.engineId}:null,bpm:alignment.bpm,
    ...(style==='Natural'?{}:{singingStyle:style}),
    cues:alignment.cues.map(c=>({lyric:c.lyric,pitch:c.pitch,startSec:c.startSec,endSec:c.endSec,velocity:c.velocity,hangul:hangulHint(c.lyric)})),
    ...(phonemePlan?{phonemes:phonemePlan.segments.map(s=>({cueIndex:s.cueIndex,token:s.token,kind:s.kind,pitch:s.pitch,startSec:s.startSec,endSec:s.endSec}))}:{})};
