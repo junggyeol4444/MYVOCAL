@@ -87,7 +87,7 @@ export function parseCharacter3d(arrayBuffer,filename){
    const extract=(name,n)=>{const id=p.attributes[name];if(id===undefined)return null;const a=read(id);if(a.count!==position.count||a.components!==n)throw Error(name+' 데이터 개수 오류');return a.array;};
    const targets=arr(p.targets).map(t=>{const a=t.POSITION===undefined?null:read(t.POSITION);if(a&&(a.count!==position.count||a.components!==3))throw Error('Morph 데이터 개수 오류');return a?.array||null;});
    const mat=json.materials?.[p.material]||{}, pbr=mat.pbrMetallicRoughness||{};
-   const source={node:node.index,mesh:node.mesh,position:position.array,indices:indices||Float32Array.from({length:position.count},(_,i)=>i),uv:extract('TEXCOORD_0',2),joints:extract('JOINTS_0',4),jointWeights:extract('WEIGHTS_0',4),targets,weights:node.weights.length?node.weights:arr(mesh.weights),material:{color:pbr.baseColorFactor||[.8,.8,.85,1],texture:pbr.baseColorTexture?.index,alphaMode:mat.alphaMode||'OPAQUE',doubleSided:!!mat.doubleSided},mode:p.mode??4};
+   const source={node:node.index,mesh:node.mesh,position:position.array,indices:indices||Float32Array.from({length:position.count},(_,i)=>i),uv:extract('TEXCOORD_0',2),joints:extract('JOINTS_0',4),jointWeights:extract('WEIGHTS_0',4),targets,weights:node.weights.length?node.weights:arr(mesh.weights),material:{color:pbr.baseColorFactor||[.8,.8,.85,1],texture:pbr.baseColorTexture?.index,alphaMode:['OPAQUE','MASK','BLEND'].includes(mat.alphaMode)?mat.alphaMode:'OPAQUE',alphaCutoff:Number.isFinite(mat.alphaCutoff)?clamp(mat.alphaCutoff,0,1):.5,doubleSided:!!mat.doubleSided},mode:p.mode??4};
    if(![4,5,6].includes(source.mode))throw Error('이 모델의 기하 형태(선/점)는 아직 지원하지 않습니다.');primitives.push(source);
   });
  });

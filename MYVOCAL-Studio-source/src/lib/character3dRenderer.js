@@ -19,6 +19,23 @@ function inv(m){const a=m.slice(),b=I(); // Gauss-Jordan in row-oriented scratch
  for(let c=0;c<4;c++)for(let rr=0;rr<4;rr++)b[c*4+rr]=r[rr][4+c];return b;
 }
 const lerp=(a,b,t)=>a+(b-a)*t;
+// glTF 2.0 LINEAR rotation uses shortest-arc quaternion SLERP, not component-wise lerp.
+function slerpQuaternion(a,b,t){
+ const from=qnormalize(a),to=qnormalize(b);
+ let dot=from.reduce((sum,value,i)=>sum+value*to[i],0);
+ const sign=dot<0?-1:1;dot=Math.min(1,Math.max(-1,dot*sign));
+ if(dot>.9995)return qnormalize(from.map((value,i)=>value+(sign*to[i]-value)*t));
+ const angle=Math.acos(dot),denom=Math.sin(angle);
+ const wa=Math.sin((1-t)*angle)/denom,wb=Math.sin(t*angle)/denom;
+ return qnormalize(from.map((value,i)=>wa*value+wb*sign*to[i]));
+}
+// VRM blink morphs are driven on the real WebGL mesh and do not edit model files.
+function vrmBlinkWeight(seconds){
+ if(!Number.isFinite(seconds)||seconds<0)return 0;
+ const phase=seconds%5.4;
+ const pulse=(center,half)=>Math.max(0,1-Math.abs(phase-center)/half);
+ return Math.max(pulse(1.72,.13),pulse(1.96,.11),pulse(4.58,.14));
+}
 function sample(s,t,path,weightCount=0){const n=s.times.length;if(!n)return null;let k=0;while(k<n-2&&s.times[k+1]<t)k++;const last=s.interpolation==='STEP'||k>=n-1||t<=s.times[k]?0:Math.max(0,Math.min(1,(t-s.times[k])/(s.times[k+1]-s.times[k]||1)));
  const width=path==='weights'?weightCount:s.components;
  if(s.interpolation==='CUBICSPLINE'){
@@ -39,7 +56,13 @@ function sample(s,t,path,weightCount=0){const n=s.times.length;if(!n)return null
   if(values.some(v=>!Number.isFinite(v)))throw Error('VRM 모션 보간 결과가 올바르지 않습니다.');
   return path==='rotation'?qnormalize(values):values;
  }const start=k*width,next=Math.min(k+1,n-1)*width;
- const values=Array.from({length:width},(_,i)=>lerp(s.values[start+i],s.values[next+i],last));return path==='rotation'?qnormalize(values):values;
+ if(path==='rotation'&&s.interpolation==='LINEAR'&&k<n-1){
+  const from=Array.from({length:width},(_,i)=>s.values[start+i]);
+  const to=Array.from({length:width},(_,i)=>s.values[next+i]);
+  return slerpQuaternion(from,to,last);
+ }
+ const values=Array.from({length:width},(_,i)=>lerp(s.values[start+i],s.values[next+i],last));
+ return path==='rotation'?qnormalize(values):values;
 }
 export function calculateRigPose(model,settings,time,dancePlan){return calculateRigPoseWithPerformance(model,settings,time,dancePlan,null);}
 export function calculateRigPoseWithPerformance(model,settings,time,dancePlan=null,performancePlan=null){
@@ -83,7 +106,7 @@ function primitivesBounds(model,pose){let low=[Infinity,Infinity,Infinity],high=
 function projection(aspect){const f=1/Math.tan(Math.PI/6),near=.01,far=1000;return [f/aspect,0,0,0,0,f,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0];}
 function lookAt(eye,at){let z=eye.map((x,i)=>x-at[i]);const norm=v=>{const l=Math.hypot(...v)||1;return v.map(x=>x/l);};z=norm(z);let x=norm([z[2],0,-z[0]]),y=[z[1]*x[2]-z[2]*x[1],z[2]*x[0]-z[0]*x[2],z[0]*x[1]-z[1]*x[0]];return [x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-x.reduce((s,v,i)=>s+v*eye[i],0),-y.reduce((s,v,i)=>s+v*eye[i],0),-z.reduce((s,v,i)=>s+v*eye[i],0),1];}
 const VERT=`attribute vec3 pos; attribute vec2 uv; attribute float shade;uniform mat4 viewProj;varying vec2 vUV;varying float vShade;void main(){gl_Position=viewProj*vec4(pos,1.);vUV=uv;vShade=shade;}`;
-const FRAG=`precision mediump float;uniform vec4 tint;uniform vec3 lightTint;uniform sampler2D tex;uniform float hasTex;varying vec2 vUV;varying float vShade;void main(){vec4 c=tint*(hasTex>0.5?texture2D(tex,vUV):vec4(1.));if(c.a<0.03)discard;gl_FragColor=vec4(c.rgb*vShade*lightTint,c.a);}`;
+const FRAG=`precision mediump float;uniform vec4 tint;uniform vec3 lightTint;uniform sampler2D tex;uniform float hasTex;uniform float alphaCutoff;uniform float forceOpaque;varying vec2 vUV;varying float vShade;void main(){vec4 c=tint*(hasTex>0.5?texture2D(tex,vUV):vec4(1.));if(forceOpaque>0.5)c.a=1.;if(c.a<alphaCutoff)discard;gl_FragColor=vec4(c.rgb*vShade*lightTint,c.a);}`;
 function shader(gl,type,src){const sh=gl.createShader(type);gl.shaderSource(sh,src);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw Error('WebGL 셰이더 오류: '+gl.getShaderInfoLog(sh));return sh;}
 function program(gl){const p=gl.createProgram();gl.attachShader(p,shader(gl,gl.VERTEX_SHADER,VERT));gl.attachShader(p,shader(gl,gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error('WebGL 프로그램 연결 실패');return p;}
 function generateVertices(model,p,pose,settings,stageLighting=null,lipSync=null,time=0,directed=null){const n=p.position.length/3,values=new Float32Array(n*6),meshWorld=pose.worlds[p.node],skinIndex=model.nodes[p.node].skin,skin=model.skins[skinIndex];
@@ -91,6 +114,15 @@ function generateVertices(model,p,pose,settings,stageLighting=null,lipSync=null,
  const weights=[...p.weights];const anim=pose.locals[p.node].weights;if(anim.length)for(let i=0;i<Math.min(weights.length,anim.length);i++)weights[i]=anim[i];
  const faceName=directed?.expression||settings.expression,faceWeight=directed?directed.weight:settings.expressionWeight;
  for(const binding of expressionBindings(model,faceName))if((binding.node===p.node)||(binding.mesh===p.mesh)){weights[binding.index]=(weights[binding.index]||0)+binding.weight*faceWeight;}
+ if(settings.autoBlink!==false&&String(faceName||'').toLowerCase()!=='blink'){
+  const blink=vrmBlinkWeight(time);
+  if(blink>0){
+   const common=expressionBindings(model,'blink');
+   const eyelids=common.length?common:[...expressionBindings(model,'blinkleft'),...expressionBindings(model,'blinkright')];
+   for(const b of eyelids)if(b.node===p.node||b.mesh===p.mesh)
+    weights[b.index]=Math.max(weights[b.index]||0,Math.min(1,blink*b.weight));
+  }
+ }
  if(lipSync){const {viseme,weight}=visemeAt(lipSync,time);const aliases={A:['aa','a','ah'],I:['ih','i'],U:['ou','u'],E:['ee','e'],O:['oh','o'],M:['closed','m'],F:['ff','f']};
   for(const name of aliases[viseme]||[]){const bindings=expressionBindings(model,name);if(bindings.length){for(const b of bindings)if(b.node===p.node||b.mesh===p.mesh)weights[b.index]=Math.max(weights[b.index]||0,weight*b.weight);break;}}
  }
@@ -107,7 +139,7 @@ function generateVertices(model,p,pose,settings,stageLighting=null,lipSync=null,
 }
 export class Character3dRenderer{
  constructor(canvas,model){this.canvas=canvas;this.model=model;this.gl=canvas.getContext('webgl',{alpha:false,antialias:true,preserveDrawingBuffer:true});const gl=this.gl;if(!gl)throw Error('이 환경에서는 WebGL을 사용할 수 없습니다.');
-  this.shader=program(gl);this.attrib={pos:gl.getAttribLocation(this.shader,'pos'),uv:gl.getAttribLocation(this.shader,'uv'),shade:gl.getAttribLocation(this.shader,'shade')};this.uniform={viewProj:gl.getUniformLocation(this.shader,'viewProj'),tint:gl.getUniformLocation(this.shader,'tint'),tex:gl.getUniformLocation(this.shader,'tex'),hasTex:gl.getUniformLocation(this.shader,'hasTex'),lightTint:gl.getUniformLocation(this.shader,'lightTint')};
+  this.shader=program(gl);this.attrib={pos:gl.getAttribLocation(this.shader,'pos'),uv:gl.getAttribLocation(this.shader,'uv'),shade:gl.getAttribLocation(this.shader,'shade')};this.uniform={viewProj:gl.getUniformLocation(this.shader,'viewProj'),tint:gl.getUniformLocation(this.shader,'tint'),tex:gl.getUniformLocation(this.shader,'tex'),hasTex:gl.getUniformLocation(this.shader,'hasTex'),alphaCutoff:gl.getUniformLocation(this.shader,'alphaCutoff'),forceOpaque:gl.getUniformLocation(this.shader,'forceOpaque'),lightTint:gl.getUniformLocation(this.shader,'lightTint')};
   this.resources=model.primitives.map(p=>{const vertices=gl.createBuffer(),indices=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vertices);gl.bufferData(gl.ARRAY_BUFFER,p.position.length/3*24,gl.DYNAMIC_DRAW);
    const use32=p.indices.some(i=>i>65535);if(use32&&!gl.getExtension('OES_element_index_uint'))throw Error('이 그래픽 장치는 65,535개 이상 정점 인덱스를 지원하지 않습니다.');
    const idx=use32?new Uint32Array(p.indices):new Uint16Array(p.indices);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indices);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx,gl.STATIC_DRAW);
@@ -130,12 +162,20 @@ export class Character3dRenderer{
   if(frame)this.drawStage(frame,bounds,matrix);
   gl.uniform3fv(this.uniform.lightTint,frame?frame.light.theme:[1,1,1]);
   const directed=expressionPlan&&character?expressionAt(character,expressionPlan,time):null;
-  model.primitives.forEach((p,i)=>{const item=this.resources[i],v=generateVertices(model,p,pose,settings,frame?.light,lipSync,time,directed);gl.bindBuffer(gl.ARRAY_BUFFER,item.vertices);gl.bufferSubData(gl.ARRAY_BUFFER,0,v);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,item.indices);
+  const drawOrder=model.primitives.map((p,i)=>({p,i})).sort((a,b)=>
+   Number(a.p.material.alphaMode==='BLEND')-Number(b.p.material.alphaMode==='BLEND'));
+  for(const {p,i} of drawOrder){const item=this.resources[i],v=generateVertices(model,p,pose,settings,frame?.light,lipSync,time,directed);gl.bindBuffer(gl.ARRAY_BUFFER,item.vertices);gl.bufferSubData(gl.ARRAY_BUFFER,0,v);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,item.indices);
    for(const [name,size,offset] of [['pos',3,0],['uv',2,12],['shade',1,20]]){const loc=this.attrib[name];if(loc<0)continue;gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,24,offset);}
-   const material=p.material;gl.uniform4fv(this.uniform.tint,material.color);const imageIndex=model.textures[material.texture];const texture=this.textureSlots[imageIndex];gl.uniform1f(this.uniform.hasTex,texture?1:0);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture||null);
+   const material=p.material,alpha=material.alphaMode;
+   if(alpha==='BLEND'){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);}
+   else{gl.disable(gl.BLEND);gl.depthMask(true);}
+   gl.uniform1f(this.uniform.alphaCutoff,alpha==='MASK'?material.alphaCutoff:alpha==='BLEND'?.005:0);
+   gl.uniform1f(this.uniform.forceOpaque,alpha==='OPAQUE'?1:0);
+   gl.uniform4fv(this.uniform.tint,material.color);const imageIndex=model.textures[material.texture];const texture=this.textureSlots[imageIndex];gl.uniform1f(this.uniform.hasTex,texture?1:0);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture||null);
    if(material.doubleSided)gl.disable(gl.CULL_FACE);else{gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);}
    gl.drawElements(p.mode===5?gl.TRIANGLE_STRIP:p.mode===6?gl.TRIANGLE_FAN:gl.TRIANGLES,item.count,item.indexType,0);
-  });
+  }
+  gl.depthMask(true);gl.disable(gl.BLEND);
  }
  // A locally generated stage: raised floor, upstage LED wall and three light bars.
  // It uses real WebGL triangles, the same depth buffer and camera as the avatar.

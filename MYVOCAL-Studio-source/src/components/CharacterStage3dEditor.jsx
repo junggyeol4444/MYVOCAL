@@ -259,6 +259,7 @@ export default function CharacterStage3dEditor({character,onSave,notify,projects
   {stageFields('기본 카메라 회전(°)','yaw',-180,180,5)}{stageFields('카메라 높이(°)','pitch',-60,60,5)}{stageFields('기본 줌','zoom',.7,1.5,.05)}
   {stageFields('카메라 동작 강도','cameraMotion',0,2,.1)}{stageFields('조명 밝기','lightIntensity',.2,2,.1)}{stageFields('조명 움직임','lightMotion',0,2,.1)}
   {stageFields('캐릭터 표정 강도','expressionWeight',0,1,.05)}
+  <label><input type="checkbox" disabled={exporting} checked={settings.autoBlink!==false} onChange={e=>patch('autoBlink',e.target.checked)}/> VRM 실제 눈꺼풀 Morph 자동 눈깜빡임 (미리보기·녹화 동일)</label>
   <div className="look-actions"><Button disabled={!model||exporting} onClick={snapshot}>현재 프레임 PNG</Button><Button disabled={exporting} onClick={json}>무대 설정 JSON</Button><Button disabled={!model||exporting} onClick={save} variant="primary">무대 설정 저장</Button></div>
   <Field label="3D 공연 영상에 실제 가창 WAV 음성 추가 (선택)"><input type="file" accept=".wav,audio/wav" disabled={exporting} onChange={e=>setSingingWav(e.target.files?.[0]||null)}/></Field>
   <Notice>선택한 WAV는 실제 미디어 오디오 트랙으로 녹화됩니다. 현재 프로젝트의 한국어 음소와 가사 표정을 같은 VRM 시간축에 적용하며, 실제 보컬 PCM을 연결하면 발성 강약도 표정에 반영합니다. 일치하는 사용자 수동 표정은 우선합니다. 감정 인식 신경망은 아니며 원본 모델·WAV·캐릭터 저장값은 수정하지 않습니다.</Notice>

@@ -20,13 +20,14 @@ export function createStageSettings(character){
  const candidates=modelAssets(character);const rig=character.rig3d&&candidates.some(a=>a.id===character.rig3d.assetId)?character.rig3d:createRigSettings(character);
  return {version:1,assetId:rig.assetId,backdrop:'concert',camera:'orbit',lights:'concert',duration:8,fps:24,
   yaw:rig.yaw||0,pitch:rig.pitch||0,zoom:1,lightIntensity:1,cameraMotion:1,lightMotion:1,
-  motion:rig.motion||'idle',animation:rig.animation||'',expression:rig.expression||'neutral',expressionWeight:rig.expressionWeight??1,speed:rig.speed||1};
+  motion:rig.motion||'idle',animation:rig.animation||'',expression:rig.expression||'neutral',expressionWeight:rig.expressionWeight??1,speed:rig.speed||1,autoBlink:true};
 }
 export function validateStageSettings(character,stage){
  ensure(character&&typeof character==='object','캐릭터가 없습니다.');
  ensure(character.rights==='owned'||character.rights==='self'||(character.rights==='licensed'&&character.rightsNote?.trim()),'본인 제작 또는 허가 기록이 있는 캐릭터만 무대 제작할 수 있습니다.');
  ensure(stage&&typeof stage==='object'&&!Array.isArray(stage),'3D 무대 설정 형식 오류');
  ensure(stage.version===1,'지원하지 않는 무대 설정 버전');
+ ensure(stage.autoBlink===undefined||typeof stage.autoBlink==='boolean','VRM 자동 눈깜빡임 설정 오류');
  ensure(modelAssets(character).some(a=>a.id===stage.assetId),'캐릭터 원본 3D 모델을 찾을 수 없습니다.');
  ensure(STAGE_BACKDROPS.includes(stage.backdrop)&&STAGE_CAMERAS.includes(stage.camera)&&STAGE_LIGHTS.includes(stage.lights),'무대·카메라·조명 설정 오류');
  for(const key of ['duration','fps','yaw','pitch','zoom','lightIntensity','cameraMotion','lightMotion','expressionWeight','speed'])ensure(finite(stage[key]),`${key} 설정 오류`);
@@ -62,7 +63,7 @@ export function stageFrame(stage,time,{continuous=false}={}){
  return {time:t,camera:{yaw,pitch,zoom,track},light:{brightness,sweep,theme:tints[stage.lights]},palette:colors[stage.backdrop]};
 }
 export function stageRigSettings(stage){return {assetId:stage.assetId,motion:stage.motion,animation:stage.animation,expression:stage.expression,
- expressionWeight:stage.expressionWeight,speed:stage.speed,boneName:'',boneDegrees:0,yaw:stage.yaw,pitch:stage.pitch};}
+ expressionWeight:stage.expressionWeight,speed:stage.speed,autoBlink:stage.autoBlink!==false,boneName:'',boneDegrees:0,yaw:stage.yaw,pitch:stage.pitch};}
 export function stageMetadata(character,stage){validateStageSettings(character,stage);return {format:'MYVOCAL_3D_STAGE_STEP84',version:1,characterId:character.id,
  modelAssetId:stage.assetId,settings:{...stage},export:{format:'video/webm',audio:'none',durationSec:stage.duration,fps:stage.fps},
  caveat:'WebGL stage renderer; actual WebM recording depends on supported MediaRecorder and GPU.'};}
