@@ -1,6 +1,7 @@
 import {visemeAt} from './characterLipSync.js';
 import {expressionAt} from './characterExpressionDirector.js';
 import {dancePose} from './characterDanceDirector.js';
+import {capturedMotionPoseAt} from './motionReferencePose31.js';
 import {performancePose} from './characterPerformance89.js';
 // STEP83 — minimal embedded glTF WebGL1 preview. No remote requests or AI calls.
 // Supports uncompressed GLB/VRM geometries, glTF skins, morph targets and linear animations.
@@ -65,7 +66,7 @@ function sample(s,t,path,weightCount=0){const n=s.times.length;if(!n)return null
  return path==='rotation'?qnormalize(values):values;
 }
 export function calculateRigPose(model,settings,time,dancePlan){return calculateRigPoseWithPerformance(model,settings,time,dancePlan,null);}
-export function calculateRigPoseWithPerformance(model,settings,time,dancePlan=null,performancePlan=null){
+export function calculateRigPoseWithPerformance(model,settings,time,dancePlan=null,performancePlan=null,capturedMotion=null){
  const t=time*(settings.speed||1),locals=model.nodes.map(n=>({translation:[...n.translation],rotation:[...n.rotation],scale:[...n.scale],weights:[...n.weights]}));
  const chosen=model.animations.find(x=>settings.animation&&x.name===settings.animation);
  if(chosen&&chosen.duration>0){const sec=t%chosen.duration;for(const ch of chosen.channels){const dst=locals[ch.node];const width=ch.path==='weights'?(model.primitives.find(p=>p.node===ch.node)?.targets.length||0):0;const value=sample(ch.sampler,sec,ch.path,width);if(value&&value.length)dst[ch.path]=value;}}
@@ -85,6 +86,17 @@ export function calculateRigPoseWithPerformance(model,settings,time,dancePlan=nu
    locals[hip].translation[1]+=dance.lift;
    locals[hip].translation[0]+=dance.offset;
   }
+ }
+ // 원본 31·32항: 실제 등록 영상 MediaPipe 추출 프레임을 기존 VRM 휴머노이드 본으로 재현한다.
+ // 회전은 2D 추정값으로 완전한 3D 모션캡처가 아니며, 등록 원본 본·애니메이션을 교체하지 않는다.
+ const realPose=capturedMotion?capturedMotionPoseAt(capturedMotion,time):null;
+ if(realPose){
+  for(const [name,degrees] of Object.entries(realPose.angles)){
+   if(!Object.prototype.hasOwnProperty.call(vrm,name))continue;
+   drive(name,[0,0,1],degrees);
+  }
+  const hips=vrm.hips;
+  if(Number.isInteger(hips)&&locals[hips])locals[hips].translation[1]+=realPose.lift;
  }
  // STEP89: opt-in additive video motion-energy and MIDI gesture approximation.
  const acting=performancePlan?performancePose(performancePlan,time):null;
@@ -153,7 +165,9 @@ export class Character3dRenderer{
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);this.textureSlots[i]=t;
   }catch{/* if invalid texture, show solid material */}finally{URL.revokeObjectURL(url);}
  }}
- render(settings,time,stage=null,lipSync=null,expressionPlan=null,character=null,dancePlan=null,performancePlan=null,continuousStage=false){if(this.disposed)return;const gl=this.gl,model=this.model,pose=calculateRigPoseWithPerformance(model,settings,time,dancePlan,performancePlan),bounds=primitivesBounds(model,pose),frame=stage?stageFrame(stage,time,{continuous:continuousStage}):null;
+ render(settings,time,stage=null,lipSync=null,expressionPlan=null,character=null,dancePlan=null,performancePlan=null,continuousStage=false){if(this.disposed)return;const gl=this.gl,model=this.model,pose=calculateRigPoseWithPerformance(model,settings,time,dancePlan,performancePlan,
+  character?.motionCaptured31?.characterId===character?.id&&
+  character.assets?.some(a=>a.id===character.motionCaptured31.referenceAssetId)?character.motionCaptured31:null),bounds=primitivesBounds(model,pose),frame=stage?stageFrame(stage,time,{continuous:continuousStage}):null;
   gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clearColor(...(frame?frame.palette.background:[.055,.072,.115]),1);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(this.shader);
   const yaw=(frame?.camera.yaw??settings.yaw)*Math.PI/180,pitch=(frame?.camera.pitch??settings.pitch)*Math.PI/180,dist=bounds.radius*3.3/(frame?.camera.zoom||1);const {center}=bounds;
   const eye=[center[0]+Math.sin(yaw)*Math.cos(pitch)*dist,center[1]+Math.sin(pitch)*dist,center[2]+Math.cos(yaw)*Math.cos(pitch)*dist];
