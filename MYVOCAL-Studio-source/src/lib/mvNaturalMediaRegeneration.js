@@ -3,8 +3,9 @@
 import {applyMvInstruction93} from './mvNaturalEdit93.js';
 import {buildSceneImageRequest,applySceneImage,validateGeneratedImage,generateComfyImage} from './mvSceneImages.js';
 import {videoSourceKey,applySceneVideo,generateLocalVideoClip,readSourceFrame} from './mvSceneVideos.js';
-import {validatePersonSource,generatePersonMvImage} from './imageToMv.js';
-import {validateCharacterArtwork,generateCharacterMvImage} from './characterToMv.js';
+import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
+import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
+import {chooseSceneReference} from './characterSceneReference.js';
 import {buildMvDirectionPlan} from './mvDirection.js';
 import {inspectSvdClipDuration,assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
 import {getFile,putFilesAtomic} from './assetDb.js';
@@ -21,6 +22,34 @@ function sourceReference(scene,character){
   if(scene.characterId!==character?.id||scene.characterMv.characterId!==character.id)throw Error('등록된 2D 캐릭터 연결이 일치하지 않습니다.');
   validateCharacterArtwork(character,scene.characterMv.referenceAssetId);
   return {kind:'character',assetId:scene.characterMv.referenceAssetId,denoise:scene.characterMv.denoise};
+ }
+ // 사용자가 이미 '원본 이미지 포함'으로 일괄 생성한 자동 장면에만
+ // 같은 프로필의 원본 이미지를 다시 연결한다. 새로운 사용 허가를 추측하지 않는다.
+ // 기존 참조 기록의 실제 asset ID를 검사하므로 다른 사람/캐릭터 혼입을 방지한다.
+ if(character?.id&&character.identityLock!==false&&
+   ['ComfyUI local person img2img','ComfyUI local character img2img'].includes(scene.imageGeneration?.source)){
+  let saved=[];
+  try{saved=JSON.parse(scene.imageGeneration?.key||'[]');}catch{}
+  if(!Array.isArray(saved))saved=[];
+  const [tag,recordedId,recordedKind,originalAsset,denoise]=saved.slice(-5);
+  if(tag==='registered-identity'){
+   if(recordedId!==character.id||recordedKind!==character.kind)
+    throw Error('영상 원본과 연결된 사람·캐릭터가 바뀌었습니다. 다시 참조 대상을 확인하세요.');
+   if(!Number.isFinite(denoise)||denoise<.15||denoise>.75)
+    throw Error('기존 등록 원본 변환 강도 기록이 올바르지 않습니다.');
+   if(recordedKind==='person'){
+    validatePersonSource(character,originalAsset);
+    if(!personPhotoAssets(character).some(a=>a.id===originalAsset))
+     throw Error('기존 원본 사람 사진이 제거되어 재생성할 수 없습니다.');
+   }else if(recordedKind==='character'){
+    validateCharacterArtwork(character,originalAsset);
+    if(!characterArtworkAssets(character).some(a=>a.id===originalAsset))
+     throw Error('기존 원본 캐릭터 원화가 제거되어 재생성할 수 없습니다.');
+   }else throw Error('기존 장면의 이미지 참조 종류가 올바르지 않습니다.');
+   const matched=chooseSceneReference(character,scene,originalAsset);
+   return {kind:recordedKind,assetId:matched.assetId,denoise,
+    source:'registered-identity',sourceProfileId:character.id,cameraView:matched.view};
+  }
  }
  if(character)throw Error('등록 인물·캐릭터는 장면에 원본 사진 또는 원화를 먼저 연결해야 합니다.');
  return null;
@@ -69,7 +98,8 @@ export async function regenerateNaturalMvScene(project,plan,characters,{
  };
  guard();
  const direction=buildMvDirectionPlan(draft,characters).scenes.find(s=>s.id===scene.id);
- const request=buildSceneImageRequest(draft,scene,character,direction);
+ const request=buildSceneImageRequest(draft,scene,character,direction,
+  reference?.source==='registered-identity'?reference:null);
  const seed=Math.floor(Math.random()*1999999000)+1;
  const imageSettings={port,checkpoint,prompt:request.prompt,negative:request.negative,width,height,steps:imageSteps,seed};
  let image;
