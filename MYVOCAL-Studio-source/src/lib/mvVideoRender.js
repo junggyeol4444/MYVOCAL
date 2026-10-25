@@ -4,6 +4,7 @@
 import {auditMvStoryboard} from './mvStoryboard.js';
 import {captionAtTime} from './mvLyricCaptions.js';
 import {drawMvLipSyncOverlay} from './mvLipSyncOverlay.js';
+import {activeMvStyleGrade91} from './mvStyleReapply91.js';
 
 export const MV_VIDEO_WIDTH=640;
 export const MV_VIDEO_HEIGHT=360;
@@ -30,7 +31,7 @@ export function planMvVideoRender(project,characters=[]){
    kind:assetId?kind:'card',mime:kind==='video'?'video/mp4':clipMime==='image/webp'&&assetId===clip?'image/webp':'image/*'};
  });
  return {format:'MYVOCAL_WEBM_STORYBOARD',version:1,projectId:project.id,
-  durationSec:audit.durationSec,gapSec:audit.gapSeconds,scenes,
+  durationSec:audit.durationSec,gapSec:audit.gapSeconds,scenes,grade91:activeMvStyleGrade91(project),
   width:MV_VIDEO_WIDTH,height:MV_VIDEO_HEIGHT,fps:MV_VIDEO_FPS,
   mediaScenes:scenes.filter(s=>s.kind!=='card').length,
   cardScenes:scenes.filter(s=>s.kind==='card').length};
@@ -176,11 +177,23 @@ export function drawMvVideoFrame(canvas,plan,assets,seconds,{captions=[],showCap
  const scene=findMvVideoScene(plan,seconds);
  ctx.fillStyle='#111623';ctx.fillRect(0,0,width,height);
  const record=scene?.assetId?assets?.get(scene.assetId):null;
+ const grade=plan.grade91;
  let imageReady=false;
  if(record){
-  if(record.kind==='frame-sequence')imageReady=cover(ctx,record.frameAt(scene,seconds),width,height);
-  else if(record.kind==='video')imageReady=record.element.readyState>=2&&cover(ctx,record.element,width,height);
-  else imageReady=cover(ctx,record.element,width,height);
+  ctx.save();
+  try{
+   // Real pixels are graded in both WebView2 preview and encoded WebM frames.
+   // Previous canvas state is restored before lip shapes and captions are drawn.
+   if(grade)ctx.filter='brightness('+grade.brightness+') contrast('+grade.contrast+
+    ') saturate('+grade.saturation+')';
+   if(record.kind==='frame-sequence')imageReady=cover(ctx,record.frameAt(scene,seconds),width,height);
+   else if(record.kind==='video')imageReady=record.element.readyState>=2&&cover(ctx,record.element,width,height);
+   else imageReady=cover(ctx,record.element,width,height);
+  }finally{ctx.restore();}
+ }
+ if(imageReady&&grade){
+  ctx.fillStyle='rgba('+grade.color[0]+','+grade.color[1]+','+grade.color[2]+','+grade.tintAlpha+')';
+  ctx.fillRect(0,0,width,height);
  }
  if(!imageReady){
   ctx.fillStyle='#202c40';ctx.fillRect(0,0,width,height);

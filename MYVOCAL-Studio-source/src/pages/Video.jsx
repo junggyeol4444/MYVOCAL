@@ -10,6 +10,7 @@ import {previewSectionNaturalEdit,applySectionNaturalEdit,undoSectionNaturalEdit
 import {prepareCharacterReplace94,applyCharacterReplace94,undoCharacterReplace94} from '../lib/characterReplace94.js';
 import {eligibleBandCharacters} from '../lib/virtualBand90.js';
 import {reviewCharacterLook} from '../lib/characterLooks.js';
+import {previewMvStyleReapply91,applyMvStyleReapply91,undoMvStyleReapply91} from '../lib/mvStyleReapply91.js';
 import {prepareRegeneration92,verifyRegeneration92,applyRegeneration92,undoRegeneration92} from '../lib/identityRegeneration92.js';
 import {genId} from '../lib/schema';
 import {downloadText} from '../lib/store';
@@ -52,6 +53,7 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  const p=project||data.projects[0];const [selected,setSelected]=useState(focusSceneId||'');const [pendingImport,setPendingImport]=useState(null);const [animaticPosition,setAnimaticPosition]=useState(0);const [animaticPlaying,setAnimaticPlaying]=useState(false);const [animaticSpeed,setAnimaticSpeed]=useState(1);const [shotSheetPage,setShotSheetPage]=useState(1);const animaticLastTick=useRef(null);
  const [imagePort,setImagePort]=useState('8188');const [checkpoints,setCheckpoints]=useState([]);const [checkpoint,setCheckpoint]=useState('');
  const [natural93,setNatural93]=useState(''),[review93,setReview93]=useState(null),[natural93Busy,setNatural93Busy]=useState(false),[natural93Status,setNatural93Status]=useState(''),[replace94Id,setReplace94Id]=useState(''),[review94,setReview94]=useState(null),[replace94All,setReplace94All]=useState(false);
+ const [style91Id,setStyle91Id]=useState(''),[style91Review,setStyle91Review]=useState(null);
  const [band90Open,setBand90Open]=useState(false),[regen92Busy,setRegen92Busy]=useState(false),[regen92Status,setRegen92Status]=useState('로컬 이미지 모델·기존 장면 이미지 필요'),[regen92Patch,setRegen92Patch]=useState('');
  const [imageBusy,setImageBusy]=useState(false);const [imageStatus,setImageStatus]=useState('로컬 ComfyUI 확인 필요');
  const [imageSteps,setImageSteps]=useState(20);const [imageSeed,setImageSeed]=useState('');const [imageSize,setImageSize]=useState('768x448');
@@ -79,6 +81,8 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  const eligibleArtwork=data.characters.filter(c=>c.kind==='character'&&(c.rights==='owned'||c.rights==='self'||(c.rights==='licensed'&&c.rightsNote?.trim()))&&characterArtworkAssets(c).length);
  const pvCharacter=eligibleArtwork.find(c=>c.id===pvCharacterId)||null;
  const pvAssets=characterArtworkAssets(pvCharacter);
+ const usableMeasuredStyles=(data.learning||[]).filter(x=>x.kind==='MV Style Learning'&&x.mvStyle91?.version===1&&['self','owned','licensed'].includes(x.rights)&&(x.rights!=='licensed'||x.rightsNote?.trim()));
+ const chosenMeasuredStyle=usableMeasuredStyles.find(s=>s.id===style91Id);
  const availableLooks=(pvCharacter?.looks||[]).filter(l=>l.referenceAssetId&&pvAssets.some(a=>a.id===l.referenceAssetId)&&!reviewCharacterLook(pvCharacter,l).reviewRequired);
  const pvSelectedArtwork=pvAssets.some(a=>a.id===pvArtworkId)?pvArtworkId:pvAssets[0]?.id||'';
  const selectedPersonPhoto=availablePhotos.some(a=>a.id===personPhotoId)?personPhotoId:availablePhotos[0]?.id||'';
@@ -475,6 +479,22 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  };
  const reviewReplacement94=()=>{try{setReview94(prepareCharacterReplace94(p,replace94All?p.scenes.map(s=>s.id):[current.id],replace94Id,data.characters));}catch(e){setReview94(null);notify('STEP94: '+e.message);}};
  const applyReplacement94=()=>{try{if(!review94)throw Error('교체 내용을 먼저 확인하세요.');onChange(applyCharacterReplace94(p,review94,data.characters));setReview94(null);notify('캐릭터 링크 교체 완료. 이전 미디어는 복원 이력에 보존되고 새 인물의 이미지 생성은 별도로 필요합니다.');}catch(e){setReview94(null);notify('STEP94 적용 실패: '+e.message);}};
+ const inspectStyle91=()=>{
+  try{setStyle91Review(previewMvStyleReapply91(p,chosenMeasuredStyle));}
+  catch(e){setStyle91Review(null);notify('MV 측정 스타일 검토: '+e.message);}
+ };
+ const applyStyle91=()=>{
+  try{if(!style91Review)throw Error('스타일 적용 전 검토가 필요합니다.');
+   const next=applyMvStyleReapply91(p,chosenMeasuredStyle,style91Review);
+   latestProject.current=next;onChange(next);setStyle91Review(null);
+   notify('실제 측정한 색상·명암·채도를 MV 미리보기와 WebM/MP4 렌더러에 적용했습니다.');
+  }catch(e){setStyle91Review(null);notify('MV 색 보정 적용 실패: '+e.message);}
+ };
+ const restoreStyle91=()=>{
+  try{const next=undoMvStyleReapply91(p);latestProject.current=next;onChange(next);
+   setStyle91Review(null);notify('이전 MV 색 보정 상태를 복원했습니다. 원본 영상은 유지됩니다.');
+  }catch(e){notify('MV 색 보정 복원 실패: '+e.message);}
+ };
  const change=(patch)=>onChange({...p,...patch});
  const setScene=(id,patch)=>change({scenes:p.scenes.map(s=>s.id===id?{...s,...patch}:s)});
  const addScene=()=>{const last=p.scenes.at(-1);const start=last?Number(last.end):0;const id=genId('scn');change({scenes:[...p.scenes,{id,start,end:start+12,title:`Scene ${String(p.scenes.length+1).padStart(2,'0')}`,description:'새 장면',characterId:p.characterId||'',location:'',outfit:'',expression:'',action:'',camera:'',lighting:''}]});setSelected(id);};
@@ -529,6 +549,20 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  <div className="hstack spread" style={{marginTop:8,flexWrap:'wrap'}}><span className="muted">{animaticFrame.timecode} / {animatic.durationSec}초 · {animatic.sceneCount}장면 · 공백 {animatic.gapSeconds}초</span><span className="muted">{animaticFrame.completed?'재생 종료':animaticFrame.gap?'장면 없는 구간':'계획된 장면 미리보기'}</span></div>
  <div className="video-preview" style={{minHeight:170,marginTop:12,padding:20,textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>{(()=>{const scene=p.scenes?.find(s=>s.id===animaticFrame.scene?.id);return scene?.characterMv&&scene.videoClipAssetId?<SceneVideoClip key={scene.id} assetId={scene.videoClipAssetId} mime={scene.videoGeneration?.mime} title="Step80 캐릭터 PV: 현재 장면의 짧은 반복 영상"/>:scene?.imageAssetId?<SceneImage assetId={scene.imageAssetId} alt="Step77 스토리보드 정지 이미지"/>:null;})()}<strong>{animaticFrame.scene?.title|| (animaticFrame.completed?'애니매틱 종료':'장면 없는 구간')}</strong><span>{animaticFrame.scene?.description||'영상 프레임은 생성되지 않았습니다.'}</span><span>{animaticFrame.scene?.camera&&`카메라: ${animaticFrame.scene.camera}`}{animaticFrame.scene?.location&&` · 장소: ${animaticFrame.scene.location}`}</span><span>{animaticFrame.scene?.action&&`동작: ${animaticFrame.scene.action}`}</span>{currentAnimaticDirection&&<span>Step76 연출 · {currentAnimaticDirection.direction} · 인물 등장 목표 {currentAnimaticDirection.targetPresencePercent}% (연출 목표이며 영상에 자동 적용되지 않음)</span>}{(p.scenes||[]).some(s=>s.id===animaticFrame.scene?.id&&s.characterMv&&s.videoClipAssetId)&&<span>Step80 장면 타임라인 위치에 캐릭터 PV 클립을 반복 표시합니다. 음악 오디오 동기화·전체 길이 영상 합성은 아닙니다.</span>}</div>
  <div className="hstack" style={{flexWrap:'wrap',gap:6,marginTop:10}}>{animatic.scenes.map(s=><Button key={s.id} variant={animaticFrame.scene?.id===s.id?'primary':undefined} onClick={()=>seekAnimatic(s.start)}>{s.title||s.id} · {s.start}초</Button>)}</div></>:<p className="muted">{animaticError} 타임라인 오류를 수정하면 재생할 수 있습니다.</p>}
+ </Panel>
+ <Panel title="원본 50항 · 실제 MV 스타일 색 보정 적용" description="본인이 제작했거나 이용 권한이 있는 영상에서 측정한 색·밝기·대비를 로컬 실제 영상 프레임에 적용합니다.">
+  <Field label="로컬 MV 영상 분석 스타일"><select value={style91Id} onChange={e=>{setStyle91Id(e.target.value);setStyle91Review(null);}}>
+   <option value="">학습 스튜디오에서 분석한 영상 선택</option>
+   {usableMeasuredStyles.map(x=><option key={x.id} value={x.id}>{x.mvStyle91.name||x.name}</option>)}
+  </select></Field>
+  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
+   <Button disabled={!chosenMeasuredStyle} onClick={inspectStyle91}>측정된 색상·밝기·대비 검토</Button>
+   <Button variant="primary" disabled={!style91Review} onClick={applyStyle91}>실제 영상 프레임에 보정 적용</Button>
+   <Button disabled={!p.mvStyleGradeHistory91?.history?.length} onClick={restoreStyle91}>이전 영상 색 보정 복원</Button>
+  </div>
+  {style91Review&&<p className="muted">검토: {style91Review.preview}</p>}
+  {p.mvStyleGrade91&&<p role="status" className="muted">적용 중인 영상 색 보정: {p.mvStyleGrade91.styleName}. 기존 이미지·영상 파일은 읽기 전용입니다.</p>}
+  <Notice>프레임 샘플에서 측정한 RGB·명암을 내보내는 실제 영상 픽셀에 적용합니다. 컷 길이는 참고값이며 장면 순서·카메라·오디오·타이포그래피를 임의 변경하지 않습니다. 신경망 자체 스타일 학습이 아닙니다.</Notice>
  </Panel>
  <MvVideoExporter project={p} characters={data.characters} positionSeconds={animaticPosition} playing={animaticPlaying} notify={notify}/>
   <Panel title="Step74 · 시각적 스토리보드 컷 시트" description="12컷씩 정리한 로컬 SVG 계획표입니다. 추상적인 자리표시자만 사용하며 원본 이미지·음악·영상 또는 생성된 영상 프레임을 포함하지 않습니다.">

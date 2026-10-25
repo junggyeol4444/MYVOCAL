@@ -1,10 +1,12 @@
 // Step77 — non-destructive scene-image prompt/metadata layer.
 // Images stay in the existing IndexedDB asset store, not project localStorage JSON.
+import {activeMvStyleGrade91} from './mvStyleReapply91.js';
 const imageFields=['title','description','location','outfit','expression','action','camera','lighting'];
 const text=(v,max=320)=>String(v??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,max);
 export const MAX_SCENE_IMAGE_BYTES=12*1024*1024;
 export function buildSceneImageRequest(project,scene,character=null,direction=null,autoReference=null){
  if(!project||!scene||!scene.id)throw Error('장면 또는 프로젝트가 없습니다.');
+ const measuredStyle=activeMvStyleGrade91(project);
  const detail=imageFields.map(k=>text(scene[k])).join('|')+
  (scene.characterLookId?'|look:'+text(scene.characterLookId,130)+'|hair:'+text(scene.characterLookHair,180)+'|accessories:'+text(scene.characterLookAccessories,180):'');
  const charName=character?text(character.name,160):'';
@@ -12,7 +14,8 @@ export function buildSceneImageRequest(project,scene,character=null,direction=nu
  const appearance=character?.appearance&&typeof character.appearance==='object'?Object.entries(character.appearance).filter(([k,v])=>['hair','eyes','outfit','palette','accessories','body'].includes(k)&&v).map(([k,v])=>`${k}: ${text(v,160)}`).join(', ').slice(0,750):'';
  const role=direction?.direction||text(project.mvMode||'Story MV',70);
  const framing=direction?.framing||'';
- const fingerprint=[project.id,scene.id,detail,charName,charDescription,appearance,role,framing];
+ const fingerprint=[project.id,scene.id,detail,charName,charDescription,appearance,role,framing,
+  ...(measuredStyle?['measured-mv-style',measuredStyle.brightness,measuredStyle.contrast,measuredStyle.saturation,...measuredStyle.color]:[])];
  // Preserve exact Step77/78 fingerprints for legacy scenes; append a photo identity only for Step79 scenes.
  if(scene.personMv)fingerprint.push(scene.characterId||'',scene.personMv.personId||'',scene.personMv.referenceAssetId||'',scene.personMv.denoise??null);
  if(scene.characterMv)fingerprint.push('Step80-character',scene.characterId||'',scene.characterMv.characterId||'',scene.characterMv.referenceAssetId||'',scene.characterMv.denoise??null);
@@ -26,6 +29,7 @@ export function buildSceneImageRequest(project,scene,character=null,direction=nu
   scene.lighting&&`Lighting: ${text(scene.lighting)}`,
   scene.characterLookId&&scene.characterLookHair&&`Selected hairstyle: ${text(scene.characterLookHair,180)}`,
   scene.characterLookId&&scene.characterLookAccessories&&`Selected accessories: ${text(scene.characterLookAccessories,180)}`,
+  measuredStyle&&`MV reference video measured color palette RGB ${measuredStyle.color.join(', ')}, measured brightness grade ${measuredStyle.brightness}, contrast ${measuredStyle.contrast}`,
   `Direction: ${text(role,90)}`,
   framing&&`Framing: ${text(framing,130)}`, 'single coherent shot, no captions, no watermark'];
  return {key,prompt:pieces.filter(Boolean).join('. ').slice(0,3000),negative:'low quality, blurry, distorted, duplicate body, watermark, text, logo'};

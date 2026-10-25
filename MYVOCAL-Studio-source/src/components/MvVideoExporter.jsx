@@ -33,6 +33,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
  const captionsEnabled=showCaptions&&lyricCaptions.status==='ready';
  const captionSignature=JSON.stringify(lyricCaptions.captions);
  const sceneTimeline=JSON.stringify(plan?.scenes.map(s=>[s.id,s.start,s.end,s.title])||[]);
+ const gradeSignature=JSON.stringify(project?.mvStyleGrade91?.grade||null);
  const lipSignature=JSON.stringify(characters.map(c=>[c.id,c.lipSync?.cues]).filter(x=>x[1]?.length));
  let lipSyncOverlays=null,lipError='';
  if(showMouth)try{lipSyncOverlays=planMvLipSyncOverlay(project,characters,{xPercent:mouthX,yPercent:mouthY,sizePercent:mouthSize});}
@@ -75,7 +76,7 @@ export default function MvVideoExporter({project,characters=[],positionSeconds=0
   if(!prepared||!plan||!canvas.current)return;
   syncMvPreviewClips(plan.scenes,prepared.assets,activeScene,playing,positionSeconds);
   try{drawMvVideoFrame(canvas.current,plan,prepared.assets,Number(positionSeconds)||0,{captions:lyricCaptions.captions,showCaptions:captionsEnabled,lipSyncOverlays});}catch{}
- },[prepared,assetsSignature,sceneTimeline,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,captionSignature,showMouth,mouthX,mouthY,mouthSize,lipSignature]);
+ },[prepared,assetsSignature,sceneTimeline,gradeSignature,positionSeconds,playing,activeScene?.id,project?.id,captionsEnabled,captionSignature,showMouth,mouthX,mouthY,mouthSize,lipSignature]);
  const startExport=async(format='webm')=>{
   if(!plan||busy)return;
   if(!lipReady){notify('캐릭터 입 모양 설정 오류: '+lipError);return;}
