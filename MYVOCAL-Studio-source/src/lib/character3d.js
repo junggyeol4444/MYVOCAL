@@ -36,20 +36,75 @@ function loadContainer(bytes,filename){
 }
 const COMPONENTS={5120:{bytes:1,read:(v,o)=>v.getInt8(o)},5121:{bytes:1,read:(v,o)=>v.getUint8(o)},5122:{bytes:2,read:(v,o)=>v.getInt16(o,true)},5123:{bytes:2,read:(v,o)=>v.getUint16(o,true)},5125:{bytes:4,read:(v,o)=>v.getUint32(o,true)},5126:{bytes:4,read:(v,o)=>v.getFloat32(o,true)}};
 const ELEMENTS={SCALAR:1,VEC2:2,VEC3:3,VEC4:4,MAT4:16};
+// glTF 2.0 sparse accessor: 기존 dense 버퍼를 읽고 일부 인덱스만 별도 값으로 치환.
+// 원본 VRM/GLB bytes는 항상 읽기 전용이며 별도의 Float32Array만 만든다.
 function accessorLoader(json,buffers){
- return (id)=>{
-  const a=json.accessors?.[id];if(!a||!Number.isInteger(a.count)||a.count<0||a.count>MAX_VERTICES*4||!ELEMENTS[a.type]||!COMPONENTS[a.componentType])throw Error('지원되지 않는 glTF accessor: '+id);
-  if(a.sparse)throw Error('Sparse accessor는 아직 지원하지 않습니다.');
-  const n=ELEMENTS[a.type],info=COMPONENTS[a.componentType],strideBase=n*info.bytes;
-  if(a.bufferView===undefined)return {array:new Float32Array(a.count*n),components:n,count:a.count};
-  const v=json.bufferViews?.[a.bufferView];if(!v||!buffers[v.buffer])throw Error('존재하지 않는 bufferView');
-  const bytes=buffers[v.buffer],stride=v.byteStride||strideBase,off=(v.byteOffset||0)+(a.byteOffset||0);
-  if(stride<strideBase||off<0||off+(Math.max(0,a.count-1))*stride+strideBase>bytes.byteLength||off+(Math.max(0,a.count-1))*stride+strideBase>(v.byteOffset||0)+v.byteLength)throw Error('Accessor가 파일 버퍼 범위를 벗어납니다.');
-  const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),out=new Float32Array(a.count*n);
-  for(let i=0;i<a.count;i++)for(let j=0;j<n;j++){
-   let value=info.read(dv,off+i*stride+j*info.bytes);
-   if(a.normalized&&a.componentType!==5126){const max=a.componentType===5120?127:a.componentType===5121?255:a.componentType===5122?32767:a.componentType===5123?65535:4294967295;value=a.componentType===5120||a.componentType===5122?Math.max(-1,value/max):value/max;}
-   if(!Number.isFinite(value))throw Error('비정상 glTF 숫자');out[i*n+j]=value;
+ const viewOf=(index,label)=>{
+  const v=json.bufferViews?.[index],bytes=v&&buffers[v.buffer];
+  if(!v||!bytes||!Number.isSafeInteger(v.byteOffset??0)||
+    !Number.isSafeInteger(v.byteLength)||v.byteLength<0||v.byteOffset<0||
+    v.byteOffset+v.byteLength>bytes.byteLength)throw Error(label+'의 glTF bufferView 범위가 올바르지 않습니다.');
+  return {v,bytes,dv:new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength)};
+ };
+ const normalized=(raw,type)=>{
+  if(type===5126)return raw;
+  const signed=type===5120||type===5122;
+  const max=type===5120?127:type===5121?255:type===5122?32767:type===5123?65535:4294967295;
+  return signed?Math.max(-1,raw/max):raw/max;
+ };
+ return id=>{
+  const a=json.accessors?.[id];
+  if(!a||!Number.isInteger(a.count)||a.count<0||a.count>MAX_VERTICES*4||
+    !ELEMENTS[a.type]||!COMPONENTS[a.componentType])throw Error('지원되지 않는 glTF accessor: '+id);
+  const n=ELEMENTS[a.type],type=a.componentType,info=COMPONENTS[type],elementSize=n*info.bytes;
+  const out=new Float32Array(a.count*n);
+  if(a.bufferView!==undefined){
+   const {v,bytes,dv}=viewOf(a.bufferView,'기본 Accessor');
+   const stride=v.byteStride??elementSize,base=(v.byteOffset??0)+(a.byteOffset??0);
+   if(!Number.isSafeInteger(stride)||stride<elementSize||stride>252||
+      !Number.isSafeInteger(a.byteOffset??0)||a.byteOffset<0||
+      (a.count>0&&(base+(a.count-1)*stride+elementSize>v.byteOffset+v.byteLength||
+       base+(a.count-1)*stride+elementSize>bytes.byteLength)))
+    throw Error('glTF 기본 Accessor가 지정한 버퍼 범위를 벗어납니다.');
+   for(let i=0;i<a.count;i++)for(let j=0;j<n;j++){
+    const value=info.read(dv,base+i*stride+j*info.bytes);
+    const decoded=a.normalized?normalized(value,type):value;
+    if(!Number.isFinite(decoded))throw Error('glTF 기본 Accessor의 숫자가 유효하지 않습니다.');
+    out[i*n+j]=decoded;
+   }
+  }
+  const sparse=a.sparse;
+  if(sparse!==undefined){
+   if(!sparse||!Number.isInteger(sparse.count)||sparse.count<1||sparse.count>a.count||
+      !sparse.indices||!sparse.values||
+      ![5121,5123,5125].includes(sparse.indices.componentType))
+    throw Error('glTF Sparse Accessor의 개수 또는 인덱스 형식이 잘못되었습니다.');
+   const indices=viewOf(sparse.indices.bufferView,'Sparse 인덱스');
+   const values=viewOf(sparse.values.bufferView,'Sparse 값');
+   const indexInfo=COMPONENTS[sparse.indices.componentType];
+   const indexOffset=(indices.v.byteOffset??0)+(sparse.indices.byteOffset??0);
+   const valueOffset=(values.v.byteOffset??0)+(sparse.values.byteOffset??0);
+   if(!Number.isSafeInteger(sparse.indices.byteOffset??0)||
+      !Number.isSafeInteger(sparse.values.byteOffset??0)||
+      sparse.indices.byteOffset<0||sparse.values.byteOffset<0||
+      indexOffset+sparse.count*indexInfo.bytes>indices.v.byteOffset+indices.v.byteLength||
+      valueOffset+sparse.count*elementSize>values.v.byteOffset+values.v.byteLength||
+      indexOffset+sparse.count*indexInfo.bytes>indices.bytes.byteLength||
+      valueOffset+sparse.count*elementSize>values.bytes.byteLength)
+    throw Error('glTF Sparse 인덱스/값이 모델 버퍼 범위를 벗어납니다.');
+   let previous=-1;
+   for(let k=0;k<sparse.count;k++){
+    const target=indexInfo.read(indices.dv,indexOffset+k*indexInfo.bytes);
+    if(!Number.isInteger(target)||target<=previous||target>=a.count)
+     throw Error('glTF Sparse 인덱스가 중복되거나 범위를 벗어났습니다.');
+    previous=target;
+    for(let j=0;j<n;j++){
+     const raw=info.read(values.dv,valueOffset+k*elementSize+j*info.bytes);
+     const decoded=a.normalized?normalized(raw,type):raw;
+     if(!Number.isFinite(decoded))throw Error('glTF Sparse 모프/정점 값이 유효하지 않습니다.');
+     out[target*n+j]=decoded;
+    }
+   }
   }
   return {array:out,components:n,count:a.count};
  };
