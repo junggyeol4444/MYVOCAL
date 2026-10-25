@@ -4,6 +4,7 @@ import {generateMusicGenAudio} from '../lib/musicGenClient.js';
 import {splitMusicGenStems} from '../lib/musicStemsClient.js';
 import {generateMusicGenSequence} from '../lib/musicGenSequence.js';
 import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
+import {reanalyzeStoredNeuralMidiWaves} from '../lib/neuralStoredMidiReaudit.js';
 import {exportOriginalNeuralWav,NEURAL_STEM_EXPORT_LABELS} from '../lib/neuralStemWavExport.js';
 import {latestCompleteNeuralScore} from '../lib/neuralScoreBatch.js';
 import {planScoreMatchedMusicGenSegments} from '../lib/neuralStemScoreTiming.js';
@@ -273,6 +274,22 @@ export default function MusicGenPanel({project,onChange,notify}){
      {Object.entries(NEURAL_STEM_EXPORT_LABELS).map(([role,label])=><option key={role} value={role}>{label} · 최신 생성 WAV</option>)}
     </select></Field>
     <div className="mv7-actions"><Button disabled={busy} onClick={exportNeuralStem}>선택한 독립 악기 원본 WAV 저장</Button></div>
+    <div className="mv7-actions"><Button disabled={busy} onClick={async()=>{
+     const original=latest.current,controller=new AbortController();active.current=controller;
+     setBusy(true);setError('');setProgress('기존 저장된 원본 악기 PCM 재분석 중');
+     try{
+      const report=await reanalyzeStoredNeuralMidiWaves(original,{
+       current:()=>latest.current,signal:controller.signal,
+       onProgress:(done,total)=>setProgress('기존 신경망 악기 '+done+'/'+total+' 실제 WAV 분석')});
+      if(controller.signal.aborted||latest.current!==original)
+       throw Error('프로젝트가 변경됐거나 분석이 취소됐습니다.');
+      const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json;charset=utf-8'}));
+      const a=document.createElement('a');a.href=url;a.download='MYVOCAL-기존저장6악기-실제WAV-MIDI재분석.json';
+      a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);
+      notify('기존 저장 악기 '+report.analyzedRoles+'개 원본 WAV를 실제 MIDI와 재분석했습니다. 원본을 변경하지 않았습니다.');
+     }catch(e){setError(e.message)}
+     finally{active.current=null;setBusy(false);setProgress('')}
+    }}>이전 저장 독립 악기 WAV 다시 실측·JSON 저장</Button></div>
     <div className="mv7-actions"><Button disabled={busy} onClick={()=>{
      try{
       const audits=(latest.current.tracks||[]).filter(t=>t.generatedBy==='musicgen-independent-audio'&&t.sourceScorePcmAlignment)
