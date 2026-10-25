@@ -3,7 +3,7 @@ import {Button,Field,Notice,Panel,Status} from './UI';
 import {alignLyricNotes,isAlignmentStale,makeImportedVocalTrack,midiVocalTracks} from '../lib/lyricAlignment';
 import {lyricVowel,VOWEL_NAMES,guessVowelModels,renderVowelSinging} from '../lib/singingRender';
 import {genId} from '../lib/schema';
-import {putFileNew,removeFile,putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb';
+import {putFileNew,removeFile,putFilesAtomic,deleteFilesAtomic,getFile} from '../lib/assetDb';
 import {persistNeuralVocalTake} from '../lib/neuralVocalPersist.js';
 import {readAudioInfo} from '../lib/audioEngine';
 import {assertUsableSingingWav} from '../lib/singingOutputValidation.js';
@@ -18,6 +18,8 @@ import EngineManager from './EngineManager';
 import RvcVoiceConversion from './RvcVoiceConversion.jsx';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {convertLongSingingWithRVC} from '../lib/rvcLongConversion.js';
+import {convertRegisteredRVC} from '../lib/rvcStoredConversion.js';
+import {sha256File} from '../lib/voiceTraining.js';
 import {isPhonemePlanStale} from '../lib/phonemePlan';
 
 const guideVowelLabel=v=>({a:'ㅏ',eo:'ㅓ',o:'ㅗ',u:'ㅜ',eu:'ㅡ',i:'ㅣ'})[v]||v;
@@ -39,6 +41,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const [replacementVoiceId,setReplacementVoiceId]=useState(''),[replacementTrackId,setReplacementTrackId]=useState(''),[replacementConsent,setReplacementConsent]=useState(false);
  const [cueStart,setCueStart]=useState(1),[cueEnd,setCueEnd]=useState(4);
  const [autoRvc,setAutoRvc]=useState(false),[autoRvcRights,setAutoRvcRights]=useState(false),[sourceVocal,setSourceVocal]=useState(null),[saveNeuralTracks,setSaveNeuralTracks]=useState(false);
+ const [registeredRvcModelId,setRegisteredRvcModelId]=useState('');
  const [directLongSinging,setDirectLongSinging]=useState(false);
  const latestUrl=useRef('');
  const externalAbortRef=useRef(null),latestProject=useRef(p);latestProject.current=p;
@@ -53,7 +56,9 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   (c.kind==='character'||c.kind==='person'));
  const samples=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId==='sampler'&&m.status==='sample-preview-ready');
  const externalModels=(data.voiceModels||[]).filter(m=>m.voiceId===voice?.id&&m.engineId!=='sampler');
- useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setSingingStyle(p.singingStyle||'Natural');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setDirectLongSinging(false);setSourceVocal(null);setReplacementVoiceId('');setReplacementTrackId('');setReplacementConsent(false);setDuetVoiceId('');setDuetLeadTrackId('');setDuetLeadCharacterId('');setDuetSecondCharacterId('');setDuetConsent(false);},[p.id]);
+ const registeredRvcModels=(data.voiceModels||[]).filter(m=>m.engineId==='rvc'&&m.voiceId===voice?.id&&m.assetId&&/^[a-f0-9]{64}$/i.test(String(m.sha256||'')));
+ useEffect(()=>{setVoiceId(p.voiceId||'');setResult(null);setStatus('');setPort(String(p.singingEngine?.port||7867));setEngineModelId(p.singingEngine?.modelId||'');setSingingStyle(p.singingStyle||'Natural');setCapability(null);setCueStart(1);setCueEnd(4);setAutoRvc(false);setAutoRvcRights(false);setRegisteredRvcModelId('');setDirectLongSinging(false);setSourceVocal(null);setReplacementVoiceId('');setReplacementTrackId('');setReplacementConsent(false);setDuetVoiceId('');setDuetLeadTrackId('');setDuetLeadCharacterId('');setDuetSecondCharacterId('');setDuetConsent(false);},[p.id]);
+ useEffect(()=>{setRegisteredRvcModelId('');setAutoRvcRights(false);},[voice?.id]);
  useEffect(()=>{const suggested=guessVowelModels(samples);if(!Object.values(suggested).some(Boolean)&&samples.length)suggested.a=samples[0].id;setModelMap(suggested);setExternalModelId('')},[voice?.id,data.voiceModels]);
  useEffect(()=>()=>{if(latestUrl.current)URL.revokeObjectURL(latestUrl.current)},[]);
  const changeResult=(blob,kind,count,fileKind=kind,placement=null)=>{if(kind!=='rvc-neural')setSourceVocal(null);if(latestUrl.current)URL.revokeObjectURL(latestUrl.current);const u=URL.createObjectURL(blob);latestUrl.current=u;setUrl(u);setResult({file:new File([blob],outputName(p.title,fileKind),{type:'audio/wav'}),kind,count,placement});};
@@ -102,14 +107,30 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   notify('엔진 접속과 모델 목록 조회를 마쳤습니다. 엔진 정보는 자체 신고이며 추론 품질을 보증하지 않습니다.');});
  const renderExternal=()=>run(async()=>{const controller=new AbortController();externalAbortRef.current=controller;try{if(!alignment)throw Error('먼저 가사·MIDI 싱크를 저장해 주세요.');if(!voice)throw Error('사용 허가가 있는 목소리를 선택해 주세요.');
   const number=safePort(port);
-  let rvcConfig=null;
+  let rvcConfig=null,registeredModel=null,registeredModelFile=null,registeredIndexFile=null;
   if(autoRvc){
    if(!autoRvcRights)throw Error('자동 RVC 변환에 사용할 목소리·모델 권한을 확인하세요.');
    if(capability?.mode!=='neural'||capability.inferenceReady!==true)throw Error('자동 RVC 연결은 실제 신경망 Singing 엔진에서만 사용할 수 있습니다.');
    rvcConfig=readRVCPreferences(window.localStorage);
-   if(!rvcConfig)throw Error('RVC 변환 패널에서 모델·Python 경로를 저장하세요.');
+   if(!rvcConfig)throw Error('기존 RVC 변환 패널에서 로컬 Python·엔진 실행 환경을 저장하세요.');
+   if(registeredRvcModelId){
+    registeredModel=registeredRvcModels.find(m=>m.id===registeredRvcModelId);
+    if(!registeredModel||registeredModel.voiceId!==voice.id)
+     throw Error('현재 목소리의 등록된 RVC 체크포인트를 선택하세요.');
+    registeredModelFile=await getFile(registeredModel.assetId);
+    if(!(registeredModelFile instanceof Blob)||await sha256File(registeredModelFile)!==registeredModel.sha256)
+     throw Error('등록된 본인 음색 RVC 체크포인트 SHA-256이 일치하지 않습니다.');
+    if(registeredModel.indexAssetId){
+     registeredIndexFile=await getFile(registeredModel.indexAssetId);
+     if(!(registeredIndexFile instanceof Blob)||!/^[a-f0-9]{64}$/i.test(String(registeredModel.indexSha256||''))||
+        await sha256File(registeredIndexFile)!==registeredModel.indexSha256)
+      throw Error('등록된 RVC FAISS 인덱스 SHA-256이 일치하지 않습니다.');
+    }
+    if(Number(rvcConfig.indexRate)>0&&!registeredIndexFile)
+     throw Error('등록 모델의 FAISS 인덱스가 없으면 검색 비율을 0으로 설정하세요.');
+   }
   }
-  let checkpoint=externalModels.find(m=>m.id===externalModelId)||null;
+    let checkpoint=externalModels.find(m=>m.id===externalModelId)||null;
   if(capability?.supported&&capability.models.length){
    const advertised=capability.models.find(m=>m.id===engineModelId);
    if(!advertised)throw Error('엔진이 제공하는 모델 목록에서 모델을 먼저 선택해 주세요.');
@@ -138,8 +159,15 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   if(autoRvc){
    setStatus('실제 Singing WAV 수신 · 로컬 RVC 신경망 음색 변환 중');
    const original=new File([blob],outputName(p.title,'singing-source'),{type:'audio/wav'});
-   const converted=await convertLongSingingWithRVC(original,{...rvcConfig,rightsConfirmed:true},{session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal,onProgress:(done,total)=>setStatus(`RVC 변환 ${done}/${total} 구간`)});
-   if(controller.signal.aborted)throw Error('가창·RVC 연속 생성을 취소했습니다.');
+   const rvcConversion={session:window.__MYVOCAL_SESSION_KEY,signal:controller.signal,
+    onProgress:(done,total)=>setStatus(`RVC 변환 ${done}/${total} 구간`)};
+   if(registeredModelFile){
+    // 현재 목소리로 학습·등록한 체크포인트 사본만 기존 EXE 인증 RVC 추론에 전달한다.
+    rvcConversion.convert=(chunk,settings,options)=>convertRegisteredRVC(chunk,{
+     ...settings,modelFile:registeredModelFile,indexFile:registeredIndexFile},options);
+   }
+   const converted=await convertLongSingingWithRVC(original,{...rvcConfig,rightsConfirmed:true},rvcConversion);
+      if(controller.signal.aborted)throw Error('가창·RVC 연속 생성을 취소했습니다.');
    sourceForSave=original;
    setSourceVocal({file:original,projectId:p.id});
    changeResult(converted,'rvc-neural',alignment.cues.length,'singing-rvc');
@@ -147,7 +175,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   }else{
    setSourceVocal(null);changeResult(blob,'engine',alignment.cues.length);
   }
-  const job={id:genId('singjob'),at:new Date().toISOString(),mode:autoRvc?'외부 Singing + RVC':'외부 엔진',result:autoRvc?'Singing/RVC WAV 두 개 수신 (품질 미검증)':longForm?'긴 곡 WAV 합성 수신':'WAV 수신',notes:alignment.cues.length,engine:capability?.name||'미확인'};
+  const job={id:genId('singjob'),at:new Date().toISOString(),rvcModelId:registeredModel?.id||'',mode:autoRvc?'외부 Singing + RVC':'외부 엔진',result:autoRvc?'Singing/RVC WAV 두 개 수신 (품질 미검증)':longForm?'긴 곡 WAV 합성 수신':'WAV 수신',notes:alignment.cues.length,engine:capability?.name||'미확인'};
   if(saveNeuralTracks){
    if(capability?.mode!=='neural'||capability?.inferenceReady!==true)throw Error('실제 준비된 신경망 Singing 엔진에서 생성한 WAV만 보컬 자동 저장할 수 있습니다.');
    const files=sourceForSave?[sourceForSave,blob]:[blob];
@@ -330,7 +358,12 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
     </Button>
    </Panel>
    <label className="check-item"><input type="checkbox" checked={autoRvc} disabled={busy} onChange={e=>{setAutoRvc(e.target.checked);setAutoRvcRights(false)}}/>실제 신경망 Singing WAV 생성 후 저장된 RVC 모델로 음색 변환</label>
-   {autoRvc&&<label className="check-item"><input type="checkbox" checked={autoRvcRights} disabled={busy} onChange={e=>setAutoRvcRights(e.target.checked)}/>목소리·모델·가창 원본에 대한 사용 권한이 있습니다.</label>}
+   {autoRvc&&<Field label="실제 RVC 추론 체크포인트 출처"><select disabled={busy} value={registeredRvcModelId} onChange={e=>{setRegisteredRvcModelId(e.target.value);setAutoRvcRights(false);}}>
+     <option value="">기존 RVC 변환 패널의 설치된 모델 파일 경로 사용</option>
+     {registeredRvcModels.map(m=><option key={m.id} value={m.id}>{m.name||m.id} · 등록 본인 음색 체크포인트{m.indexAssetId?' + FAISS':''}</option>)}
+    </select></Field>}
+    {autoRvc&&<label className="check-item"><input type="checkbox" checked={autoRvcRights} disabled={busy} onChange={e=>setAutoRvcRights(e.target.checked)}/>목소리·모델·가창 원본에 대한 사용 권한이 있습니다.</label>}
+    {autoRvc&&registeredRvcModelId&&<Notice>현재 목소리에 등록된 체크포인트와 FAISS 인덱스의 실제 SHA-256을 확인한 뒤, 기존 Windows EXE의 로컬 RVC CUDA 추론에만 사용합니다. 기존 모델·원곡은 변경하지 않습니다.</Notice>}
    {alignment?.longForm===true&&<label className="check-item"><input type="checkbox" checked={directLongSinging} disabled={busy} onChange={e=>setDirectLongSinging(e.target.checked)}/>로컬 엔진이 360초·2048음표 전곡 요청을 지원하면 분할 없이 한 번에 Singing WAV 생성 (미지원 엔진은 해제하여 기존 분할 방식 사용)</label>}
     <label className="check-item"><input type="checkbox" checked={saveNeuralTracks} disabled={busy} onChange={e=>setSaveNeuralTracks(e.target.checked)}/>신경망 Singing 생성→RVC 음색 변환 결과까지 기존 프로젝트에 실제 WAV 트랙으로 자동 일괄 저장 (RVC 원본은 음소거 참고 트랙)</label>
    <div className="mv7-actions"><Button disabled={busy} onClick={checkEngine}>엔진 · 모델 조회</Button><Button icon="wave" variant="primary" disabled={!alignment||!voice||busy} onClick={renderExternal}>{autoRvc?'신경망 Singing → RVC 연속 생성':capability?.mode==='demo'?'데모 테스트 WAV 생성':'외부 엔진으로 보컬 WAV 생성'}</Button>{busy&&externalAbortRef.current&&<Button onClick={()=>externalAbortRef.current?.abort()}>진행 중인 가창 취소</Button>}<Status>{bridgeState}</Status></div>
