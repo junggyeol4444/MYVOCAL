@@ -2,6 +2,7 @@
 // 실제 설치된 SD 생성 첫 장면 이미지를 다른 장면의 img2img 원본으로 재사용.
 // 프로젝트의 기존 이미지, 인물, 설정과 녹음은 수정하거나 삭제하지 않는다.
 // 이는 동일성 향상을 위한 이미지 참조이며 학습된 Identity Lock 보증이 아니다.
+import {buildSceneImageRequest} from './mvSceneImages.js';
 const IMAGE_ID=/^img_[A-Za-z0-9_-]{1,80}$/;
 const initialKind='MYVOCAL_AUTO_SINGER_FIRST_IMAGE_V1';
 const sourceKind='ComfyUI local auto singer';
@@ -65,4 +66,13 @@ export function autoSingerRequest(project,scene,request,{enabled=false}={}){
  if(!plan.anchor||scene?.id===plan.anchor.sourceSceneId)
   return autoSingerFirstImageRequest(request);
  return request;
+}
+
+/** 기존 Video 편집기와 배치의 이미지 key를 동일하게 만들기 위한 읽기 전용 요청. */
+export function currentAutoSingerImageRequest(project,scene,character,direction){
+ if(!scene?.id)throw Error('현재 편집할 MV 장면을 선택하세요.');
+ const enabled=!!project?.autoVirtualSingerImageV1;
+ const reference=autoSingerReference(project,scene,{enabled});
+ return autoSingerRequest(project,scene,
+  buildSceneImageRequest(project,scene,character,direction,reference),{enabled});
 }
