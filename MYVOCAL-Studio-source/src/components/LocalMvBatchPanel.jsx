@@ -17,6 +17,7 @@ import {exportOriginalNeuralWav,NEURAL_STEM_EXPORT_LABELS} from '../lib/neuralSt
 import {exportOriginalNeuralWavBundle} from '../lib/neuralStemBundleZip.js';
 import {importOriginalNeuralMidiWavBundle} from '../lib/neuralStemBundleImport.js';
 import {extendMvToFullSong,bindRegisteredDuetToAutoScenes} from '../lib/fullSongMvScenes.js';
+import {analyzeRecordedDuetScenes,recordedDuetCueSheet} from '../lib/duetVocalSceneActivity.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
@@ -33,9 +34,11 @@ import {applyNeuralFaceLipToMv} from '../lib/autoMvRealPersonLip.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {persistProductionDeliverables} from '../lib/productionOutputPersist.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
- const cancelRef=useRef(null),stemExportCancelRef=useRef(null);
+ const cancelRef=useRef(null),stemExportCancelRef=useRef(null),duetSceneCancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
  const [includeReferences,setIncludeReferences]=useState(false);
+ const [duetPcmCasting,setDuetPcmCasting]=useState(false);
+ const [duetSceneBusy,setDuetSceneBusy]=useState(false),[duetSceneStatus,setDuetSceneStatus]=useState('');
  const [autoVirtualSinger,setAutoVirtualSinger]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true&&project.videoMode==='auto'&&!project.characterId);
  const [saveFullMovie,setSaveFullMovie]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true),[fullMouth,setFullMouth]=useState(false);
  const [makeMp4,setMakeMp4]=useState(true),[exportWav,setExportWav]=useState(true);
@@ -132,6 +135,37 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    notify('신경망 원곡 악기 MIDI·WAV 새 트랙 12개를 현재 프로젝트에 추가했습니다.');
   }catch(e){setStemExportStatus('원본 프로젝트·자산 보존 · ZIP 가져오기 중단: '+e.message);}
   finally{stemExportCancelRef.current=null;setStemExportBusy(false);}
+ };
+ const analyzeDuetSceneWavs=async(apply=false)=>{
+  if(busy||stemExportBusy||duetSceneBusy)return;
+  const source=current();
+  if(!source||source.id!==project.id){setDuetSceneStatus('원곡 프로젝트가 변경됐습니다.');return;}
+  const controller=new AbortController();duetSceneCancelRef.current=controller;
+  setDuetSceneBusy(true);setDuetSceneStatus('실제 두 가수 WAV PCM 분석 준비 중');
+  try{
+   if(apply&&!includeReferences)
+    throw Error('장면에 등록 인물을 배치하려면 허가된 원본 사진·원화 사용에 동의하세요.');
+   const result=await analyzeRecordedDuetScenes(source,{
+    loadFile:getFile,current,signal:controller.signal,onProgress:setDuetSceneStatus
+   });
+   if(controller.signal.aborted||current()!==source)
+    throw Error('보컬 분석이 취소되거나 원곡이 변경됐습니다.');
+   if(apply){
+    const linked=bindRegisteredDuetToAutoScenes(result.project,
+     dataRef.current?.characters||[],{includeReferences});
+    if(result.updated||linked.updated)await Promise.resolve(commit(linked.project));
+    setDuetSceneStatus('실제 WAV 분석 '+result.analyzed+'장면 · 가수 역할 '+
+     result.updated+'개·등록 인물 '+linked.updated+'개 반영. 기존 이미지·영상 보존');
+   }else{
+    const cueFile=recordedDuetCueSheet(source,result);
+    const url=URL.createObjectURL(cueFile),a=document.createElement('a');
+    try{a.href=url;a.download=cueFile.name;document.body.append(a);a.click();a.remove();}
+    finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
+    setDuetSceneStatus('실제 WAV 발성량 '+result.analyzed+
+     '장면 분석 완료 · 가수별 RMS와 타임라인 JSON 내보내기 시작');
+   }
+  }catch(e){setDuetSceneStatus('원본 보존 · 실제 듀엣 장면 분석 중단: '+e.message);}
+  finally{duetSceneCancelRef.current=null;setDuetSceneBusy(false);}
  };
  const create=async()=>{
   if(busy||(!info.total&&!saveFullMovie))return;
@@ -313,7 +347,19 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     const duetSceneSource=current();
     if(duetSceneSource?.duetSingers?.version===1){
      if(duetSceneSource.id!==project.id)throw Error('듀엣 자동 MV 중 프로젝트가 변경됐습니다.');
-     const cast=bindRegisteredDuetToAutoScenes(duetSceneSource,dataRef.current?.characters||[],
+     let castSource=duetSceneSource;
+     if(duetPcmCasting){
+      const activity=await analyzeRecordedDuetScenes(castSource,{
+       loadFile:getFile,current,signal:controller.signal,onProgress:setMessage
+      });
+      if(activity.updated){
+       await Promise.resolve(commit(activity.project));
+       castSource=current();
+      }
+      setMessage('실제 두 가수 WAV PCM '+activity.analyzed+
+       '장면 분석 · 노래 발성량으로 '+activity.updated+'개 가수 역할 지정');
+     }
+     const cast=bindRegisteredDuetToAutoScenes(castSource,dataRef.current?.characters||[],
       {includeReferences});
      if(cast.updated){
       await Promise.resolve(commit(cast.project));
@@ -414,6 +460,13 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <Notice>동일 회차 신경망 MIDI 6악기가 모두 있어야 하며 WAV의 실제 PCM 길이·프레임·샘플레이트가 같아야 합니다. 대용량 3~6분 원천 WAV를 인코딩·잘라내지 않고 개별 보존합니다. 전체 ZIP은 같은 회차 6악기 전부의 PCM 길이·샘플레이트를 확인하고 원래 MIDI 음표 6개 파일을 함께 담아 로컬에서 생성합니다. 가져오기에서는 기존 음악을 덮어쓰지 않고 MIDI·WAV 신규 12트랙을 추가합니다.</Notice>
   </div>
   <label><input type="checkbox" disabled={busy} checked={includeReferences} onChange={e=>setIncludeReferences(e.target.checked)}/> 등록된 본인·허가받은 사람 사진·2D 캐릭터 원화 장면도 일괄 이미지·영상 생성에 포함</label>
+  <label><input type="checkbox" disabled={busy||duetSceneBusy} checked={duetPcmCasting} onChange={e=>setDuetPcmCasting(e.target.checked)}/> 두 가수 실제 WAV 발성량으로 새 자동 MV 장면의 주인공 결정 (한 번에 Music+MV 제작 시)</label>
+  {project.duetSingers?.version===1&&<div className="mv7-actions">
+   <Button disabled={busy||stemExportBusy||duetSceneBusy} onClick={()=>analyzeDuetSceneWavs(false)}>실제 두 가수 WAV 분석 → 장면별 발성 JSON 저장</Button>
+   <Button disabled={busy||stemExportBusy||duetSceneBusy||!includeReferences} onClick={()=>analyzeDuetSceneWavs(true)}>실제 WAV 발성 → 미생성 자동 장면 두 가수 배치</Button>
+   {duetSceneBusy&&<Button onClick={()=>duetSceneCancelRef.current?.abort()}>듀엣 분석 취소</Button>}
+  </div>}
+  {duetSceneStatus&&<p role="status" className="muted">{duetSceneStatus}</p>
   <label><input type="checkbox" disabled={busy||project.videoMode!=='auto'||!!project.characterId||
    (project.scenes||[]).some(s=>s.characterId||s.personMv||s.characterMv)}
    checked={autoVirtualSinger} onChange={e=>setAutoVirtualSinger(e.target.checked)}/>
