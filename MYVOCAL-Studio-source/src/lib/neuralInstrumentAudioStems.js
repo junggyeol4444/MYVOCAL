@@ -30,19 +30,29 @@ export function instrumentNeuralPrompts(project,role,{segments,seconds=18,crossf
   const from=absoluteSec*bpm/60;
   const to=(absoluteSec+allDurations[index])*bpm/60;
   absoluteSec+=allDurations[index]-crossfadeSec;
-  const phrase=notes.filter(n=>Number.isInteger(n.pitch)&&Number.isFinite(n.startBeat)&&
-   Number.isFinite(n.length)&&n.length>0&&n.startBeat<to&&n.startBeat+n.length>from)
-   .sort((a,b)=>a.startBeat-b.startBeat).slice(0,16)
-   .map(n=>{
-    // 이전 구간부터 이어지는 음표는 현 구간의 0박부터 이어지는
-    // 실제 겹침 부분만 전달한다. 음수 시작 박자·구간 밖 길이 금지.
+  // 각 MusicGen 구간을 독립 생성할 때 이전 마디의 악기 선율과 다음
+  // 마디로 이어질 MIDI 음표를 같은 원곡 회차에서 읽어 함께 조건화한다.
+  // 음표를 새로 합성하지 않고 실제 MIDI 타임라인만 모델 프롬프트에 쓴다.
+  const usable=notes.filter(n=>Number.isInteger(n.pitch)&&n.pitch>=0&&n.pitch<=127&&
+   Number.isFinite(n.startBeat)&&Number.isFinite(n.length)&&n.length>0)
+   .sort((a,b)=>a.startBeat-b.startBeat);
+  const phrase=usable.filter(n=>n.startBeat<to&&n.startBeat+n.length>from)
+   .slice(0,12).map(n=>{
     const localStart=Math.max(from,n.startBeat);
     const localEnd=Math.min(to,n.startBeat+n.length);
     return String(n.pitch)+'@'+(localStart-from).toFixed(2)+
      'b/'+(localEnd-localStart).toFixed(2)+'b/'+Math.round(Number(n.velocity)||80);
    }).join(' ');
+  // 구간 전·후 최대 2박만 사용하므로 다른 절/후렴의 MIDI가 섞이지 않는다.
+  const previous=usable.filter(n=>n.startBeat<from&&n.startBeat+n.length<=from&&
+    n.startBeat+n.length>=from-2).slice(-3)
+   .map(n=>n.pitch+'@-'+(from-n.startBeat-n.length).toFixed(2)+'b').join(' ');
+  const following=usable.filter(n=>n.startBeat>=to&&n.startBeat<to+2)
+   .slice(0,3).map(n=>n.pitch+'@+'+(n.startBeat-to).toFixed(2)+'b').join(' ');
   const cue='solo '+musicalRole+' only, instrumental, no singing, no other instruments; '+
-   bpm+' BPM; actual MIDI pitches/relative beat/length/velocity '+(phrase||'continue previous original phrase')+'; ';
+   bpm+' BPM; MIDI notes (pitch@beat/length/velocity) '+(phrase||'sustain original phrase')+
+   '; previous phrase tail '+(previous||'rest')+
+   '; next phrase pickup '+(following||'rest')+'; ';
   const compact=text.replace(/continuous original arrangement with drums, bass, guitar, keys and pads; /,
    'maintain original instrumental theme; ')
    .replace(/; preserve the same song theme and transition smoothly from the previous audio\.$/,'');
