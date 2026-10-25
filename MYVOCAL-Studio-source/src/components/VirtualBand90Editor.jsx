@@ -15,7 +15,7 @@ import {recordStageWebM,supportedStageWebM} from '../lib/stage3dRecording.js';
 import {audioEnd,mixdownWav} from '../lib/audioEngine.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {resolveProjectVrmLipSync} from '../lib/projectVrmSingingSync.js';
-import {makeFullSongInstrumentPerformance} from '../lib/fullSongInstrumentPerformance.js';
+import {makeFullSongInstrumentPerformance,makeFullSongReferencePerformance} from '../lib/fullSongInstrumentPerformance.js';
 import {lipSyncFromSingingAudio} from '../lib/audioDrivenLipSync.js';
 import {visemeAt} from '../lib/characterLipSync.js';
 import {stageSingerExpressionFromVocal} from '../lib/duetSingingExpression.js';
@@ -34,12 +34,25 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   const plans=new Map();
   if(plan.durationSec<150)return plans;
   for(const member of plan.members){
-   if(!['guitar','bass','drums','piano','strings','synth'].includes(member.role))continue;
-   try{plans.set(member.characterId,makeFullSongInstrumentPerformance(project,{durationSec:plan.durationSec,role:member.role}));}
-   catch{/* 해당 악기 MIDI가 없으면 기존 STEP89 공연 계획을 사용한다. */}
+   const character=byId.get(member.characterId);
+   if(!character)continue;
+   let midiPlan=null;
+   if(['guitar','bass','drums','piano','strings','synth'].includes(member.role)){
+    try{midiPlan=makeFullSongInstrumentPerformance(project,{durationSec:plan.durationSec,role:member.role});}
+    catch{/* 이 악기에 MIDI 음표가 없으면 허가된 참고 동작만 사용한다. */}
+   }
+   try{
+    const combined=makeFullSongReferencePerformance(character,project,{
+     durationSec:plan.durationSec,midiPlan
+    });
+    if(combined)plans.set(member.characterId,combined);
+   }catch{
+    // 참고 영상이 잘못됐더라도 이미 연결된 원본 MIDI 악기 연주는 유지한다.
+    if(midiPlan)plans.set(member.characterId,midiPlan);
+   }
   }
   return plans;
- },[project,plan.durationSec,plan.members]);
+ },[project,characters,plan.durationSec,plan.members]);
  const lipByMember=useMemo(()=>{
   const result=new Map();
   for(const member of plan.members){
