@@ -14,6 +14,7 @@ import {makeImportedVocalTrack} from '../lib/lyricAlignment.js';
 import {genId} from '../lib/schema.js';
 import {putFilesAtomic,deleteFilesAtomic,getFile} from '../lib/assetDb.js';
 import {exportOriginalNeuralWav,NEURAL_STEM_EXPORT_LABELS} from '../lib/neuralStemWavExport.js';
+import {exportOriginalNeuralWavBundle} from '../lib/neuralStemBundleZip.js';
 import {extendMvToFullSong,bindRegisteredDuetToAutoScenes} from '../lib/fullSongMvScenes.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
@@ -87,6 +88,26 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     ' 실제 MusicGen WAV '+result.durationSec.toFixed(2)+'초 / '+
     result.sampleRate+'Hz / '+result.frames+'프레임 다운로드 시작');
   }catch(e){setStemExportStatus('원본 보존 · 악기 내보내기 중단: '+e.message);}
+  finally{stemExportCancelRef.current=null;setStemExportBusy(false);}
+ };
+ const exportAllNeuralStems=async()=>{
+  if(busy||stemExportBusy)return;
+  const source=current();
+  if(!source||source.id!==project.id){setStemExportStatus('원곡 프로젝트가 변경됐습니다.');return;}
+  const controller=new AbortController();stemExportCancelRef.current=controller;
+  setStemExportBusy(true);setStemExportStatus('6악기 원본 PCM을 순서대로 확인하는 중');
+  try{
+   const result=await exportOriginalNeuralWavBundle(source,{
+    current,loadFile:getFile,signal:controller.signal,
+    onProgress:(step,total,detail)=>setStemExportStatus('6악기 WAV ZIP '+step+'/'+total+' · '+detail)
+   });
+   if(controller.signal.aborted||current()!==source)throw Error('저장 중 취소하거나 원곡이 변경됐습니다.');
+   const url=URL.createObjectURL(result.file),a=document.createElement('a');
+   try{a.href=url;a.download=result.file.name;document.body.append(a);a.click();a.remove();}
+   finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
+   setStemExportStatus('원본 PCM 신경망 악기 6개 · '+result.durationSec.toFixed(2)+'초 · '+
+    result.sampleRate+'Hz · '+(result.file.size/1024/1024).toFixed(1)+'MiB ZIP 저장 시작');
+  }catch(e){setStemExportStatus('기존 음악·악기 파일 보존 · 6악기 내보내기 중단: '+e.message);}
   finally{stemExportCancelRef.current=null;setStemExportBusy(false);}
  };
  const create=async()=>{
@@ -361,10 +382,11 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    </select></label>
    <div className="mv7-actions">
     <Button disabled={busy||stemExportBusy} onClick={exportSelectedStem}>선택한 악기 MusicGen 원본 WAV 저장</Button>
+    <Button disabled={busy||stemExportBusy} onClick={exportAllNeuralStems}>원천 신경망 6악기 WAV 전체 ZIP 저장</Button>
     {stemExportBusy&&<Button onClick={()=>stemExportCancelRef.current?.abort()}>원천 악기 저장 취소</Button>}
    </div>
    {stemExportStatus&&<p role="status" className="muted">{stemExportStatus}</p>}
-   <Notice>동일 회차 신경망 MIDI 6악기가 모두 있어야 하며 WAV의 실제 PCM 길이·프레임·샘플레이트가 같아야 합니다. 대용량 3~6분 원천 WAV를 인코딩·잘라내지 않고 개별 보존합니다.</Notice>
+   <Notice>동일 회차 신경망 MIDI 6악기가 모두 있어야 하며 WAV의 실제 PCM 길이·프레임·샘플레이트가 같아야 합니다. 대용량 3~6분 원천 WAV를 인코딩·잘라내지 않고 개별 보존합니다. 전체 ZIP은 같은 회차 6악기 전부의 PCM 길이·샘플레이트를 확인한 후 로컬에서 생성합니다.</Notice>
   </div>
   <label><input type="checkbox" disabled={busy} checked={includeReferences} onChange={e=>setIncludeReferences(e.target.checked)}/> 등록된 본인·허가받은 사람 사진·2D 캐릭터 원화 장면도 일괄 이미지·영상 생성에 포함</label>
   <label><input type="checkbox" disabled={busy} checked={saveFullMovie} onChange={e=>setSaveFullMovie(e.target.checked)}/> 생성 후 음악·보컬·가사 포함 완성 MV WebM까지 한 번에 저장 (Windows WebView2 사용)</label>
