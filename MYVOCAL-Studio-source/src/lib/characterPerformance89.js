@@ -1,3 +1,4 @@
+import {stemPerformanceLevel} from './neuralStemPerformanceEnvelope.js';
 // STEP89: consented local webcam / reference-video motion *energy* and MIDI-note performance.
 // No face recognition, skeleton recovery, remote model or storage of raw video frames.
 import {modelAssets} from './character3d.js';
@@ -97,7 +98,19 @@ export function performanceAt(plan,time){
  const notes=(plan.instruments||[]).filter(e=>e.startMs<=ms&&e.endMs>ms);
  let guitar=0,piano=0,drums=0,bass=0,strings=0,synth=0;
  for(const n of notes){const pulse=Math.max(0,1-(ms-n.startMs)/Math.min(300,n.endMs-n.startMs)),v=n.velocity/127*(.3+.7*pulse);if(n.role==='guitar')guitar=Math.max(guitar,v);else if(n.role==='piano')piano=Math.max(piano,v);else if(n.role==='drums')drums=Math.max(drums,v);else if(n.role==='bass')bass=Math.max(bass,v);else if(n.role==='strings')strings=Math.max(strings,v);else synth=Math.max(synth,v);}
- return {left,center,right,guitar,piano,drums,bass,strings,synth,activeNotes:notes.length};
+ // 원본 46·47항: MIDI 타이밍은 보존하고, 실제 MusicGen 독립 WAV가 연결된
+  // 악기의 강약만 100ms PCM RMS 엔벨로프로 구동한다. 2D/VRM 렌더러가 공통 사용.
+  const pcmEnvelope=plan.pcmEnergy;
+  if(pcmEnvelope&&['guitar','bass','drums','piano','strings','synth'].includes(pcmEnvelope.role)){
+   const pcm=stemPerformanceLevel(pcmEnvelope,ms+(Number(plan.pcmOffsetMs)||0));
+   if(pcmEnvelope.role==='guitar')guitar=pcm;
+   else if(pcmEnvelope.role==='bass')bass=pcm;
+   else if(pcmEnvelope.role==='drums')drums=pcm;
+   else if(pcmEnvelope.role==='piano')piano=pcm;
+   else if(pcmEnvelope.role==='strings')strings=pcm;
+   else synth=pcm;
+  }
+  return {left,center,right,guitar,piano,drums,bass,strings,synth,activeNotes:notes.length};
 }
 export function performancePose(plan,time){const a=performanceAt(plan,time);if(!a)return null;
  // Limited gesture approximation: explicitly not reconstructed camera poses or finger animation.
