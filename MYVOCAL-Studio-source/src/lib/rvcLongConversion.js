@@ -158,7 +158,7 @@ export function joinOverlappedRVCWavs(parts,durationSec){
  }
  const frames=Math.round(durationSec*format.sampleRate),align=format.channels*format.bits/8;
  const pcmLength=frames*align,padding=pcmLength&1;
- if(44+pcmLength+padding>128*1024*1024)throw Error('RVC 긴 곡 WAV가 128MiB를 초과했습니다.');
+ if(44+pcmLength+padding>160*1024*1024)throw Error('RVC 긴 곡 WAV가 160MiB를 초과했습니다.');
  const result=new Uint8Array(44+pcmLength+padding),view=new DataView(result.buffer);
  setTag(result,0,'RIFF');setTag(result,8,'WAVE');setTag(result,12,'fmt ');setTag(result,36,'data');
  view.setUint32(4,result.length-8,true);view.setUint32(16,16,true);
