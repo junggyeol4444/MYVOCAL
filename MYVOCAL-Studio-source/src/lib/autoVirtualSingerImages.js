@@ -76,3 +76,30 @@ export function currentAutoSingerImageRequest(project,scene,character,direction)
  return autoSingerRequest(project,scene,
   buildSceneImageRequest(project,scene,character,direction,reference),{enabled});
 }
+
+// 원본 13·55·58항. 등록된 실제 사람이나 캐릭터가 아닌,
+// 위에서 SD로 만들어 저장한 첫 가수 이미지 전용 Windows EXE img2img.
+// 얼굴 동일성은 모델 품질에 좌우되므로 확정된 Identity Lock으로 표시하지 않는다.
+export async function generateAutoSingerReferenceImage(settings,session,signal){
+ const {sourceProjectId,sourceSceneId,sourceAssetId,sourceKey,imageData}=settings||{};
+ if(!sourceProjectId||!sourceSceneId||!IMAGE_ID.test(sourceAssetId||'')||
+   !sourceKey||sourceKey.length>8192||typeof imageData!=='string'||
+   !imageData.startsWith('data:image/'))
+  throw Error('기존 MYVOCAL 프로젝트의 실제 자동 생성 가수 원본 이미지가 필요합니다.');
+ if(!session||typeof session!=='string')
+  throw Error('Windows MYVOCAL EXE의 현재 보안 세션에서만 자동 가수를 생성할 수 있습니다.');
+ const payload={...settings,generatedInProject:true,rightsAttested:false};
+ const res=await fetch('/api/auto-singer-mv/generate',{
+  method:'POST',headers:{'Content-Type':'application/json','X-MYVOCAL-Session':session},
+  body:JSON.stringify(payload),cache:'no-store',signal
+ });
+ if(!res.ok){
+  let message='등록된 자동 가수 원본으로 새 장면 이미지를 생성하지 못했습니다.';
+  try{message=(await res.json()).error||message;}catch{}
+  throw Error(message);
+ }
+ const blob=await res.blob();
+ if(!['image/png','image/jpeg'].includes(blob.type)||blob.size<16||blob.size>12*1024*1024)
+  throw Error('자동 가수 후속 장면 이미지 형식 또는 크기가 올바르지 않습니다.');
+ return blob;
+}
