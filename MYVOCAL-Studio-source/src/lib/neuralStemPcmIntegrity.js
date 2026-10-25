@@ -29,19 +29,43 @@ export function analyzeNeuralStemPcm(input){
   throw Error('신경망 악기는 실제 16비트 PCM WAV(모노/스테레오)여야 합니다.');
  const frames=dataSize/fmt.align,count=Math.min(frames,SAMPLE_COUNT);
  const samples=new Int16Array(count*fmt.channels);
- let max=0,sum=0,sumSq=0;
+ let max=0,sum=0,sumSq=0,clipped=0;
+ // 전곡의 서로 다른 위치를 균등 샘플링해 실제 생성 WAV의 레벨을 분석한다.
+ // 이는 음질/악기 분리 정확도의 신경망 판정이 아니라 PCM 수치 진단이다.
+ const windows=16,windowSq=new Float64Array(windows),windowCount=new Uint32Array(windows);
+ const channelSq=new Float64Array(fmt.channels);
  for(let i=0;i<count;i++){
   const frame=Math.floor(i*frames/count);
   for(let ch=0;ch<fmt.channels;ch++){
    const value=view.getInt16(dataOffset+frame*fmt.align+ch*2,true);
    samples[i*fmt.channels+ch]=value;
    const abs=Math.abs(value);max=Math.max(max,abs);sum+=value;sumSq+=value*value;
+   if(abs>=32760)clipped++;
+   const bucket=Math.min(windows-1,Math.floor(i*windows/count));
+   windowSq[bucket]+=value*value;windowCount[bucket]++;
+   channelSq[ch]+=value*value;
   }
  }
  const n=samples.length,mean=sum/n,variance=Math.max(0,sumSq/n-mean*mean);
  if(max<64||Math.sqrt(variance)<32)
   throw Error('신경망 악기 WAV가 무음이거나 유효한 악기 파형이 아닙니다.');
- return {rate:fmt.rate,channels:fmt.channels,frames,samples,mean,variance};
+ const rms=Math.sqrt(sumSq/n)/32768,peak=max/32768;
+ const db=value=>Math.round(100*20*Math.log10(Math.max(1e-10,value)))/100;
+ const windowRmsDbfs=Array.from(windowSq,(power,i)=>
+  windowCount[i]?db(Math.sqrt(power/windowCount[i])/32768):-200);
+ const left=Math.sqrt(channelSq[0]/count)/32768;
+ const right=fmt.channels===2?Math.sqrt(channelSq[1]/count)/32768:left;
+ const quality={
+  method:'전곡 균등 PCM16 샘플링 · 음질 보증 아님',
+  sampledFrames:count,fullFrames:frames,
+  rmsDbfs:db(rms),peakDbfs:db(peak),
+  crestDb:Math.round(100*20*Math.log10(Math.max(1e-10,peak)/Math.max(1e-10,rms)))/100,
+  clippedSampleRatio:Math.round(clipped/n*1000000)/1000000,
+  dcOffset:Math.round(mean/32768*1000000)/1000000,
+  stereoBalanceDb:fmt.channels===2?db(left)-db(right):0,
+  windowRmsDbfs
+ };
+ return {rate:fmt.rate,channels:fmt.channels,frames,samples,mean,variance,quality};
 }
 export function assertDistinctNeuralStems(a,b,roleA='현재',roleB='이전'){
  if(a.rate!==b.rate||a.channels!==b.channels||a.frames!==b.frames)

@@ -110,6 +110,11 @@ export async function renderAndStoreNeuralAudioStems(project,{
   const profile=analyzeNeuralStemPcm(pcm);
   for(const previous of integrity)assertDistinctNeuralStems(profile,previous.profile,role,previous.role);
   integrity.push({role,profile});
+  // 실제 신경망이 만든 WAV에서 직접 읽은 수치만 기록한다.
+  // MIDI 음정 일치·악기 분리 품질을 이 수치로 보증하지 않는다.
+  if(profile.quality.clippedSampleRatio>.01)
+   onProgress('주의: '+INSTRUMENT[role][1]+' WAV의 PCM 샘플 클리핑 비율 '+
+    (profile.quality.clippedSampleRatio*100).toFixed(2)+'% · 원본을 수정하지 않습니다.');
   const info=await readInfo(rendered);alive(project,current,signal);
   const duration=Number(info?.duration??info?.durationSec);
   if(!Number.isFinite(duration)||Math.abs(duration-timing.targetSec)>.12)
@@ -135,7 +140,8 @@ export async function renderAndStoreNeuralAudioStems(project,{
    type:'instrument',mute:!audible,solo:false,volume:audible?35:70,generatedBy:'musicgen-independent-audio',
    sourceRole:role,sourceMidiTrackId:latestCompleteNeuralScore(project).get(role).id,
    sourceRoleSeed:roleSeed,sourceBpm:Number(project.bpm),
-   sourceScoreDurationSec:timing.targetSec});
+   sourceScoreDurationSec:timing.targetSec,
+   sourcePcmAnalysis:{...profile.quality}});
  }
  alive(project,current,signal);
  let stored=false;
@@ -144,7 +150,8 @@ export async function renderAndStoreNeuralAudioStems(project,{
   const changed={...project,tracks:[...project.tracks,...tracks]};
   await Promise.resolve(onChange(changed));stored=false;
   return {project:changed,assets:tracks.length,tracks:tracks.length,roles:selectedRoles,
-   durationSec:baseline,source:'real-musicgen-independent'};
+   durationSec:baseline,source:'real-musicgen-independent',
+   pcmAnalysis:integrity.map(({role,profile})=>({role,...profile.quality}))};
  }catch(e){
   if(stored&&current()===project){
    try{await remove(entries.map(([id])=>id));}
