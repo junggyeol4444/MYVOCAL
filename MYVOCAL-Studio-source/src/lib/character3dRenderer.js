@@ -104,7 +104,7 @@ export class Character3dRenderer{
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);this.textureSlots[i]=t;
   }catch{/* if invalid texture, show solid material */}finally{URL.revokeObjectURL(url);}
  }}
- render(settings,time,stage=null,lipSync=null,expressionPlan=null,character=null,dancePlan=null,performancePlan=null){if(this.disposed)return;const gl=this.gl,model=this.model,pose=calculateRigPoseWithPerformance(model,settings,time,dancePlan,performancePlan),bounds=primitivesBounds(model,pose),frame=stage?stageFrame(stage,time):null;
+ render(settings,time,stage=null,lipSync=null,expressionPlan=null,character=null,dancePlan=null,performancePlan=null,continuousStage=false){if(this.disposed)return;const gl=this.gl,model=this.model,pose=calculateRigPoseWithPerformance(model,settings,time,dancePlan,performancePlan),bounds=primitivesBounds(model,pose),frame=stage?stageFrame(stage,time,{continuous:continuousStage}):null;
   gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clearColor(...(frame?frame.palette.background:[.055,.072,.115]),1);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(this.shader);
   const yaw=(frame?.camera.yaw??settings.yaw)*Math.PI/180,pitch=(frame?.camera.pitch??settings.pitch)*Math.PI/180,dist=bounds.radius*3.3/(frame?.camera.zoom||1);const {center}=bounds;
   const eye=[center[0]+Math.sin(yaw)*Math.cos(pitch)*dist,center[1]+Math.sin(pitch)*dist,center[2]+Math.cos(yaw)*Math.cos(pitch)*dist];
