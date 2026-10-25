@@ -382,8 +382,8 @@ export default function Video({data,project,onChange,navigate,notify,mode='video
  <div className="video-project-banner"><Icon name="music" size={20}/><strong>{p.title}</strong><span>·</span><span>{p.bpm} BPM</span><span className="banner-stretch"/><span>Step78 로컬 SVD 장면별 영상 클립 연결</span></div>
  <LocalAiStoryboardPanel project={p} onChange={onChange} notify={notify}/>
  <LocalMvBatchPanel project={p} data={data} checkpoint={checkpoint} videoModel={videoModel} imagePort={imagePort} imageSteps={imageSteps} imageSize={imageSize} videoFrames={videoFrames} videoFps={videoFps} videoSteps={videoSteps} videoMotion={videoMotion} current={()=>latestProject.current} commit={next=>{latestProject.current=next;onChange(next)}} session={readSession} notify={notify}/>
- <Panel title="STEP93 · AI 영상 자연어 수정" description="로컬 명령 문법으로 선택한 장면의 속성 하나만 안전하게 편집합니다. 미리보기·확인 후 적용하며 AI 모델 추론이 아닙니다.">
- <Field label="장면 자연어 명령"><input aria-label="Step93 자연어 명령" maxLength={500} value={natural93} onChange={e=>{setNatural93(e.target.value);setReview93(null);}} placeholder="배경을 비 오는 밤거리로 바꿔"/></Field>
+ <Panel title="STEP93 · AI 영상 자연어 수정" description="로컬 명령 문법으로 선택한 장면의 속성 하나 또는 서로 다른 두 속성을 함께 검토·편집합니다. 미리보기·확인 후 적용하며 AI 모델 추론이 아닙니다.">
+ <Field label="장면 자연어 명령"><input aria-label="Step93 자연어 명령" maxLength={500} value={natural93} onChange={e=>{setNatural93(e.target.value);setReview93(null);}} placeholder="배경을 비 오는 밤거리로 바꿔 그리고 조명을 네온 불빛으로 바꿔"/></Field>
  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}><Button disabled={!current} onClick={reviewNatural93}>변경 내용 검토</Button><Button disabled={!review93} onClick={applyNatural93}>검토한 수정 적용</Button><Button disabled={!p.videoEdits93?.history?.length} onClick={()=>{try{onChange(undoMvInstruction93(p));notify('직전 장면 문구 복원 완료');}catch(e){notify(e.message);}}}>직전 수정 되돌리기</Button></div>
  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
    <Button variant="primary" disabled={!review93||natural93Busy||imageBusy||videoBusy||personBusy||pvBusy||regen92Busy||!checkpoint||!videoModel} onClick={regenerateNatural93}>{natural93Busy?'실제 SD/SVD 생성 중…':'검토한 자연어 수정으로 실제 장면 영상 재생성'}</Button>

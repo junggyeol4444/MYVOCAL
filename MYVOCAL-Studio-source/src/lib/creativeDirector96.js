@@ -52,6 +52,16 @@ export function previewCreativeDirection96(project,command){
  const parts=text.split(/\s+그리고\s+/u);
  if(parts.length>1){
   if(parts.length!==2||parts.some(p=>!p.trim()))throw Error('음악 명령 하나와 영상 명령 하나만 그리고로 연결하세요.');
+  // 영상 속성 두 개를 같은 장면에서 승인/적용하고, 기존 음악+영상 동시 편집은 유지한다.
+  const directed=selectDirectedScene96(project,text);
+  let compound=null;
+  if(directed.scene){try{compound=interpretMvInstruction93(project,directed.scene.id,directed.instruction);}catch{}}
+  if(compound?.field==='multi'){
+   const changes=compound.changes.map(({field,after})=>({field,after}));
+   const action={domain:'video',sceneId:directed.scene.id,sceneCommand:directed.instruction,field:'multi',
+    value:changes,summary:(directed.scene.title||directed.scene.id)+': '+compound.summary};
+   return {version:1,projectId:project.id,command:text,action,source:sourceSnapshot96(project),summary:action.summary};
+  }
   const previews=parts.map(part=>previewCreativeDirection96(project,part));
   if(previews[0].action.domain===previews[1].action.domain)
    throw Error('음악과 영상 명령을 하나씩 지정하세요.');
@@ -87,7 +97,7 @@ export function previewCreativeDirection96(project,command){
   if(timing)action={...timing,sceneCommand:instruction};
   else{
    const p=interpretMvInstruction93(project,scene.id,instruction);
-   action={domain:'video',sceneId:scene.id,sceneCommand:instruction,field:p.field,value:p.after,
+   action={domain:'video',sceneId:scene.id,sceneCommand:instruction,field:p.field,value:p.field==='multi'?p.changes.map(({field,after})=>({field,after})):p.after,
     summary:(scene.title||scene.id)+': '+p.summary};
   }
  }
@@ -114,7 +124,7 @@ export function applyCreativeDirection96(project,plan){
  if(plan?.version!==1||plan.projectId!==project?.id)throw Error('검토한 프로젝트가 아닙니다.');
  const current=sourceSnapshot96(project);
  if(current!==plan.source)throw Error('검토 후 내용이 변경되었습니다. 다시 미리 확인하세요.');
- const action=plan.action;if(!action||!['bpm','lyrics','location','outfit','camera','expression','action','lighting','neuralWav','midi','sceneTime'].includes(action.field))throw Error('지원하지 않는 수정입니다.');
+ const action=plan.action;if(!action||!['bpm','lyrics','location','outfit','camera','expression','action','lighting','neuralWav','midi','sceneTime','multi'].includes(action.field))throw Error('지원하지 않는 수정입니다.');
  let updated;
  if(action.domain==='video'&&action.field==='sceneTime'){
   const scene=project.scenes.find(s=>s.id===action.sceneId);
@@ -126,7 +136,8 @@ export function applyCreativeDirection96(project,plan){
    {...s,start:verified.value.start,end:verified.value.end}:s)};
  }else if(action.domain==='video'){
   const validation=interpretMvInstruction93(project,action.sceneId,action.sceneCommand||plan.command);
-  if(validation.field!==action.field||validation.after!==action.value)throw Error('검토 결과가 변조되었습니다.');
+  const actual=validation.field==='multi'?validation.changes.map(({field,after})=>({field,after})):validation.after;
+  if(validation.field!==action.field||JSON.stringify(actual)!==JSON.stringify(action.value))throw Error('검토 결과가 변조되었습니다.');
   updated=applyMvInstruction93(project,validation);
  }else if(action.domain==='music'&&action.field==='neuralWav'&&action.value===plan.command){
   const result=applyProducerCommand(project,plan.command);
@@ -144,4 +155,4 @@ export function applyCreativeDirection96(project,plan){
  const audit={command:plan.command,domain:action.domain,summary:plan.summary,at:new Date().toISOString()};
  return {...updated,creativeDirector96:{version:1,history:[...(project.creativeDirector96?.history||[]),audit].slice(-30)}};
 }
-export function directorCapabilities96(){return {music:['BPM 설정','가사 전체 수정','신경망 WAV 트랙 음량·음소거 및 클립별 음소거·페이드 곡선·팬·음량·트림','구간별 MIDI 악기 쉼표·복원·강약·길이·음높이·후렴 편곡'],video:['장면 번호·정확한 제목으로 배경·의상·카메라·표정·동작·조명 변경','장면 시간(0~360초) 이동·겹침 방지','그리고로 음악·영상 명령 동시 적용'],unavailable:['자유 대화 AI','모델 미설치 시 영상 픽셀 생성','학습되지 않은 가창 모델 추론']};}
+export function directorCapabilities96(){return {music:['BPM 설정','가사 전체 수정','신경망 WAV 트랙 음량·음소거 및 클립별 음소거·페이드 곡선·팬·음량·트림','구간별 MIDI 악기 쉼표·복원·강약·길이·음높이·후렴 편곡'],video:['장면 번호·정확한 제목으로 배경·의상·카메라·표정·동작·조명 변경','같은 장면의 서로 다른 두 속성 동시 수정·복원','장면 시간(0~360초) 이동·겹침 방지','그리고로 음악·영상 명령 동시 적용'],unavailable:['자유 대화 AI','모델 미설치 시 영상 픽셀 생성','학습되지 않은 가창 모델 추론']};}
