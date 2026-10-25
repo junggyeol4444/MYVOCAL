@@ -42,8 +42,10 @@ export function validateStageSettings(character,stage){
 export function saveStageSettings(character,settings){validateStageSettings(character,settings);return {...character,stage3d:{...settings},updatedAt:new Date().toISOString()};}
 export function stageStatus(character){if(!modelAssets(character).length)return '3D 모델 없음';if(!character.stage3d)return '무대 설정 전';try{validateStageSettings(character,character.stage3d);return '3D 무대 저장됨';}catch{return '무대 재설정 필요';}}
 // Time is always explicitly supplied; the preview, scrubber and video use identical math.
-export function stageFrame(stage,time){
- const t=clamp(Number.isFinite(time)?time:0,0,stage.duration);
+export function stageFrame(stage,time,{continuous=false}={}){
+ // 3~6분 가상 밴드에서는 원곡 전체 시각으로 카메라·조명을 구동한다.
+ // 단독 짧은 무대 미리보기는 기존 duration 경계를 유지한다.
+ const t=continuous?Math.max(0,Number.isFinite(time)?time:0):clamp(Number.isFinite(time)?time:0,0,stage.duration);
  const movement=stage.cameraMotion;
  let yaw=stage.yaw,pitch=stage.pitch,zoom=stage.zoom,track=0;
  if(stage.camera==='orbit')yaw+=movement*30*Math.sin(t*.42);
