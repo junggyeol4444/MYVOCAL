@@ -1,0 +1,135 @@
+// 원본 #06·#07·#08·#33: 실제 사용자 노래 녹음과 가사·MIDI의 학습용 페어 데이터.
+// 기존 프로젝트/녹음/모델은 읽기 전용. 음소 시간은 MIDI 기반이며 강제 정렬 결과가 아니다.
+import {makeZip} from './zipStore.js';
+import {isAlignmentStale,validateAlignment} from './lyricAlignment.js';
+import {buildKoreanDiffSingerDS} from './diffSingerNative.js';
+
+const encoder=new TextEncoder();
+const MAX_WAV_BYTES=120*1024*1024;
+const MAX_PHRASES=60;
+const permitted=new Set(['self','owned','licensed']);
+const round=x=>Math.round(x*10000)/10000;
+function wav16(raw){
+ const b=raw instanceof Uint8Array?raw:new Uint8Array(raw);
+ if(b.length<44||b.length>MAX_WAV_BYTES)throw Error('녹음 WAV는 120MB 이하의 실제 PCM 파일이어야 합니다.');
+ const v=new DataView(b.buffer,b.byteOffset,b.byteLength);
+ const tag=(p)=>String.fromCharCode(...b.subarray(p,p+4));
+ if(tag(0)!=='RIFF'||tag(8)!=='WAVE'||v.getUint32(4,true)+8!==b.length)
+  throw Error('녹음 파일의 RIFF/WAVE 크기 또는 형식이 올바르지 않습니다.');
+ let format=null,pcm=null,at=12;
+ while(at+8<=b.length){
+  const size=v.getUint32(at+4,true),start=at+8;
+  if(size>b.length-start)throw Error('녹음 WAV 청크 크기가 손상됐습니다.');
+  if(tag(at)==='fmt '){
+   if(format||size<16)throw Error('녹음 WAV 포맷 청크가 잘못됐습니다.');
+   format={codec:v.getUint16(start,true),channels:v.getUint16(start+2,true),
+    rate:v.getUint32(start+4,true),bits:v.getUint16(start+14,true)};
+  }
+  if(tag(at)==='data'){
+   if(pcm)throw Error('중복된 녹음 PCM 청크가 있습니다.');
+   pcm=b.subarray(start,start+size);
+  }
+  at=start+size+(size&1);
+ }
+ if(!format||!pcm||format.codec!==1||format.bits!==16||![1,2].includes(format.channels)||
+  format.rate<16000||format.rate>96000||!pcm.length||pcm.length%(format.channels*2))
+  throw Error('학습용 녹음은 16~96kHz, 16비트 PCM 모노/스테레오 WAV여야 합니다.');
+ return {...format,pcm,frames:pcm.length/(format.channels*2)};
+}
+function sliceWav(source,start,end){
+ const first=Math.round(start*source.rate),last=Math.round(end*source.rate);
+ if(first<0||last>source.frames||last-first<source.rate*.3)
+  throw Error('녹음 시작 위치·길이가 가사·MIDI와 맞지 않습니다.');
+ const frameSize=source.channels*2,body=source.pcm.subarray(first*frameSize,last*frameSize);
+ const out=new Uint8Array(44+body.length),v=new DataView(out.buffer);
+ for(const [at,name] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']])
+  for(let i=0;i<4;i++)out[at+i]=name.charCodeAt(i);
+ v.setUint32(4,out.length-8,true);v.setUint32(16,16,true);
+ v.setUint16(20,1,true);v.setUint16(22,source.channels,true);
+ v.setUint32(24,source.rate,true);v.setUint32(28,source.rate*frameSize,true);
+ v.setUint16(32,frameSize,true);v.setUint16(34,16,true);
+ v.setUint32(40,body.length,true);out.set(body,44);
+ let sum=0,clipped=0,peak=0;
+ const pcm=new DataView(body.buffer,body.byteOffset,body.byteLength);
+ for(let i=0;i<body.length;i+=2){
+  const s=pcm.getInt16(i,true)/32768;sum+=s*s;peak=Math.max(peak,Math.abs(s));
+  if(Math.abs(s)>=.999)clipped++;
+ }
+ const samples=body.length/2,rms=Math.sqrt(sum/samples);
+ return {bytes:out,metrics:{seconds:round((last-first)/source.rate),rmsDbfs:round(20*Math.log10(Math.max(rms,1e-9))),
+  peak:round(peak),clippedPercent:round(100*clipped/samples)}};
+}
+export function planSingingTakePhrases(project,alignment,{recordingStartSec=0}={}){
+ if(!project||isAlignmentStale(project,alignment))throw Error('프로젝트 가사·MIDI가 변경됐습니다. 싱크를 다시 생성하세요.');
+ validateAlignment(alignment);
+ if(!Number.isFinite(recordingStartSec)||recordingStartSec<0||recordingStartSec>360)
+  throw Error('녹음 시작 위치는 원곡 기준 0~360초입니다.');
+ const cues=[...alignment.cues].sort((a,b)=>a.startSec-b.startSec);
+ const phrases=[];let current=[];
+ const flush=()=>{if(!current.length)return;phrases.push(current);current=[];};
+ for(const cue of cues){
+  const lyric=String(cue.lyric||'').trim();
+  if(!lyric||lyric==='—'||lyric==='-'||lyric==='_'||lyric==='SP'){flush();continue;}
+  if(cue.startSec<recordingStartSec-.001)
+   throw Error('가사 음표가 녹음 시작 위치보다 앞에 있습니다. 녹음 시작 초를 확인하세요.');
+  if(current.length&&(cue.startSec-current[current.length-1].endSec>.35||
+   cue.endSec-current[0].startSec>12))flush();
+  if(cue.endSec-cue.startSec>12)throw Error('12초보다 긴 한 음표는 학습용으로 분할할 수 없습니다.');
+  current.push(cue);
+ }
+ flush();
+ if(!phrases.length||phrases.length>MAX_PHRASES)
+  throw Error('실제 가사가 있는 학습 구간은 1~60개여야 합니다.');
+ return phrases.map((cues,i)=>({index:i+1,startSec:cues[0].startSec,
+  endSec:cues[cues.length-1].endSec,cues}));
+}
+export async function exportSingingTakeDataset(project,alignment,recording,dictionary,{
+ voice,recordingStartSec=0,rightsConfirmed=false,signal}={}){
+ if(!voice||!permitted.has(voice.rights)||rightsConfirmed!==true)
+  throw Error('본인 또는 허가받은 노래 녹음·가사·모델 학습 권한을 확인하세요.');
+ if(!(recording instanceof Blob)||recording.size<44||recording.size>MAX_WAV_BYTES)
+  throw Error('원본 노래 녹음 WAV 파일을 선택하세요 (최대 120MB).');
+ if(!(dictionary instanceof Map)||!dictionary.size)
+  throw Error('현재 학습할 DiffSinger 모델의 한국어 발음 사전을 선택하세요.');
+ const phrases=planSingingTakePhrases(project,alignment,{recordingStartSec});
+ const source=wav16(await recording.arrayBuffer());
+ if(signal?.aborted)throw Error('데이터셋 만들기가 취소됐습니다.');
+ const entries=[],manifest=[],maxSeconds=source.frames/source.rate;
+ let size=0;
+ for(const phrase of phrases){
+  if(signal?.aborted)throw Error('데이터셋 만들기가 취소됐습니다.');
+  const from=phrase.startSec-recordingStartSec,to=phrase.endSec-recordingStartSec;
+  if(from<0||to>maxSeconds+.0001)throw Error(phrase.index+'번 가사 구간이 실제 녹음 WAV 길이를 벗어납니다.');
+  const audio=sliceWav(source,from,Math.min(to,maxSeconds));
+  const ds=buildKoreanDiffSingerDS({cues:phrase.cues},dictionary);
+  if(ds.length!==1)throw Error(phrase.index+'번 음소·음정 학습 구간을 만들 수 없습니다.');
+  const key='take-'+String(phrase.index).padStart(3,'0');
+  const label={format:'MYVOCAL_SINGING_TAKE_LABEL',version:1,voiceId:voice.id,
+   projectId:project.id,sourceKey:alignment.sourceKey,
+   originalStartSec:round(phrase.startSec),originalEndSec:round(phrase.endSec),
+   recordingStartSec:round(recordingStartSec),
+   noteCues:phrase.cues.map(c=>({lyric:c.lyric,pitch:c.pitch,
+    startSec:round(c.startSec-phrase.startSec),endSec:round(c.endSec-phrase.startSec)})),
+   phonemeTiming:'MIDI-derived, not audio forced-aligned',
+   audioMetrics:audio.metrics};
+  const paths={audio:'audio/'+key+'.wav',label:'labels/'+key+'.json',score:'score/'+key+'.ds'};
+  const score={...ds[0],offset:0};
+  entries.push({name:paths.audio,data:audio.bytes},
+   {name:paths.label,data:encoder.encode(JSON.stringify(label,null,2))},
+   {name:paths.score,data:encoder.encode(JSON.stringify([score],null,2))});
+  size+=audio.bytes.length;
+  if(size>MAX_WAV_BYTES)throw Error('학습용 구간 WAV 합계가 120MB를 넘었습니다.');
+  manifest.push({...paths,seconds:audio.metrics.seconds,rmsDbfs:audio.metrics.rmsDbfs,
+   clippedPercent:audio.metrics.clippedPercent});
+ }
+ const meta={format:'MYVOCAL_SINGING_TAKE_DATASET',version:1,voiceId:voice.id,
+  projectId:project.id,alignmentSourceKey:alignment.sourceKey,
+  recordingName:String(recording.name||'recording.wav').slice(0,120),
+  sampleRate:source.rate,channels:source.channels,rights:voice.rights,
+  recordingStartSec,phrases:manifest,trained:false,
+  note:'실제 노래 녹음에서 PCM 구간을 추출했습니다. 음소 시간은 가사·MIDI 추정이며 음성 강제 정렬/신경망 학습은 수행하지 않았습니다. 학습 전 수동 라벨 검수와 모델별 전처리가 필요합니다.'};
+ entries.unshift({name:'manifest.json',data:encoder.encode(JSON.stringify(meta,null,2))},
+  {name:'README.txt',data:encoder.encode('MYVOCAL 한국어 가창 학습 데이터\n실제 사용자 녹음 WAV와 원곡 가사·MIDI 시간표를 페어로 저장합니다.\n음소 시간은 실제 발음 강제 정렬 결과가 아닙니다. 반드시 라벨을 검수하고 설치한 DiffSinger 버전에 맞게 전처리하세요.\n이 파일은 학습된 모델이나 합성된 노래가 아닙니다.\n')});
+ return {bytes:makeZip(entries),manifest:meta,
+  fileName:'MYVOCAL-'+String(project.title||'singing').replace(/[^a-zA-Z0-9가-힣_-]/g,'_').slice(0,45)+'-가창학습데이터.zip'};
+}
