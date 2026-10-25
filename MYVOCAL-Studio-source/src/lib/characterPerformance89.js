@@ -64,9 +64,35 @@ export function motionEnergy(previous,next,width,height){
 export function performanceAt(plan,time){
  if(!plan||!Number.isFinite(time)||time<0||time*1000>plan.durationMs)return null;
  const ms=time*1000,frames=plan.frames||[];let left=0,center=0,right=0;
- if(frames.length){let i=0;while(i<frames.length-1&&frames[i+1].ms<=ms)i++;
-  const a=frames[i],b=frames[i+1]||a,k=a===b?0:Math.max(0,Math.min(1,(ms-a.ms)/(b.ms-a.ms)));
-  left=a.left+(b.left-a.left)*k;center=a.center+(b.center-a.center)*k;right=a.right+(b.right-a.right)*k;
+ // 전곡 공연에서는 사용자가 실제 촬영한 1~30초 움직임 강약을
+ // MIDI 마디 길이에 맞춰 반복한다. 관절·자세를 추정한 결과가 아니다.
+ // STEP89 원본 프레임과 참고 영상은 복사하거나 수정하지 않는다.
+ const loop=Number(plan.referenceLoopMs),sourceMs=Number(plan.referenceSourceDurationMs);
+ const looped=Number.isFinite(loop)&&loop>=1000&&Number.isFinite(sourceMs)&&
+  sourceMs>=1000&&sourceMs<=30000&&plan.durationMs>=150000;
+ const phase=looped?ms%loop:ms;
+ const sampleMs=looped?phase*sourceMs/loop:ms;
+ const sample=target=>{
+  let lo=0,hi=frames.length-1;
+  while(lo<hi){const mid=(lo+hi+1)>>1;if(frames[mid].ms<=target)lo=mid;else hi=mid-1;}
+  const a=frames[lo],b=frames[lo+1]||a;
+  const k=a===b?0:Math.max(0,Math.min(1,(target-a.ms)/(b.ms-a.ms)));
+  return {left:a.left+(b.left-a.left)*k,center:a.center+(b.center-a.center)*k,
+   right:a.right+(b.right-a.right)*k};
+ };
+ if(frames.length){
+  ({left,center,right}=sample(sampleMs));
+  if(looped){
+   // 반복 경계의 0.2초를 교차 보간해 6분 공연에서 몸짓이 튀지 않도록 한다.
+   const fade=Math.min(200,loop*.1);
+   if(phase>=loop-fade){
+    const next=sample((phase-loop+fade)*sourceMs/loop);
+    const weight=(phase-loop+fade)/fade;
+    left=left*(1-weight)+next.left*weight;
+    center=center*(1-weight)+next.center*weight;
+    right=right*(1-weight)+next.right*weight;
+   }
+  }
  }
  const notes=(plan.instruments||[]).filter(e=>e.startMs<=ms&&e.endMs>ms);
  let guitar=0,piano=0,drums=0,bass=0,strings=0,synth=0;
