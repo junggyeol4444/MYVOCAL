@@ -2,6 +2,7 @@
 // 오디오가 MIDI 음을 정확히 재현한다는 주장은 하지 않는다.
 import {latestCompleteNeuralScore,NEURAL_SCORE_ROLES} from './neuralScoreBatch.js';
 import {summarizeOriginalMidiTheme,prependSongTheme} from './neuralMusicMotifContinuity.js';
+import {ownedMusicSectionEnergy8} from './ownedMusicStyle8.js';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const pitchName=n=>NOTES[n%12]+Math.floor(n/12-1);
 const limited=(s,n)=>[...String(s??'').replace(/[\r\n\t]/g,' ').trim()].slice(0,n).join('');
@@ -77,10 +78,18 @@ export function buildNeuralMusicPrompts(project,{segments,seconds=18,crossfadeSe
    .map(([pitch])=>NOTES[pitch]).join(' ');
   const drums=take('drums');
   const energy=drums.length?drums.reduce((s,n)=>s+Number(n.velocity||0),0)/drums.length:75;
+  const styleEnergy=ownedMusicSectionEnergy8(project,(index+.5)/segments);
+  // Apply actual original owned-song coarse dynamics only to text guidance.
+  // No source melody, note timing, samples, or copyrightable recording are copied.
+  const ownedContour=styleEnergy===null?'':styleEnergy>=1.35?
+   'energetic original-song-inspired dynamics, strongly accented new instrumental performance':
+   styleEnergy<=.72?
+   'restrained original-song-inspired dynamics, sparse new instrumentation and gentle attacks':
+   'balanced evolving original-song-inspired dynamics, moderate new instrumental accents';
   const intensity=energy>=95?'powerful':energy<=55?'gentle':'balanced';
   return prependSongTheme(limited(base+'; '+sectionGenres+'; '+key+'; '+bpm+' BPM; '+sectionName+
    '; continuous original arrangement with drums, bass, guitar, keys and pads; '+
-   intensity+' energy; MIDI lead pitches '+(melody||'carry preceding motif')+
+   intensity+' energy; '+(ownedContour?ownedContour+'; ':'')+'MIDI lead pitches '+(melody||'carry preceding motif')+
    '; chord pitch classes '+(harmony||'follow established harmony')+
    '; preserve the same song theme and transition smoothly from the previous audio.',520),globalTheme);
  });
