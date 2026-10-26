@@ -60,7 +60,7 @@ type diffSingerTrainingSettings struct {
  Mode,Config string
  Args []string
 }
-var diffSingerTakeName=regexp.MustCompile(`^(?:wavs/take-[0-9]{3}\.wav|labels/take-[0-9]{3}\.json|score/take-[0-9]{3}\.ds|manifest\.json|transcriptions\.csv|README\.txt)$`)
+var diffSingerTakeName=regexp.MustCompile(`^(?:wavs/take-[0-9]{3}\.wav|labels/take-[0-9]{3}\.json|score/take-[0-9]{3}\.ds|manifest\.json|transcriptions\.csv|dictionary\.txt|README\.txt)$`)
 
 func validateDiffSingerTrainingSettings(v diffSingerTrainingSettings)error{
  if len(v.VoiceID)==0||len(v.VoiceID)>128||strings.ContainsAny(v.VoiceID,"/\\\x00\r\n"){return errors.New("학습 Voice ID 오류")}
@@ -96,7 +96,7 @@ func unpackDiffSingerTrainingDataset(raw []byte,dir,voiceID string)(int,error){
  if len(zr.File)<4||len(zr.File)>250{return 0,errors.New("학습 데이터 항목 개수가 유효하지 않습니다")}
  seen:=map[string]bool{};wavCount:=0;var size uint64
  var meta struct{Format string `json:"format"`;VoiceID string `json:"voiceId"`;Rights string `json:"rights"`;Phrases []json.RawMessage `json:"phrases"`}
- hasManifest,hasTranscript:=false,false
+ hasManifest,hasTranscript,hasDictionary:=false,false,false
  for _,f:=range zr.File{
   if !diffSingerTakeName.MatchString(f.Name)||seen[f.Name]||!f.Mode().IsRegular()||
    f.UncompressedSize64>diffSingerDatasetExpandedLimit{return 0,errors.New("학습 ZIP의 중복/경로/파일 형식이 안전하지 않습니다")}
@@ -104,6 +104,7 @@ func unpackDiffSingerTrainingDataset(raw []byte,dir,voiceID string)(int,error){
   if size>diffSingerDatasetExpandedLimit{return 0,errors.New("학습 ZIP 압축 해제 용량이 너무 큽니다")}
   if strings.HasPrefix(f.Name,"wavs/"){wavCount++}
   if f.Name=="transcriptions.csv"{hasTranscript=true}
+  if f.Name=="dictionary.txt"{hasDictionary=true}
   if f.Name=="manifest.json"{
    hasManifest=true
    in,err:=f.Open();if err!=nil{return 0,err}
@@ -111,7 +112,7 @@ func unpackDiffSingerTrainingDataset(raw []byte,dir,voiceID string)(int,error){
    if err!=nil||json.Unmarshal(data,&meta)!=nil{return 0,errors.New("학습 manifest JSON 오류")}
   }
  }
- if !hasManifest||!hasTranscript||wavCount<1||wavCount>60||
+ if !hasManifest||!hasTranscript||!hasDictionary||wavCount<1||wavCount>60||
   len(meta.Phrases)!=wavCount||meta.Format!="MYVOCAL_SINGING_TAKE_DATASET"||
   meta.VoiceID!=voiceID||!(meta.Rights=="self"||meta.Rights=="owned"||meta.Rights=="licensed"){
   return 0,errors.New("현재 Voice의 실제 노래 녹음·가사·MIDI 학습 자료가 아닙니다")
@@ -202,7 +203,7 @@ func (a *appServer) diffSingerTrainingStart(w http.ResponseWriter,r *http.Reques
   var runErr error
   if settings.Mode=="official"{
    checkpoint,runErr=runOfficialDiffSingerTraining(ctx,settings.Root,settings.Python,
-    settings.Config,dataset,output,id,diffSingerTrainingLog{j})
+    settings.Config,dataset,output,id,count,diffSingerTrainingLog{j})
   }else{
    cmdArgs:=[]string{settings.Script}
    for _,arg:=range settings.Args{cmdArgs=append(cmdArgs,strings.ReplaceAll(strings.ReplaceAll(arg,"{dataset}",dataset),"{output}",output))}
