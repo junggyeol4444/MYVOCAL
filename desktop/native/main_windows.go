@@ -285,6 +285,7 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   callCreate("BUTTON","프로젝트 열기",wsChild|wsVisible,197,660,165,35,hwnd,idProjectOpen)
   callCreate("BUTTON","가사·설정 편집",wsChild|wsVisible,374,660,170,35,hwnd,idProjectEdit)
   callCreate("BUTTON","프로젝트 저장",wsChild|wsVisible,556,660,160,35,hwnd,idProjectSave)
+  callCreate("BUTTON","자산 라이브러리",wsChild|wsVisible,728,660,170,35,hwnd,idProjectAssets)
   ui.projectStatus=callCreate("STATIC",projectStatusText(),wsChild|wsVisible,20,705,960,46,hwnd,0)
   enableWindow.Call(ui.cancelButton,0)
   if pythonPath,err:=exec.LookPath("python.exe");err==nil&&filepath.IsAbs(pythonPath){setText(ui.edits[0],pythonPath)}
@@ -302,6 +303,7 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   setText(ui.logEdit,logText)
   if !isRunning{setRunning(false)}
   refreshProjectStatus()
+  if assetUI.hwnd!=0{refreshAssetList()}
   return 0
  case wmClose:
   ui.mu.Lock();running:=ui.running;ui.mu.Unlock()
