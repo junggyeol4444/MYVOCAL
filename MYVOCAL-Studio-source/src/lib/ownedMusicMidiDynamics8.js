@@ -14,9 +14,9 @@ export function applyOwnedMusicMidiDynamics8(project,profile,{strength=65}={}){
   throw Error('이미 스타일이 적용됐습니다. 이전 적용을 되돌리고 새 스타일을 선택하세요.');
  let all=0,last=0;
  for(const track of project.tracks){
-  if(!Array.isArray(track.midiNotes)||track.midiNotes.length>12000)
+  if(track.midiNotes!==undefined&&(!Array.isArray(track.midiNotes)||track.midiNotes.length>12000))
    throw Error('MIDI 노트가 없거나 안전한 편집 허용량을 초과했습니다.');
-  for(const n of track.midiNotes){
+  for(const n of track.midiNotes||[]){
    if(!Number.isFinite(n.startBeat)||n.startBeat<0||
      !Number.isFinite(n.length)||n.length<=0||
      !Number.isInteger(n.velocity)||n.velocity<1||n.velocity>127)
@@ -29,7 +29,7 @@ export function applyOwnedMusicMidiDynamics8(project,profile,{strength=65}={}){
  const guide=ownedMusicGuideForProject8(profile);
  const base={...project,ownedMusicGuide8:guide};
  const saved=[],tracks=project.tracks.map(t=>{
-  if(!t.midiNotes.length)return {...t};
+  if(!t.midiNotes?.length)return {...t};
   const original=t.midiNotes.map(n=>({...n}));
   const applied=original.map(n=>{
    const normalized=clamp((n.startBeat+n.length/2)/last,0,1);
