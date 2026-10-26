@@ -63,6 +63,7 @@ export async function startCharacterIdentityTraining(character,settings,{
   if(total>128*1024*1024)throw Error('학습 원본 전체 파일은 128MiB 이하만 가능합니다.');
   form.append('images',blob,original.name);
   form.set('assetId'+i,id);
+  form.set('assetRole'+i,original.role||'portrait');
   onProgress(i+1,settings.assetIds.length);
  }
  const res=await checked(await request(endpoint+'start',{
