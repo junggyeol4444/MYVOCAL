@@ -20,7 +20,8 @@ export function linkedProfiles(project,data){
  const selectedVirtualSinger=(data.virtualSingers||[]).find(v=>v.id===project.virtualSingerId);
  const linkedVoiceIds=new Set([project.voiceId,selectedVirtualSinger?.voiceId,
   project.duetSingers?.lead?.voiceId,project.duetSingers?.harmony?.voiceId,
-  ...(project.tracks||[]).map(t=>t.singerVoiceId)].filter(Boolean));
+  ...(project.tracks||[]).map(t=>t.singerVoiceId),
+  ...(project.voiceReplace54?.history||[]).flatMap(h=>[h.fromVoiceId,h.toVoiceId])].filter(Boolean));
  const voice=(data.voices||[]).filter(v=>linkedVoiceIds.has(v.id));
  const charIds=new Set([project.characterId,selectedVirtualSinger?.characterId,project.duetSingers?.lead?.characterId,project.duetSingers?.harmony?.characterId,...(project.tracks||[]).map(t=>t.singerCharacterId),...(project.scenes||[]).flatMap(s=>[s.characterId,s.personMv?.personId,s.characterMv?.characterId]),...(project.band90?.members||[]).map(m=>m.characterId),...(project.scenes||[]).flatMap(s=>(s.characterReplace94?.history||[]).flatMap(h=>[h.scene?.characterId,h.scene?.personMv?.personId,h.scene?.characterMv?.characterId]))].filter(Boolean));
  const characters=(data.characters||[]).filter(c=>charIds.has(c.id));
@@ -140,6 +141,35 @@ export async function importProjectBundle(file){
   };
   project.duetSingers={...original.duetSingers,
    lead:translateSinger('lead'),harmony:translateSinger('harmony')};
+ }
+ // Original #54: backup of replaced vocals includes muted original WAV
+ // and restores model, singer, and clip references without modifying sources.
+ if(original.voiceReplace54?.version===1){
+  const history=original.voiceReplace54.history;
+  if(!Array.isArray(history)||history.length>20)
+   throw Error('보컬 교체 이력이 누락됐거나 허용 개수를 초과했습니다.');
+  const mappedTrack=oldId=>{
+   const index=oldTrackIds.indexOf(oldId);
+   if(index<0||!project.tracks[index]?.id)
+    throw Error('보컬 교체 이력의 원곡 WAV 트랙이 백업에 없습니다.');
+   return project.tracks[index].id;
+  };
+  project.voiceReplace54={...original.voiceReplace54,
+   activeVoiceId:mapping[original.voiceReplace54.activeVoiceId]||
+    original.voiceReplace54.activeVoiceId,
+   history:history.map(row=>{
+    if(!Array.isArray(row.newTrackIds)||!row.newTrackIds.length||
+      row.newTrackIds.length>2||typeof row.mutedTrackId!=='string'||
+      !mapping[row.fromVoiceId]||!mapping[row.toVoiceId])
+     throw Error('보컬 교체 기록에 목소리·원곡·신규 WAV 연결이 누락됐습니다.');
+    if(row.engine==='diffsinger'&&row.modelId&&!modelIdMap[row.modelId])
+     throw Error('보컬 교체용 DiffSinger 학습 모델 기록이 백업에 없습니다.');
+    return {...row,fromVoiceId:mapping[row.fromVoiceId],
+     toVoiceId:mapping[row.toVoiceId],
+     mutedTrackId:mappedTrack(row.mutedTrackId),
+     newTrackIds:row.newTrackIds.map(mappedTrack),
+     ...(row.modelId&&modelIdMap[row.modelId]?{modelId:modelIdMap[row.modelId]}:{})};
+   })};
  }
  if(project.tracks.some(t=>t.singerVoiceId||t.singerCharacterId)){
   project.tracks=project.tracks.map(t=>({
