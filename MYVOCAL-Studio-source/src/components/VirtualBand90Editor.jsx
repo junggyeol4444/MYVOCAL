@@ -22,6 +22,8 @@ import {stageSingerExpressionFromVocal} from '../lib/duetSingingExpression.js';
 import {projectVocalSources} from '../lib/lipSyncProjectSources.js';
 import {loadNeuralStemPerformance,attachNeuralStemPerformance,stemPerformanceLevel} from '../lib/neuralStemPerformanceEnvelope.js';
 import {isAlignmentStale} from '../lib/lyricAlignment.js';
+import {savedRhythmSources,scoreMusicReactiveDance30} from '../lib/musicReactiveDance30.js';
+import {analyzeStemPerformanceWav} from '../lib/neuralStemPerformanceEnvelope.js';
 // 실제 원천 악기 WAV의 PCM 강약으로 저장된 VRM 무대 조명만 구동한다.
 function pcmStageLighting(stage,envelope,absoluteSeconds){
  if(!stage||!envelope)return stage;
@@ -42,6 +44,7 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
  const currentProject=useRef(project);currentProject.current=project;
  const stemSignature=(project.tracks||[]).filter(t=>t?.generatedBy==='musicgen-independent-audio').map(t=>t.id+':'+(t.clips?.[0]?.assetId||'')).join('|');
  const available=eligibleBandCharacters(characters),byId=new Map(characters.map(c=>[c.id,c]));
+ const rhythmSources=savedRhythmSources(project);
  const rolePerformance=useMemo(()=>{
   const plans=new Map();
   if(plan.durationSec<150)return plans;
@@ -126,8 +129,8 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   const active=bandFrame90(project,characters,plan,Math.max(0,Math.min(plan.durationSec,t)));const tileW=Math.floor(w/Math.max(1,active.length));
   active.forEach((member,i)=>{const c=byId.get(member.characterId),src=sources.current.get(c.id),x=i*tileW;ctx.save();ctx.beginPath();ctx.rect(x,0,tileW,h);ctx.clip();
    ctx.fillStyle=i%2?'#252d48':'#182b43';ctx.fillRect(x,0,tileW,h);
-   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,pcmStageLighting(c.stage3d||null,rolePerformance.get(c.id)?.pcmEnergy,t),lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(src.element,x,0,tileW,h-62);}
-    else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
+   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,pcmStageLighting(c.stage3d||null,rolePerformance.get(c.id)?.pcmEnergy,t),lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,plan.pcmDances?.[c.id]||usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(src.element,x,0,tileW,h-62);}
+    else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,plan.pcmDances?.[c.id]||usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='person'&&src.element.readyState>=2){
      const lip=lipByMember.get(c.id);
      let drawn=false;
@@ -298,6 +301,40 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   finally{setBusy(false);}
  };
  const save=()=>{try{onSave(saveBand90(project,characters,plan));notify('90단계 다중 캐릭터 공연 타임라인을 저장했습니다.');}catch(e){notify('공연 저장 오류: '+e.message);}};
+ const preparePcmDance=async()=>{
+  if(busy||!rhythmSources.length)return;
+  if(plan.durationSec>30&&plan.durationSec<150){
+   notify('전곡 춤은 150~360초, 짧은 춤은 2~30초로 설정하세요.');return;
+  }
+  const source=rhythmSources[0],controller=new AbortController();
+  abort.current=controller;setBusy(true);
+  try{
+   const check=()=>{if(controller.signal.aborted||currentProject.current!==project)
+     throw Error('PCM 춤 생성이 취소되거나 원곡이 바뀌었습니다.');};
+   check();setStatus('실제 MusicGen 독립 드럼 WAV 원본 PCM 분석 중');
+   const wav=await getFile(source.assetId);check();
+   if(!(wav instanceof Blob)||wav.size<44||wav.size>90*1024*1024)
+    throw Error('실제로 저장된 드럼 WAV를 불러오지 못했습니다.');
+   const envelope=analyzeStemPerformanceWav(await wav.arrayBuffer(),{hopMs:100});check();
+   const mapping={};let updated=0;
+   for(const member of plan.members){
+    check();
+    const character=byId.get(member.characterId);
+    if(!character||(!modelAssets(character).length&&!character.layerPlan?.reviewed))continue;
+    mapping[character.id]=scoreMusicReactiveDance30(character,project,envelope,{
+     durationSec:plan.durationSec,sourceTrackId:source.trackId,sourceAssetId:source.assetId
+    });
+    updated++;
+   }
+   if(!updated)throw Error('선택한 밴드에 VRM 모델 또는 검토된 2D 캐릭터가 필요합니다.');
+   check();
+   setPlan(old=>({...old,pcmDances:mapping}));
+   setStatus('실제 드럼 WAV 기반 2D/VRM 전곡 춤 '+updated+
+    '명 연결 · 공연 설정 저장 전까지 기존 등록 춤 유지');
+   notify('PCM 드럼 액센트가 '+updated+'명 춤 동작으로 연결됐습니다. 별도 공연 계획으로 저장할 수 있습니다.');
+  }catch(error){notify('실제 PCM 공연 춤 준비 실패 · 기존 영상·동작 보존: '+error.message);}
+  finally{abort.current=null;setBusy(false);}
+ };
  const prepareNeuralStemMotion=async()=>{
   if(busy)return;
   const controller=new AbortController();abort.current=controller;
@@ -338,6 +375,13 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
  <Field label="FPS"><select value={plan.fps} onChange={e=>patch('fps',Number(e.target.value))}><option value={24}>24</option><option value={30}>30</option></select></Field>
  {plan.members.map((m,i)=><div className="hstack" key={i} style={{gap:6,flexWrap:'wrap',margin:'8px 0'}}><select aria-label={`멤버 ${i+1}`} value={m.characterId} onChange={e=>patchMember(i,'characterId',e.target.value)}>{available.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select aria-label={`역할 ${i+1}`} value={m.role} onChange={e=>patchMember(i,'role',e.target.value)}>{BAND90_ROLES.map(role=><option key={role}>{role}</option>)}</select><select value={m.position} onChange={e=>patchMember(i,'position',e.target.value)}>{positions.map(pos=><option key={pos}>{pos}</option>)}</select><label>시작<input type="number" min="0" step="0.1" style={{width:58}} value={m.startSec} onChange={e=>patchMember(i,'startSec',Number(e.target.value))}/></label><label>종료<input type="number" min="0" step="0.1" style={{width:58}} value={m.endSec} onChange={e=>patchMember(i,'endSec',Number(e.target.value))}/></label><Button onClick={()=>patch('members',plan.members.filter((_,j)=>j!==i))}>제외</Button></div>)}
  <Button disabled={plan.members.length>=6||available.length<=plan.members.length} onClick={()=>patch('members',[...plan.members,{characterId:available.find(c=>!plan.members.some(m=>m.characterId===c.id))?.id||'',role:'harmony',position:'center',startSec:0,endSec:plan.durationSec}])}>멤버 추가</Button>
+ <div className="look-actions">
+  <Button disabled={busy||!rhythmSources.length||(plan.durationSec>30&&plan.durationSec<150)}
+   onClick={preparePcmDance}>실제 드럼 PCM으로 멤버 전곡 춤 생성</Button>
+  {Object.keys(plan.pcmDances||{}).length>0&&<Button disabled={busy}
+   onClick={()=>setPlan(old=>({...old,pcmDances:{}}))}>이번 공연 PCM 춤 해제 · 기존 춤 복귀</Button>}
+ </div>
+ <p role="status">프로젝트 전용 실제 PCM 춤: {Object.keys(plan.pcmDances||{}).length}명 · 기존 캐릭터 원본 춤은 유지</p>
  <div className="look-actions"><Button disabled={busy||plan.durationSec<150} onClick={prepareNeuralStemMotion}>실제 6악기 WAV PCM → 2D/VRM 연주 동작</Button>{stemPerformance?.projectId===project.id&&stemPerformance.signature===stemSignature&&<Button disabled={busy} onClick={()=>setStemPerformance(null)}>PCM 연주 연결 해제</Button>}</div>
  <div className="look-actions"><Button disabled={busy} onClick={prepareFullSong}>3~6분 전체 음악·밴드 연결</Button><Button disabled={busy} onClick={prepareRealLeadSinger}>실제 주보컬 WAV 발성 → 전곡 2D·VRM·허가 인물 립싱크</Button><Button disabled={busy} onClick={prepareCurrentMusic}>현재 밴드 음악 WAV 연결</Button></div>
  {project.duetSingers?.version===1&&<div className="look-actions">
