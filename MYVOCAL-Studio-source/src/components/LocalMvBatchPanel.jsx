@@ -572,6 +572,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      const place=reviewedCharacterMouthPlacement(movieProject,chars);
      if(place&&automaticSingingVisemes(movieProject,chars))lipPlacement=place;
     }
+    if(!(audioEnd(movieProject)>0))
+     throw Error('음악+MV 제작에는 실제 재생 가능한 악기 또는 보컬 WAV/MIDI가 필요합니다. 음악 없는 무음 장면은 완성된 노래로 저장하지 않습니다.');
     // Native 3–6min recording is expensive. An explicitly resumed project
     // with identical real scene, music and lip snapshots can reuse its
     // previously stored WebM instead of silently re-recording all frames.
@@ -591,6 +593,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }:await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,
       duetPcmLip:fullMouth&&(makeDuet||movieProject?.duetSingers?.version===1),
       prewarmedAudioContext:warmed,onProgress:setMessage});
+    if(result.audioIncluded!==true)
+     throw Error('실제 재생 가능한 보컬·반주 믹스가 WebM에 포함되지 않았습니다. 무음 영상은 완성된 음악+MV로 저장하지 않습니다.');
     const recordedWebmRevision=previousMovie?previousMovie.sourceRevision55:
       await fingerprintNativeMovie55(current(),characters,{includeLipSync:!!result.lipIncluded});
     const outputName='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV';
