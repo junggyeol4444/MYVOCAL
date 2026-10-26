@@ -154,7 +154,7 @@ func getTask()int{
  if int32(ret)<0{return 0}
  return int(ret)
 }
-var fieldNames=[9][7]string{
+var fieldNames=[10][7]string{
  {"Python.exe","MusicGen 모델 폴더","입력 (미사용)","보조 (미사용)","출력 WAV","곡 설명","길이(3~28초)"},
  {"Python.exe","RVC 설치 폴더","학습 데이터 폴더","보조 (미사용)","출력 모델 .pth","설명 (미사용)","학습 Epochs"},
  {"Python.exe","Demucs 모델 폴더","입력 음악 WAV","보조 (미사용)","출력 폴더","설명 (미사용)","모델 이름"},
@@ -164,6 +164,7 @@ var fieldNames=[9][7]string{
  {"Python.exe","DiffSinger 설치 폴더","악보 JSON(.ds)","실험 이름","출력 WAV","권리 확인: confirmed","옵션 (미사용)"},
  {"Python.exe","MusicGen 모델 폴더","입력 (미사용)","보조 (미사용)","출력 WAV","곡 설명","길이(180~360초)"},
  {"Python (미사용)","모델 (미사용)","반주 WAV","보컬 WAV","출력 WAV","설명 (미사용)","보컬 음량(0~200%)"},
+ {"Python (미사용)","모델 (미사용)","입력 (미사용)","보조 (미사용)","마이크 녹음 WAV","설명 (미사용)","녹음 길이(3~180초)"},
 }
 func updateFields(){
  task:=getTask()
@@ -175,7 +176,7 @@ func updateFields(){
   if !pathField(task,i){v=0}
   enableWindow.Call(ui.browses[i],v)
  }
- defaults:=[]string{"12","20","htdemucs","0","","0","","180","100"}
+ defaults:=[]string{"12","20","htdemucs","0","","0","","180","100","30"}
  setText(ui.edits[6],defaults[task])
  appendLog("\r\n모드: "+taskNames[task]+" (기존 사용자 파일은 덮어쓰지 않습니다)\r\n")
 }
@@ -261,7 +262,7 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
  switch message{
  case wmCreate:
   ui.hwnd=hwnd
-  callCreate("STATIC","MYVOCAL Studio  |  오프라인 Windows GUI (HTTP·HTML·WebView 사용 안 함)",wsChild|wsVisible,20,12,995,28,hwnd,0)
+  callCreate("STATIC","MYVOCAL Studio  |  로컬 Windows 음악·영상 제작 프로그램",wsChild|wsVisible,20,12,995,28,hwnd,0)
   callCreate("STATIC","작업 종류",wsChild|wsVisible,20,49,145,24,hwnd,0)
   ui.chooser=callCreate("COMBOBOX","",wsChild|wsVisible|wsVScroll|cbsDropDownList,180,47,800,190,hwnd,idTask)
   for _,n:=range taskNames{sendMessage.Call(ui.chooser,cbAddString,0,uintptr(unsafe.Pointer(utf16(n))))}
