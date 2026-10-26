@@ -768,6 +768,17 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <Notice>동일한 본인·허가받은 실제 사람으로 연결된 장면에만 적용합니다. 원본 MV WebM도 별도 보존하며, 실제 Wav2Lip 모델이 MP4를 생성하지 못하면 성공이라고 보고하지 않습니다.</Notice>
   </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 2D 립싱크 입 모양 포함 (듀엣은 두 가수 실제 WAV PCM 사용)</label>}
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={resumeProduction}
+   onChange={e=>setResumeProduction(e.target.checked)}/>
+   중단된 전체 음악+MV 제작 이어하기: 이전에 성공해 원곡에 저장된 실제 MIDI/WAV 트랙은
+   동일 모델·설정과 원본 트랙 연결이 확인되면 재생성하지 않고 다음 단계로 진행
+  </label>}
+  {saveFullMovie&&resumeProduction&&<Notice>
+   실제 기존 MIDI·MusicGen·SoundFont·보컬 트랙 ID와 모델 설정을 대조해 이어서 제작합니다.
+   새 음악·목소리 모델로 다시 만들려면 체크를 해제하세요. 사용자 원본이 변경됐거나 기록이
+   없으면 해당 단계부터 다시 실행하며 기존 파일을 삭제하거나 덮어쓰지 않습니다.
+   미생성 SD/SVD 장면은 이어서 처리하고, 이미 렌더한 완성 영상은 신규 산출물로 저장됩니다.
+  </Notice>}
   <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeSourceStems&&(!musicPython||!soundfontDll||!soundfontFile))||(makeNeuralAudioStems&&(!musicPython||!musicModelDir))||(makeNeuralSinging&&(!singingRights||!voices.length||(singingBackend==='diffsinger'&&(!selectedDiffSingerModel?.dictionaryAssetId||!selectedDiffSingerModel?.dictionarySha256||
  (makeHarmony&&makeDuet&&(!selectedDuetDiffSingerModel?.dictionaryAssetId||!selectedDuetDiffSingerModel?.dictionarySha256))))||(makeHarmony&&makeDuet&&(!duetVoiceId||!duetLeadCharacterId||!duetHarmonyCharacterId||duetLeadCharacterId===duetHarmonyCharacterId))))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))||(faceNeuralSync&&(!personId||!facePython||!faceRoot||!faceCheckpoint||!faceRights||!faceModelRights))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
   {busy&&<Button onClick={()=>cancelRef.current?.abort()}>이후 장면 생성 취소</Button>}
