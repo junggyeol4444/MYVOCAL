@@ -12,7 +12,7 @@ const alive=(project,current,signal)=>{
  if(signal?.aborted||current()!==project)
   throw Error('실제 보컬 립싱크 도중 취소 또는 프로젝트 변경 · 기존 원본을 보존합니다.');
 };
-export function selectSoloVocalPcm33(project,characters=[]){
+export function selectSoloVocalPcm33(project,characters=[],{vocalTrackId=''}={}){
  if(!project?.id||!Array.isArray(project.tracks)||!Array.isArray(characters)||
     project.duetSingers?.version===1)
   throw Error('한 명의 2D 가수가 있는 기존 노래 프로젝트가 필요합니다. 듀엣은 별도의 두 가수 PCM 립싱크를 사용하세요.');
@@ -24,12 +24,20 @@ export function selectSoloVocalPcm33(project,characters=[]){
   Number(t.volume??100)>0&&Array.isArray(t.clips)&&
   t.clips.length>=1&&t.clips.length<=24&&t.clips.every(c=>!!c?.assetId)&&
   (!t.singerCharacterId||t.singerCharacterId===singer.id)&&
-  (!t.singerVoiceId||t.singerVoiceId===project.voiceId));
+  (!t.singerVoiceId||t.singerVoiceId===project.voiceId)&&
+  (t.neuralSingingRealWav===true||
+   !/^MusicGen 분리 보컬/.test(t.name||'')));
+ // Prioritize the real generated singer-tagged primary take, not a Demucs
+ // 'vocals' split of an instrumental MusicGen mix.
+ const primaries=matching.filter(t=>t.neuralSingingRealWav===true&&
+  t.neuralSingingPrimary===true);
+ const selected=vocalTrackId?matching.find(t=>t.id===vocalTrackId):
+  primaries.length===1?primaries[0]:matching.length===1?matching[0]:null;
  // A harmony/adlib or multiple overlapping vocals is not a unique target.
  // Avoid moving the protagonist's mouth with the wrong singer's audio.
- if(matching.length!==1)
-  throw Error('실제 독립 가창 WAV가 정확히 한 트랙이어야 합니다. 화음·Ad-lib와 주보컬을 구별해 한 명의 원본 보컬 트랙을 선택하세요.');
- return {singer,track:matching[0]};
+ if(!selected)
+  throw Error('실제 가창 WAV 후보 중 주보컬을 하나 선택하세요. 자동 생성 주보컬이 여러 개이거나 화음·Ad-lib가 혼합돼 있습니다.');
+ return {singer,track:selected};
 }
 function collect(buffer,clip,project,track,levels,signal){
  const timing=clipWindow(clip,project.bpm,buffer.duration);
@@ -71,7 +79,7 @@ export function normalizeSoloVocalActivity33(power){
   Math.min(1,(n-threshold)/(reference*.55)));
 }
 export async function planRecordedSoloVocalPcmLip33(project,characters,{
- loadFile,current=()=>project,signal,onProgress=()=>{},audioContext=null,
+ loadFile,current=()=>project,signal,onProgress=()=>{},audioContext=null,vocalTrackId='',
  placement=null,createContext=()=>{
   const C=globalThis.AudioContext||globalThis.webkitAudioContext;
   if(!C)throw Error('실제 WAV PCM 디코딩을 지원하는 Windows WebView2가 필요합니다.');
@@ -80,7 +88,7 @@ export async function planRecordedSoloVocalPcmLip33(project,characters,{
 }={}){
  if(typeof loadFile!=='function'||typeof current!=='function')
   throw Error('실제 원곡 보컬 WAV 자산을 열 수 없습니다.');
- const {singer,track}=selectSoloVocalPcm33(project,characters);
+ const {singer,track}=selectSoloVocalPcm33(project,characters,{vocalTrackId});
  const position=placement||reviewedCharacterMouthPlacement(project,characters);
  if(!position)throw Error('실제 2D 원화의 입 위치를 검토하거나 MV 립싱크 입 위치를 저장하세요.');
  const overlay=planMvLipSyncOverlay(project,characters,position);
