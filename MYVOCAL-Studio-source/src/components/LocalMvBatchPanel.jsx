@@ -40,6 +40,7 @@ import {renderAndStoreNeuralMidiStems} from '../lib/autoMvSourceStems.js';
 import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
 import {getInstalledLocalModels} from '../lib/localAiComposer.js';
 import {completeProductionStage55,resumableProductionStage55} from '../lib/productionResume55.js';
+import {fingerprintNativeMovie55,savedNativeMovie55} from '../lib/nativeMovieResume55.js';
 import {applyNeuralFaceLipToMv} from '../lib/autoMvRealPersonLip.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {persistProductionDeliverables} from '../lib/productionOutputPersist.js';
@@ -571,13 +572,36 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      const place=reviewedCharacterMouthPlacement(movieProject,chars);
      if(place&&automaticSingingVisemes(movieProject,chars))lipPlacement=place;
     }
-    const result=await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,
+    // Native 3–6min recording is expensive. An explicitly resumed project
+    // with identical real scene, music and lip snapshots can reuse its
+    // previously stored WebM instead of silently re-recording all frames.
+    const characters=dataRef.current?.characters||[];
+    const lipNeeded=!!(lipPlacement||fullMouth||
+     automaticSingingVisemes(movieProject,characters)&&
+      reviewedCharacterMouthPlacement(movieProject,characters));
+    let previousMovie=null;
+    if(resumeProduction)previousMovie=await savedNativeMovie55(movieProject,characters,{
+     loadFile:getFile,lipIncluded:lipNeeded,signal:controller.signal,
+     current,onProgress:setMessage
+    });
+    const result=previousMovie?{
+     file:previousMovie.file,seconds:Math.max(0,...movieProject.scenes.map(s=>Number(s.end)||0)),
+     generatedImages:0,generatedVideos:0,audioIncluded:true,
+     lipIncluded:lipNeeded,source:'existing-local-webm'
+    }:await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,
       duetPcmLip:fullMouth&&(makeDuet||movieProject?.duetSingers?.version===1),
       prewarmedAudioContext:warmed,onProgress:setMessage});
+    const recordedWebmRevision=previousMovie?previousMovie.sourceRevision55:
+      await fingerprintNativeMovie55(current(),characters,{includeLipSync:!!result.lipIncluded});
     const outputName='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV';
     const finishedFiles=[];
     const download=(blob,ext,suffix='')=>{
-     finishedFiles.push({kind:ext,file:blob,...(suffix==='-립싱크'?{variant:'face-lip'}:{})});
+     if(!(previousMovie&&ext==='webm'&&!suffix))finishedFiles.push({kind:ext,file:blob,
+      ...(suffix==='-립싱크'?{variant:'face-lip'}:{}),
+      ...(!previousMovie&&ext==='webm'&&!suffix?{
+       sourceRevision55:recordedWebmRevision,lipIncluded55:!!result.lipIncluded
+      }:{})
+     });
      const url=URL.createObjectURL(blob),a=document.createElement('a');
      try{a.href=url;a.download=outputName+suffix+'.'+ext;document.body.append(a);a.click();a.remove();}
      finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}
@@ -595,6 +619,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     // Even if the optional licensed Wav2Lip model fails, preserve the real
     // already-rendered music+video WebM; never invent a converted MP4.
     download(result.file,'webm');
+    if(previousMovie)setMessage('실제 이전 WebM 녹화 파일 재사용 완료 · 중복 프레임 렌더링 없이 MP4·최종 WAV 제작 계속');
     if(exportWav&&audioEnd(movieProject)>0){
      setMessage('실제 완성 음악·보컬 믹스를 PCM WAV로 제작 중');
      const wav=await mixdownWav(movieProject,{bitDepth:16,channels:2,sampleRate:44100});
