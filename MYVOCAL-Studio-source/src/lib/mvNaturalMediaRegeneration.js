@@ -6,6 +6,7 @@ import {videoSourceKey,applySceneVideo,generateLocalVideoClip,readSourceFrame} f
 import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
 import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
 import {chooseSceneReference} from './characterSceneReference.js';
+import {attachIdentityLoRA,activeIdentityLoRA} from './characterIdentityLoRA.js';
 import {autoSingerReference,autoSingerRequest,validateAutoVirtualSinger,generateAutoSingerReferenceImage} from './autoVirtualSingerImages.js';
 import {buildMvDirectionPlan} from './mvDirection.js';
 import {inspectSvdClipDuration,assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
@@ -120,9 +121,9 @@ export async function regenerateNaturalMvScene(project,plan,characters,{
     sourceProjectId:project.id,sourceSceneId:anchor.sourceSceneId,
     sourceAssetId:anchor.sourceAssetId,sourceKey:anchor.sourceKey},session,signal);
   }else if(reference.kind==='person'){
-   image=await generatePerson({...imageSettings,imageData,denoise:reference.denoise},session,signal);
+   image=await generatePerson(attachIdentityLoRA({...imageSettings,imageData,denoise:reference.denoise},character),session,signal);
   }else if(reference.kind==='character'){
-   image=await generateCharacter({...imageSettings,imageData,denoise:reference.denoise},session,signal);
+   image=await generateCharacter(attachIdentityLoRA({...imageSettings,imageData,denoise:reference.denoise},character),session,signal);
   }else throw Error('지원되지 않는 장면 참조 이미지 종류입니다.');
  }else{
   onProgress('실제 로컬 SD 장면 이미지 생성 중');
@@ -160,6 +161,13 @@ export async function regenerateNaturalMvScene(project,plan,characters,{
  const after=withVideo.scenes.find(s=>s.id===scene.id);
  const history=[...(project.mvNeuralNaturalEdits?.history||[]),{
   sceneId:scene.id,before,after:JSON.stringify(after),summary:plan.summary,
+  ...(plan.aiInterpretation51?.provider==='local-ollama'?{
+   localAiInterpreter51:{model:plan.aiInterpretation51.model,
+    instruction:plan.aiInterpretation51.originalInstruction}
+  }:{}),
+  ...(activeIdentityLoRA(character)?{
+   trainedIdentityLoRA:activeIdentityLoRA(character).loraName
+  }:{}),
   at:new Date().toISOString()}].slice(-8);
  const result={...withVideo,videoEdits93:project.videoEdits93,
   mvNeuralNaturalEdits:{version:1,history}};
