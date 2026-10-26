@@ -91,6 +91,7 @@ export async function runFullLocalMv({
   return {file:new File([recording.blob],'MYVOCAL-완성뮤직비디오.webm',{type:'video/webm'}),scenes:movie.scenes.length,
     seconds:movie.durationSec,audioIncluded:useAudio,captionsIncluded:useCaptions,lipIncluded:!!mouth,
     lipMode:!mouth?'none':duetPcmLip?'duet-vocal-pcm':soloPcmLip?'solo-vocal-pcm':'manual-phoneme',
+    lipVocalTrackId:soloPcmLip?mouth?.singleVocalAudioActivity?.sourceTrackId||'':'',
     generatedImages:generated?.generatedImages||0,generatedVideos:generated?.generatedVideos||0};
  }finally{resources?.dispose?.();}
 }
