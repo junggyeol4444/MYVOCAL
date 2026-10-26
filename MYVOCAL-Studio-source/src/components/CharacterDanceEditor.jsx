@@ -4,6 +4,7 @@ import {getFile,putFileNew,removeFile} from '../lib/assetDb.js';
 import {genId} from '../lib/schema.js';
 import {MAX_CHARACTER_ASSETS,validateCharacterFile,validateCharacterAssetRole} from '../lib/characterIdentity.js';
 import {recordWebcamMotion32} from '../lib/webcamMotionRecording32.js';
+import {recordAndApplyWebcamPose32} from '../lib/webcamToVrmMotion32.js';
 import {downloadText} from '../lib/store.js';
 import {genreList} from '../lib/genres.js';
 import {createDancePlan,validateDancePlan,parseDanceLines,danceLines,danceAt,dancePose,danceReferences,saveDancePlan} from '../lib/characterDanceDirector.js';
@@ -11,6 +12,7 @@ import {extractMotionCapture31,makeMotionCapture31} from '../lib/motionReference
 import {savedRhythmSources,createMusicReactiveDance30} from '../lib/musicReactiveDance30.js';
 const MOVES={groove:'그루브',step:'스텝',bounce:'바운스',sway:'스웨이',wave:'팔 흔들기',pose:'포즈'};
 export default function CharacterDanceEditor({character,projects=[],onSave,notify}){
+ const latestCharacter=useRef(character);latestCharacter.current=character;
  const existing=(()=>{try{return character.dance88?validateDancePlan(character,character.dance88):null;}catch{return null;}})();
  const linked=projects.filter(p=>p.characterId===character.id||(p.scenes||[]).some(s=>s.characterId===character.id));
  const [projectId,setProjectId]=useState(existing?.projectId||linked[0]?.id||'');
@@ -56,6 +58,28 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
  const [cameraDuration,setCameraDuration]=useState(10),[cameraBusy,setCameraBusy]=useState(false);
  const [cameraStatus,setCameraStatus]=useState('웹캠 사용 권한을 허용하면 로컬 WebM을 녹화할 수 있습니다.');
  const cameraAbort=useRef(null);
+ const liveAbort=useRef(null);
+ const [liveBusy,setLiveBusy]=useState(false),[liveStatus,setLiveStatus]=useState('웹캠 연기 → 실제 로컬 MediaPipe 자세 추출 → VRM 동작 신규 저장을 한 번에 수행합니다.');
+ useEffect(()=>()=>liveAbort.current?.abort(),[]);
+ const performAndApply=async()=>{
+  if(liveBusy||poseRunning||cameraBusy)return;
+  const snapshot=character;
+  const controller=new AbortController();liveAbort.current=controller;
+  setLiveBusy(true);setLiveStatus('본인 또는 허가된 캐릭터 원본을 유지한 채 웹캠을 준비합니다.');
+  try{
+   const result=await recordAndApplyWebcamPose32(snapshot,{
+    durationSec:Number(cameraDuration),python:posePython,model:poseModel,
+    consent:poseRights,signal:controller.signal,
+    current:()=>latestCharacter.current,onSave,onProgress:setLiveStatus
+   });
+   if(controller.signal.aborted)throw Error('촬영·관절 추출 취소');
+   setReferenceId(result.videoAssetId);setPoseDraft(null);
+   setLiveStatus('실제 동작 '+result.frames+
+    '개 관절 프레임을 신규 VRM 동작에 저장 · 이전 춤·원본 영상 유지');
+   notify('원본 32항 · 실제 본인 웹캠 연기 → 로컬 MediaPipe → VRM 동작 연결 완료');
+  }catch(error){setLiveStatus('실제 웹캠 연기 저장 중단 · 원본 보존: '+error.message);}
+  finally{liveAbort.current=null;setLiveBusy(false);}
+ };
  useEffect(()=>()=>cameraAbort.current?.abort(),[]);
  const recordCamera=async()=>{
   if(cameraBusy||poseRunning)return;
@@ -161,6 +185,17 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
     <Button variant="primary" disabled={!poseDraft||poseRunning} onClick={savePose}>추출 동작을 VRM에 저장</Button>
    </div>
    <p role="status">{poseStatus}</p>
+   <div className="mv7-item">
+    <strong>원본 32항 · 웹캠 연기 → 실제 MediaPipe → VRM 동작 한 번에 생성</strong>
+    <div className="hstack">
+     <Button variant="primary" disabled={liveBusy||cameraBusy||poseRunning||
+      !poseRights||!posePython||!poseModel}
+      onClick={performAndApply}>{liveBusy?'실제 연기 영상 촬영·관절 추출·저장 중':'웹캠으로 직접 연기 → VRM 동작 한 번에 생성·저장'}</Button>
+     {liveBusy&&<Button onClick={()=>liveAbort.current?.abort()}>연기·관절 분석 취소</Button>}
+    </div>
+    <p role="status">{liveStatus}</p>
+    <Notice>본인이 허용한 카메라의 실제 영상에 설치된 MediaPipe Pose Task를 실행합니다. 영상과 관절 추출 둘 다 성공해야 캐릭터에 신규 참고 영상·VRM 동작을 저장합니다. 기존 사용자 녹음·사진·춤·VRM 파일은 그대로 보존합니다.</Notice>
+   </div>
    {poseDraft&&<p>추출 자세 {poseDraft.frames.length}프레임 · 길이 {(poseDraft.durationMs/1000).toFixed(2)}초 · 원본 동영상은 기존 위치에 유지</p>}
    {character.motionCaptured31&&<p>등록된 실제 동작: {character.motionCaptured31.frames?.length||0}프레임 · 기존 춤 계획과 별도 보관</p>}
    <Notice>Windows EXE에 설치된 오프라인 MediaPipe Tasks·OpenCV·Pose Task 모델이 필요합니다. 모델은 자동 설치/다운로드되지 않습니다. 2D 영상에서 검출한 상대 관절 회전을 VRM 본에 적용하는 실제 추출 기능이며, 깊이까지 추정한 완전한 3D 모션캡처는 아닙니다.</Notice>
