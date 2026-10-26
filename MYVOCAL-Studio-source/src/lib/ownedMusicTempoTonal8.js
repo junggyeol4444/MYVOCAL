@@ -133,7 +133,8 @@ export function analyzeOwnedMusicTempoTonal8(pcm,rate,options={}){
  const tempo=estimateOwnedMusicTempo8(pcm,rate,options);
  options.onProgress?.('실제 PCM의 비트 반복·템포 추정 완료 · 주파수별 조성 후보 분석 중');
  const tonal=estimateOwnedMusicTonal8(pcm,rate,options);
- return {version:1,source:'actual-owner-authorized-pcm-dsp',
+ return {version:1,source:options.referenceOnly?
+   'actual-reference-only-pcm-dsp':'actual-owner-authorized-pcm-dsp',
   rhythm:tempo,tonality:tonal,
   inferredChordProgression:false,inferredGenre:false,
   copiedMelody:false,neuralTraining:false};
