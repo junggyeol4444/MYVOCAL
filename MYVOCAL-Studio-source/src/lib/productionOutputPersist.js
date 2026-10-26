@@ -23,7 +23,8 @@ export async function persistProductionDeliverables(project,outputs,{
   const revision55=output?.sourceRevision55;
   if(revision55!==undefined&&
     (!/^[a-f0-9]{64}$/.test(revision55)||kind!=='webm'||variant!=='base'||
-     typeof output.lipIncluded55!=='boolean'))
+     typeof output.lipIncluded55!=='boolean'||
+     !['none','manual-phoneme','solo-vocal-pcm','duet-vocal-pcm'].includes(output.lipMode55)))
    throw Error('실제 음악·영상 SHA-256 이어하기 출처가 올바르지 않습니다.');
   const uniqueKey=kind+':'+variant;
   if(!Object.hasOwn(PRODUCTION_OUTPUT_TYPES,kind)||!['base','face-lip'].includes(variant)||
@@ -44,7 +45,7 @@ export async function persistProductionDeliverables(project,outputs,{
   records.push({assetId,kind,variant,mime:file.type,name:file.name,size:file.size,createdAt:timestamp,
    source:'real-local-music-mv-production',
    ...(revision55?{sourceRevision55:revision55,
-    lipIncluded55:output.lipIncluded55}:{}),
+    lipIncluded55:output.lipIncluded55,lipMode55:output.lipMode55}:{}),
   });
  }
  guard();
