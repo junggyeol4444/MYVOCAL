@@ -44,7 +44,8 @@ export async function exportFullSongPv95(project,settings,{
  if(!(images instanceof Map))throw Error('PV 원본 이미지 렌더러가 준비되지 않았습니다.');
  if(mp4&&(typeof session!=='string'||session.length<8))
   throw Error('실제 MP4 제작에는 로컬 Windows EXE의 세션이 필요합니다.');
- const guard=()=>{if(signal?.aborted||current()!==project)
+ let active=project;
+ const guard=()=>{if(signal?.aborted||current()!==active)
   throw Error('전곡 PV 제작 중 취소 또는 프로젝트 변경 · 모든 기존 원본은 유지했습니다.');};
  guard();
  const duration=eligibility.duration;
@@ -74,13 +75,14 @@ export async function exportFullSongPv95(project,settings,{
  let committed=await persistProductionDeliverables(project,[{kind:'webm',file:movie}],{
   current,onChange,newId,save,remove,signal
  });
+ active=committed.project;
  onProgress('음악 포함 가사 PV WebM 프로젝트 새 산출물로 저장 완료');
  let mp4File=null;
  if(mp4){
   guard();onProgress('Windows 로컬 FFmpeg로 완성 PV MP4 변환 중');
   mp4File=await mp4Convert(movie,{session,signal});guard();
   committed=await persistProductionDeliverables(committed.project,[{kind:'mp4',file:mp4File}],{
-   current:()=>current()===committed.project?committed.project:null,
+   current,
    onChange,newId,save,remove,signal
   });
   onProgress('음악 포함 3~6분 PV MP4도 원본과 별개 신규 파일로 저장 완료');
