@@ -6,6 +6,8 @@ import LocalMvBatchPanel from '../components/LocalMvBatchPanel.jsx';
 import AutoSingerRegisterPanel from '../components/AutoSingerRegisterPanel.jsx';
 import Pv95Editor from '../components/Pv95Editor.jsx';
 import {interpretMvInstruction93,applyMvInstruction93,undoMvInstruction93} from '../lib/mvNaturalEdit93.js';
+import {previewLocalAIMvEdit51} from '../lib/localAIMvNaturalEdit51.js';
+import {getInstalledLocalModels} from '../lib/localAiComposer.js';
 import {regenerateNaturalMvScene,undoNeuralNaturalMvScene} from '../lib/mvNaturalMediaRegeneration.js';
 import {previewSectionNaturalEdit,applySectionNaturalEdit,undoSectionNaturalEdit,regenerateSectionNaturalMvScenes,undoSectionNaturalMvScenes} from '../lib/mvSectionNaturalEdit.js';
 import {prepareCharacterReplace94,applyCharacterReplace94,undoCharacterReplace94} from '../lib/characterReplace94.js';
@@ -58,6 +60,10 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
  const p=project||data.projects[0];const [selected,setSelected]=useState(focusSceneId||'');const [pendingImport,setPendingImport]=useState(null);const [animaticPosition,setAnimaticPosition]=useState(0);const [animaticPlaying,setAnimaticPlaying]=useState(false);const [animaticSpeed,setAnimaticSpeed]=useState(1);const [shotSheetPage,setShotSheetPage]=useState(1);const animaticLastTick=useRef(null);
  const [imagePort,setImagePort]=useState('8188');const [checkpoints,setCheckpoints]=useState([]);const [checkpoint,setCheckpoint]=useState('');
  const [natural93,setNatural93]=useState(''),[review93,setReview93]=useState(null),[natural93Busy,setNatural93Busy]=useState(false),[natural93Status,setNatural93Status]=useState(''),[replace94Id,setReplace94Id]=useState(''),[review94,setReview94]=useState(null),[replace94All,setReplace94All]=useState(false);
+ const [mvAiModels,setMvAiModels]=useState([]),[mvAiModel,setMvAiModel]=useState(''),
+  [mvAiBusy,setMvAiBusy]=useState(false),[mvAiStatus,setMvAiStatus]=useState('설치된 로컬 Ollama 모델을 확인한 후 직접 선택하세요.');
+ const mvAiAbort=useRef(null);
+ useEffect(()=>()=>mvAiAbort.current?.abort(),[]);
  const [replace94ReferenceConsent,setReplace94ReferenceConsent]=useState(false),
   [replace94Busy,setReplace94Busy]=useState(false),[replace94Status,setReplace94Status]=useState('');
  const replace94Abort=useRef(null);
@@ -449,6 +455,37 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
   catch(e){notify('스토리보드 읽기 실패: '+e.message);}};
  const applyImportedScenes=()=>{if(!pendingImport)return;try{if(p.id!==pendingImport.projectId||p.bpm!==pendingImport.bpm||JSON.stringify(p.scenes)!==pendingImport.sceneSnapshot)throw Error('미리보기 이후 프로젝트 장면이 변경됐습니다. 파일을 다시 확인하세요.');const updated=restoreMvStoryboard(p,pendingImport.content,data.characters);onChange(updated);setSelected('');setPendingImport(null);notify('장면 목록을 로컬 프로젝트에 복원했습니다. 기존 미디어·트랙은 변경하지 않았습니다.');}catch(e){notify('스토리보드 복원 실패: '+e.message);setPendingImport(null);}};
  const reviewNatural93=()=>{try{if(!current)throw Error('장면을 선택하세요.');setReview93(interpretMvInstruction93(p,current.id,natural93));}catch(e){setReview93(null);notify('STEP93: '+e.message);}};
+ const discoverMvAiModels=async()=>{
+  if(mvAiBusy)return;
+  setMvAiBusy(true);
+  try{
+   const installed=await getInstalledLocalModels({key:readSession()});
+   setMvAiModels(installed);
+   if(!installed.includes(mvAiModel))setMvAiModel('');
+   setMvAiStatus(installed.length?'설치된 로컬 Ollama 모델 '+installed.length+'개 발견 · 사용할 모델을 직접 선택하세요.':
+    '실제로 설치된 Ollama 모델 없음 · 자동 모델 교체·다운로드 없음');
+  }catch(error){setMvAiStatus('설치된 모델 목록 확인 실패: '+error.message);}
+  finally{setMvAiBusy(false);}
+ };
+ const reviewMvNaturalWithAi=async()=>{
+  if(mvAiBusy||natural93Busy)return;
+  const id=current?.id,original=p,command=natural93;
+  const controller=new AbortController();mvAiAbort.current=controller;
+  setMvAiBusy(true);setReview93(null);
+  setMvAiStatus('로컬 Ollama '+mvAiModel+'의 한국어 장면 수정 해석 중');
+  try{
+   if(!mvAiModels.includes(mvAiModel))throw Error('설치된 로컬 모델을 직접 선택하세요.');
+   const plan=await previewLocalAIMvEdit51(original,id,command,{
+    model:mvAiModel,session:readSession(),signal:controller.signal,
+    current:()=>latestProject.current
+   });
+   if(controller.signal.aborted)throw Error('로컬 장면 해석을 취소했습니다.');
+   setReview93(plan);
+   setMvAiStatus('로컬 AI 지시 초안 검토 준비 · '+plan.summary+
+    ' · 명시적으로 적용 또는 실제 SD/SVD 생성 버튼을 누르기 전까지 원본 보존');
+  }catch(error){setMvAiStatus('로컬 자연어 분석 중단 · 원본 보존: '+error.message);}
+  finally{mvAiAbort.current=null;setMvAiBusy(false);}
+ };
  const applyNatural93=()=>{try{if(!review93)throw Error('검토할 지시가 없습니다.');onChange(applyMvInstruction93(p,review93));setReview93(null);notify('자연어 장면 수정 적용. 이미지·영상 원본은 보존되며 필요하면 재생성하세요.');}catch(e){setReview93(null);notify('STEP93 적용 실패: '+e.message);}};
  const regenerateNatural93=async()=>{
   if(!review93||natural93Busy||imageBusy||videoBusy||personBusy||pvBusy||regen92Busy)return;
@@ -567,6 +604,22 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
  <LocalMvBatchPanel project={p} data={data} checkpoint={checkpoint} videoModel={videoModel} imagePort={imagePort} imageSteps={imageSteps} imageSize={imageSize} videoFrames={videoFrames} videoFps={videoFps} videoSteps={videoSteps} videoMotion={videoMotion} current={()=>latestProject.current} commit={next=>{latestProject.current=next;onChange(next)}} session={readSession} notify={notify}/>
  <Panel title="STEP93 · AI 영상 자연어 수정" description="로컬 명령 문법으로 선택한 장면의 속성 하나 또는 서로 다른 두 속성을 함께 검토·편집합니다. 미리보기·확인 후 적용하며 AI 모델 추론이 아닙니다.">
  <Field label="장면 자연어 명령"><input aria-label="Step93 자연어 명령" maxLength={500} value={natural93} onChange={e=>{setNatural93(e.target.value);setReview93(null);}} placeholder="배경을 비 오는 밤거리로 바꿔 그리고 조명을 네온 불빛으로 바꿔"/></Field>
+ <div className="mv7-item">
+  <strong>원본 51·52·53항 · 자유로운 한국어 지시 → 실제 로컬 Ollama 해석 → SD/SVD 장면 재생성</strong>
+  <Field label="사용할 로컬 언어모델 직접 선택"><select disabled={mvAiBusy} value={mvAiModel}
+    onChange={e=>{setMvAiModel(e.target.value);setReview93(null);}}>
+    <option value="">모델 선택 필요 · 자동 대체/다운로드 없음</option>
+    {mvAiModels.map(m=><option key={m} value={m}>{m}</option>)}
+  </select></Field>
+  <div className="hstack">
+   <Button disabled={mvAiBusy} onClick={discoverMvAiModels}>설치 Ollama 모델 목록 읽기</Button>
+   <Button disabled={mvAiBusy||natural93Busy||!current||!mvAiModel||!natural93.trim()}
+    onClick={reviewMvNaturalWithAi}>{mvAiBusy?'로컬 AI 지시 분석 중':'자유로운 한국어를 로컬 AI로 해석·검토'}</Button>
+   {mvAiBusy&&<Button onClick={()=>mvAiAbort.current?.abort()}>지시 해석 취소</Button>}
+  </div>
+  <p role="status">{mvAiStatus}</p>
+  <Notice>사용자 지시와 현재 선택한 장면의 문구만 로컬 모델에 전달됩니다. 얼굴·Voice·캐릭터·소유권·장면 시간은 변경 대상이 아닙니다. 최대 2개 속성만 기존 장면 잠금으로 재검토합니다. 아래 적용·실제 SD/SVD 생성 버튼을 누르기 전까지 원본 사진·장면·영상은 유지됩니다.</Notice>
+ </div>
  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}><Button disabled={!current} onClick={reviewNatural93}>변경 내용 검토</Button><Button disabled={!review93} onClick={applyNatural93}>검토한 수정 적용</Button><Button disabled={!p.videoEdits93?.history?.length} onClick={()=>{try{onChange(undoMvInstruction93(p));notify('직전 장면 문구 복원 완료');}catch(e){notify(e.message);}}}>직전 수정 되돌리기</Button></div>
  <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
    <Button variant="primary" disabled={!review93||natural93Busy||imageBusy||videoBusy||personBusy||pvBusy||regen92Busy||!checkpoint||!videoModel} onClick={regenerateNatural93}>{natural93Busy?'실제 SD/SVD 생성 중…':'검토한 자연어 수정으로 실제 장면 영상 재생성'}</Button>
@@ -575,7 +628,7 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
   </div>
   {natural93Status&&<p role="status" className="muted">{natural93Status}</p>}
   <p className="muted">설치된 로컬 SD 모델로 수정된 장면 이미지를 새로 만들고 SVD 모델로 실제 움직이는 클립을 생성합니다. 등록된 인물·캐릭터는 먼저 허가된 사진·원화를 장면에 연결해야 합니다. 이전 이미지·영상은 덮어쓰지 않고 복원 이력에 남깁니다. GPU가 필요하며 짧은 SVD 클립은 장면 길이 동안 반복됩니다.</p>
-  {review93&&<p className="muted">적용 대기 · {review93.summary} · 다른 장면이나 원본 영상은 변경하지 않습니다.</p>}
+  {review93&&<p className="muted">적용 대기 · {review93.summary} · {review93.aiInterpretation51?'실제 로컬 Ollama '+review93.aiInterpretation51.model+'의 제안 초안 · ':''}다른 장면과 원본 영상은 변경하지 않습니다.</p>}
  <p className="muted">지원: 배경/장소, 의상/옷, 카메라, 표정/감정, 동작/행동, 조명 변경. 장면 타임라인·원본 사진·영상은 보존합니다. 잠긴 속성과 지원하지 않는 지시는 거부됩니다.</p>
  <p className="muted">추가 지시 예시: “이 장면만 비 오는 밤으로 바꿔”, “여기서는 카메라가 캐릭터 주변을 돌게 해”, “이 부분에서 주인공이 울지 말고 웃게 해”. 얼굴을 유지한 의상 변경은 등록 인물·캐릭터 원본이 연결된 장면에서만 검토할 수 있으며, 실제 얼굴 일치도는 로컬 모델 결과를 확인해야 합니다.</p>
  </Panel>
