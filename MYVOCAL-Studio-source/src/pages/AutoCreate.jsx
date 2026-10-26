@@ -5,15 +5,20 @@ import {validateGenreMix} from '../lib/genreMix';
 import GenreMixEditor from '../components/GenreMixEditor';
 import {virtualSingerProjectSelection,resolveVirtualSingerProfile} from '../lib/virtualSingerProjectBinding.js';
 import {ownedMusicGuideForProject8,validateOwnedMusicStyle8} from '../lib/ownedMusicStyle8.js';
+import {suggestOwnedMusicTempoKey8} from '../lib/ownedMusicTempoTonal8.js';
 const options=[['lyrics','가사 초안'],['composition','코드·작곡'],['arrangement','MIDI 편곡'],['singing','AI Singing (로컬 신경망 모델 필요)'],['mix','Mix 준비'],['master','Master 준비'],['storyboard','영상 장면 초안'],['musicVideo','AI Music Video (로컬 SD/SVD 모델 필요)']];
 export default function AutoCreate({data,createProject}){
- const [pipeline97,setPipeline97]=useState(true);const [title,setTitle]=useState('');const [prompt,setPrompt]=useState('');const [genreMix,setGenreMix]=useState([{name:'Rock',weight:100}]);const [genreAuto,setGenreAuto]=useState(false);const [mixError,setMixError]=useState('');const [virtualSingerId,setVirtualSingerId]=useState(''),[virtualSingerError,setVirtualSingerError]=useState('');const [voice,setVoice]=useState('');const [ownedStyleId,setOwnedStyleId]=useState('');const [videoMode,setVideoMode]=useState('auto');const [char,setChar]=useState('');const [withVideo,setWithVideo]=useState(true);const [selected,setSelected]=useState(Object.fromEntries(options.map(([k])=>[k,true])));
+ const [pipeline97,setPipeline97]=useState(true);const [title,setTitle]=useState('');const [prompt,setPrompt]=useState('');const [genreMix,setGenreMix]=useState([{name:'Rock',weight:100}]);const [genreAuto,setGenreAuto]=useState(false);const [mixError,setMixError]=useState('');const [virtualSingerId,setVirtualSingerId]=useState(''),[virtualSingerError,setVirtualSingerError]=useState('');const [voice,setVoice]=useState('');const [ownedStyleId,setOwnedStyleId]=useState('');const [useStyleBpmKey,setUseStyleBpmKey]=useState(false);const [videoMode,setVideoMode]=useState('auto');const [char,setChar]=useState('');const [withVideo,setWithVideo]=useState(true);const [selected,setSelected]=useState(Object.fromEntries(options.map(([k])=>[k,true])));
+ const analyzedStyle=(data.musicStyles||[]).find(p=>p.id===ownedStyleId);
+ const candidateStyleSettings=suggestOwnedMusicTempoKey8(analyzedStyle);
  const submit=(e,openMv=false)=>{e.preventDefault();try{const validated=validateGenreMix(genreMix);setMixError('');createProject({title:title.trim()||'새 음악 프로젝트',prompt:prompt.trim(),genre:validated[0].name,genreMix:validated,genreAuto,voiceId:voice,characterId:char,virtualSingerId,
  singingModelId:virtualSingerId?virtualSingerProjectSelection(virtualSingerId,data).singingModelId:'',
  singingStyle:virtualSingerId?virtualSingerProjectSelection(virtualSingerId,data).singingStyle:'Natural',
  ownedMusicGuide8:ownedStyleId?ownedMusicGuideForProject8(
    (data.musicStyles||[]).find(s=>s.id===ownedStyleId)
   ):null,
+  ownedMusicSuggested8:useStyleBpmKey&&candidateStyleSettings?
+   candidateStyleSettings:null,
   videoMode,withVideo,options:{...selected,storyboard:withVideo&&selected.storyboard,musicVideo:withVideo&&selected.musicVideo},pipeline97,openMv:openMv&&withVideo&&selected.musicVideo});}catch(err){setMixError(err.message);}};
  return <><SectionHead eyebrow="OFFLINE MUSIC WORKSPACE" title="음악과 뮤직비디오 만들기" description="설명과 장르를 입력하면 가사·코드·MIDI·장면 초안을 실제 편집 가능한 프로젝트로 만들고 엽니다. 신경망 실제 신경망 가창·영상은 아래 제작 화면에서 로컬 모델을 선택한 후 실행합니다."/><div className="two-column create-columns"><form className="panel create-form" onSubmit={submit}><div className="panel-top"><div><h3>새 프로젝트 설정</h3><p>기본 정보부터 원하는 창작 방향까지</p></div><span className="mini-step">01 / 03</span></div>
  <Field label="프로젝트 이름"><input value={title} maxLength={80} onChange={e=>setTitle(e.target.value)} placeholder="예: 다시 만나는 밤"/></Field>
@@ -42,12 +47,21 @@ export default function AutoCreate({data,createProject}){
  <div className="form-two"><Field label="목소리"><select value={voice} onChange={e=>{setVoice(e.target.value);setVirtualSingerId('');}}> <option value="">선택 안 함 (나중에 연결)</option>{data.voices.map(v=><option value={v.id} key={v.id}>{v.name}</option>)}</select></Field><div className="genre-auto-toggle"><label><input type="checkbox" checked={genreAuto} onChange={e=>setGenreAuto(e.target.checked)}/> AI AUTO (추후 AI 엔진 연결)</label><small>현재는 선택한 혼합 비율을 저장하고 로컬 작곡 기준으로 사용합니다.</small></div></div>
  {(data.musicStyles||[]).some(p=>p?.analysisSource==='actual-owned-local-pcm')&&
   <Field label="내 음악 스타일 재사용 (본인 음악 32구간 PCM 강약)">
-   <select value={ownedStyleId} onChange={e=>{setOwnedStyleId(e.target.value);setMixError('');}}>
+   <select value={ownedStyleId} onChange={e=>{setOwnedStyleId(e.target.value);setUseStyleBpmKey(false);setMixError('');}}>
     <option value="">새 곡 독립 제작 (이전 음악 스타일 미적용)</option>
     {(data.musicStyles||[]).filter(p=>{try{return validateOwnedMusicStyle8(p)}catch{return false}}).map(p=>
      <option key={p.id} value={p.id}>{p.name} · 원본 PCM 강약만 반영 · 멜로디/가사 미복제</option>)}
    </select>
    <small>Music Learning에서 권한 있는 원곡을 분석한 강약을 MusicGen 생성 구간 연출에 사용합니다.</small>
+   {ownedStyleId&&<div>
+    <p className="muted">실제 PCM 추정: BPM {candidateStyleSettings?.bpm??'판별 어려움'} · Key {candidateStyleSettings?.key??'판별 어려움'}
+     (템포 하프타임·전조·다른 화성 때문에 정확하지 않을 수 있습니다)</p>
+    <label><input type="checkbox" checked={useStyleBpmKey}
+     disabled={!candidateStyleSettings?.bpm&&!candidateStyleSettings?.key}
+     onChange={e=>setUseStyleBpmKey(e.target.checked)}/>
+     추정된 BPM·Key를 새 곡의 초기 설정으로 사용 (기존 곡은 변경하지 않음)</label>
+    {useStyleBpmKey&&<small>사용자가 선택한 BPM·Key를 기준으로 새로운 코드 진행을 생성합니다. 원곡 실제 멜로디·오디오·가사·코드를 복제하지 않습니다.</small>}
+   </div>}
   </Field>}
  <GenreMixEditor mix={genreMix} onChange={value=>{setGenreMix(value);setMixError('')}}/>{mixError&&<p className="genre-mix-validation" role="alert">{mixError}</p>}
  <div className="input-separator"/><div className="field-label">뮤직비디오 제작</div><div className="toggle-line"><div><strong>음악 + 영상 프로젝트</strong><p>영상 타임라인과 스토리보드를 함께 준비</p></div><input type="checkbox" checked={withVideo} onChange={e=>setWithVideo(e.target.checked)}/></div>
