@@ -53,7 +53,7 @@ export default function VoiceReplace54Panel({project,data,onChange,notify}){
    const result=await replace(previous,{
     ...(duet?{role:duetRole,harmonyDirection}: {targetTrackId:trackId}),
     voice,confirmed:true,
-    backend:'diffsinger',diffSingerModel:selected,singingStyle:style,
+    ...(duet?{model:selected}:{backend:'diffsinger',diffSingerModel:selected}),singingStyle:style,
     convertRVC:rvc,rvcOptions,registeredRVCModel:chosenRvc||null,
     session:window.__MYVOCAL_SESSION_KEY||'',signal:controller.signal,
     current:()=>latest.current,onChange:next=>{
