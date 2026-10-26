@@ -138,6 +138,7 @@ func (a *appServer) routes() *http.ServeMux {
  mux.HandleFunc("/api/training/diffsinger/status", a.diffSingerTrainingStatus)
  mux.HandleFunc("/api/training/diffsinger/cancel", a.diffSingerTrainingCancel)
  mux.HandleFunc("/api/training/diffsinger/model", a.diffSingerTrainingModel)
+ mux.HandleFunc("/api/training/diffsinger/dictionary", a.diffSingerTrainingDictionary)
 	mux.HandleFunc("/api/mv/lipsync2d", a.viseme2DRender)
  mux.HandleFunc("/api/training/rvc/start", a.rvcTrainingStart)
  mux.HandleFunc("/api/training/rvc/status", a.rvcTrainingStatus)
