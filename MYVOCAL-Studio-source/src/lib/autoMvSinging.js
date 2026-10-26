@@ -120,7 +120,10 @@ export async function generateAndStoreMvSinging(project,{
   result:'실제 신경망 WAV 생성 후 프로젝트 저장',notes:alignment.cues.length,engine:capabilities.name||'로컬 엔진'};
  guard();
  const saved=await persistNeuralVocalTake(project,files,{
-  ...saveOptions,signal,engineInfo:{port,modelId:model.id},job
+  ...saveOptions,signal,engineInfo:{port,modelId:model.id},job,
+  singerBinding:saveOptions.singerBinding||{
+   voiceId:voice.id,...(project.characterId?{characterId:project.characterId}:{})
+  }
  });
  onProgress('가창 WAV '+saved.assets+'개 프로젝트 자산 저장 완료');
  return {project:saved.project,vocalAssets:saved.assets,convertedWithRVC:convertRVC,modelId:model.id,
