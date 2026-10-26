@@ -21,7 +21,10 @@ export function trainedKoreanVoiceRoute(project,data){
   m.source==='official-diffsinger-acoustic-training');
  if(!matches.length)return null;
  matches.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
- const model=matches[0];
+ // Never override the deliberately selected Virtual Singer singing model.
+ const model=project.singingModelId?
+  matches.find(m=>m.id===project.singingModelId):matches[0];
+ if(!model)return null;
  return {backend:'diffsinger',voiceId:selected.id,modelId:model.id,
   trainingJobId:model.trainingJobId,experiment:model.experiment};
 }
