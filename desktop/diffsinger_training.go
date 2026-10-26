@@ -7,11 +7,14 @@ import (
  "bytes"
  "context"
  "crypto/rand"
+ "encoding/binary"
+ "encoding/csv"
  "encoding/hex"
  "encoding/json"
  "errors"
  "fmt"
  "io"
+ "math"
  "net/http"
  "os"
  "os/exec"
@@ -95,7 +98,7 @@ func unpackDiffSingerTrainingDataset(raw []byte,dir,voiceID string)(int,error){
  if e!=nil{return 0,errors.New("학습 ZIP을 읽을 수 없습니다")}
  if len(zr.File)<4||len(zr.File)>250{return 0,errors.New("학습 데이터 항목 개수가 유효하지 않습니다")}
  seen:=map[string]bool{};wavCount:=0;var size uint64
- var meta struct{Format string `json:"format"`;VoiceID string `json:"voiceId"`;Rights string `json:"rights"`;Phrases []json.RawMessage `json:"phrases"`}
+ var meta struct{Format string `json:"format"`;VoiceID string `json:"voiceId"`;Rights string `json:"rights"`;Reviewed bool `json:"phonemeDurationsReviewed"`;Phrases []json.RawMessage `json:"phrases"`}
  hasManifest,hasTranscript,hasDictionary:=false,false,false
  for _,f:=range zr.File{
   if !diffSingerTakeName.MatchString(f.Name)||seen[f.Name]||!f.Mode().IsRegular()||
@@ -127,7 +130,85 @@ func unpackDiffSingerTrainingDataset(raw []byte,dir,voiceID string)(int,error){
   closeErr:=out.Close();in.Close()
   if copyErr!=nil||closeErr!=nil||uint64(written)!=f.UncompressedSize64{return 0,errors.New("학습 ZIP 샘플 추출 실패")}
  }
+ // Explicitly reviewed phoneme durations are part of the real Acoustic
+ // training input. Validate that every CSV/DS row matches the corresponding
+ // WAV and review label before handing the data to the installed trainer.
+ if meta.Reviewed {
+  if err:=verifyReviewedDiffSingerDataset(dir,wavCount);err!=nil{return 0,err}
+ }
  return wavCount,nil
+}
+
+// Unreviewed legacy datasets remain compatible. A reviewed dataset must not
+// silently revert to MIDI-estimated durations or misassociate a different WAV.
+func verifyReviewedDiffSingerDataset(dir string,count int)error{
+ file,err:=os.Open(filepath.Join(dir,"transcriptions.csv"))
+ if err!=nil{return err}
+ defer file.Close()
+ reader:=csv.NewReader(io.LimitReader(file,2<<20))
+ rows,err:=reader.ReadAll()
+ if err!=nil||len(rows)!=count+1||len(rows[0])!=3||
+  rows[0][0]!="name"||rows[0][1]!="ph_seq"||rows[0][2]!="ph_dur"{
+  return errors.New("검수된 가창 학습 CSV의 음소/시간표 형식이 잘못됐습니다")
+ }
+ for i:=1;i<=count;i++{
+  key:=fmt.Sprintf("take-%03d",i)
+  row:=rows[i]
+  if len(row)!=3||row[0]!=key{return fmt.Errorf("%s 학습 CSV 순서가 실제 녹음과 다릅니다",key)}
+  scoreBytes,err:=os.ReadFile(filepath.Join(dir,"score",key+".ds"))
+  if err!=nil||len(scoreBytes)>1<<20{return fmt.Errorf("%s 실제 악보를 읽지 못했습니다",key)}
+  var scores []struct{PhSeq string `json:"ph_seq"`;PhDur string `json:"ph_dur"`}
+  if json.Unmarshal(scoreBytes,&scores)!=nil||len(scores)!=1||
+   scores[0].PhSeq!=row[1]||scores[0].PhDur!=row[2]{
+   return fmt.Errorf("%s 음소 검수 내용이 악보와 CSV에서 일치하지 않습니다",key)
+  }
+  labelBytes,err:=os.ReadFile(filepath.Join(dir,"labels",key+".json"))
+  if err!=nil||len(labelBytes)>1<<20{return fmt.Errorf("%s 음소 검수 라벨이 없습니다",key)}
+  var label struct{PhonemeTiming string `json:"phonemeTiming"`}
+  if json.Unmarshal(labelBytes,&label)!=nil||
+   label.PhonemeTiming!="user-reviewed durations, not automated forced alignment"{
+   return fmt.Errorf("%s 음소 길이 검수 출처가 없습니다",key)
+  }
+  phones,durations:=strings.Fields(row[1]),strings.Fields(row[2])
+  if len(phones)==0||len(phones)>4096||len(phones)!=len(durations){
+   return fmt.Errorf("%s 음소 수와 길이 수가 다릅니다",key)
+  }
+  total:=0.0
+  for _,item:=range durations{
+   seconds,err:=strconv.ParseFloat(item,64)
+   if err!=nil||math.IsNaN(seconds)||math.IsInf(seconds,0)||seconds<.005||seconds>20{
+    return fmt.Errorf("%s 음소별 길이가 유효하지 않습니다",key)
+   }
+   total+=seconds
+  }
+  wavPath:=filepath.Join(dir,"wavs",key+".wav")
+  wav,err:=os.Open(wavPath)
+  if err!=nil{return fmt.Errorf("%s 실제 WAV를 열 수 없습니다: %w",key,err)}
+  var header [44]byte
+  _,readErr:=io.ReadFull(wav,header[:])
+  info,statErr:=wav.Stat()
+  wav.Close()
+  if readErr!=nil||statErr!=nil||string(header[:4])!="RIFF"||
+   string(header[8:12])!="WAVE"||string(header[12:16])!="fmt "||
+   string(header[36:40])!="data"{
+   return fmt.Errorf("%s 실제 녹음 WAV 헤더가 잘못됐습니다",key)
+  }
+  channels:=binary.LittleEndian.Uint16(header[22:24])
+  rate:=binary.LittleEndian.Uint32(header[24:28])
+  bits:=binary.LittleEndian.Uint16(header[34:36])
+  audioBytes:=binary.LittleEndian.Uint32(header[40:44])
+  if binary.LittleEndian.Uint16(header[20:22])!=1||
+   (channels!=1&&channels!=2)||rate<16000||rate>96000||bits!=16||
+   uint64(audioBytes)+44!=uint64(info.Size())||audioBytes==0||
+   audioBytes%uint32(channels*2)!=0{
+   return fmt.Errorf("%s 검수 WAV의 실제 PCM 정보가 올바르지 않습니다",key)
+  }
+  actual:=float64(audioBytes)/float64(rate*uint32(channels)*2)
+  if math.Abs(total-actual)>.04{
+   return fmt.Errorf("%s 검수 음소 길이 %.3f초와 실제 WAV %.3f초가 다릅니다",key,total,actual)
+  }
+ }
+ return nil
 }
 
 func diffSingerCheckpointIn(dir string)(string,error){
