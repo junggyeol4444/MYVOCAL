@@ -3,6 +3,7 @@ import {AssetPreview,Button,Empty,Field,Icon,Modal,Notice,SectionHead,Status} fr
 import {genId,now,rightsOptions} from '../lib/schema';
 import {getFile,putFile,putFilesAtomic,deleteFilesAtomic} from '../lib/assetDb';
 import {sampleDependents,voiceDependents,voiceOwnedFileIds} from '../lib/voiceDeletionSafety.js';
+import {sha256File} from '../lib/voiceTraining.js';
 import {analyzeAudioFile,voiceAdvice} from '../lib/voiceAnalysis';
 import {VOICE_GUIDES,getVoiceGuide,checkSampleQuality,voiceDatasetSummary,downloadVoiceDataset} from '../lib/voiceDataset';
 
@@ -139,18 +140,49 @@ export default function Voices({data,add,remove,notify}){
   }catch(err){notify('삭제 실패 · 원본과 프로필 유지: '+err.message);}
   finally{setBusy(false)}
  };
+ const downloadArchivedCheckpoint=async model=>{
+  if(busy||recording)return;
+  setBusy(true);
+  try{
+   if(!model?.checkpointAssetId||!model.checkpointSha256||!Number.isSafeInteger(model.checkpointBytes))
+    throw Error('이전 모델 등록에는 가중치 원본이 저장되지 않았습니다. 학습 화면에서 별도 다운로드하세요.');
+   const file=await getFile(model.checkpointAssetId);
+   if(!(file instanceof Blob)||file.size!==model.checkpointBytes)
+    throw Error('보존된 DiffSinger 가중치 파일이 누락됐거나 크기가 다릅니다.');
+   const digest=await sha256File(file);
+   if(digest!==model.checkpointSha256)
+    throw Error('저장된 가중치 SHA-256이 등록 원본과 일치하지 않습니다. 내보내기를 중단했습니다.');
+   const objectUrl=URL.createObjectURL(file);
+   try{
+    const link=document.createElement('a');
+    link.href=objectUrl;link.download=model.checkpointName||'MYVOCAL-DiffSinger.ckpt';
+    document.body.appendChild(link);link.click();link.remove();
+   }finally{setTimeout(()=>URL.revokeObjectURL(objectUrl),20000);}
+   notify('저장된 실제 DiffSinger Acoustic 가중치 SHA-256 확인 후 파일 다운로드를 시작했습니다.');
+  }catch(error){notify('DiffSinger 가중치 보존본 내보내기 실패: '+error.message);}
+  finally{setBusy(false);}
+ };
  return <><SectionHead eyebrow="VOICE DATASET · RECORDING GUIDE · SIGNAL QUALITY" title="Voice Studio" description="원본 목소리와 녹음·품질을 관리하고, Singing Workbench에서 로컬 RVC/DiffSinger 학습·추론을 실행해 생성한 모델 기록을 연결합니다. 실기기 호환성은 별도 확인 대상입니다." action={<Button variant="primary" icon="plus" onClick={()=>setOpen(true)}>새 목소리 등록</Button>}/>
  <div className="feature-strip"><div className="feature-symbol"><Icon name="mic" size={28}/></div><div><strong>VOICE MODEL ≠ SINGING STYLE</strong><p>목소리 원본과 스타일을 분리해 관리합니다. 녹음 가이드와 데이터셋 내보내기를 제공하며 v1.0의 Voice Training에서 학습 준비 작업을 관리합니다. AI 가수 생성은 아직 아닙니다.</p></div><Status>학습 엔진 미연결</Status></div>
  {data.voices.length?<div className="voice-profile-list">{data.voices.map(v=>{
   const samples=[...(v.assetId?[{id:v.assetId,fileName:v.fileName,analysis:v.analysis,analysisError:v.analysisError,capturePromptId:v.capturePromptId||'',notes:v.notes||'',original:true}]:[]),...(v.assets||[])];
   const best=samples.find(x=>x.analysis)?.analysis;const isExpanded=expanded===v.id;const summary=voiceDatasetSummary(v);const guideActive=guideOpen===v.id;const done=new Set(summary.completedIds);
-  const trainedModelCount=(data.voiceModels||[]).filter(m=>m.voiceId===v.id&&m.engineId==='diffsinger'&&m.status==='checkpoint-produced-in-unverified-environment').length;
+  const trainedModels=(data.voiceModels||[]).filter(m=>m.voiceId===v.id&&m.engineId==='diffsinger'&&m.status==='checkpoint-produced-in-unverified-environment');
+  const trainedModelCount=trainedModels.length;
   return <section className="voice-profile-card" key={v.id}>
    <div className="voice-profile-top"><div className="voice-profile-icon"><Icon name="mic" size={26}/></div><div className="voice-profile-title"><span className="eyebrow">LOCAL VOICE PROFILE</span><h3>{v.name}</h3><p>{v.style} · {rightsOptions.find(x=>x.value===v.rights)?.label||v.rights} · 샘플 {samples.length}개</p></div><Status>{trainedModelCount?'로컬 Acoustic 학습 체크포인트 등록 '+trainedModelCount+'개 · 추론 미검증':'로컬 Singing 모델 미등록'}</Status><button className="icon-btn danger" onClick={()=>deleteVoice(v)} title="프로필 삭제"><Icon name="trash" size={17}/></button></div>
    <div className="voice-summary"><div><span>대표 추정 음정</span><strong>{best?.medianNote||'—'}</strong></div><div><span>측정 음역</span><strong>{best?.voicedFrames?`${best.lowNote} ~ ${best.highNote}`:'측정 전'}</strong></div><div><span>샘플 파일</span><strong>{samples.length}개</strong></div></div>
    <div className="voice-v06-summary"><div className="voice-v06-progress-head"><strong>녹음 가이드 충족 {summary.completed} / {summary.count}</strong><span>품질 확인 샘플 {summary.passed}/{summary.total} · 총 약 {summary.seconds}초</span></div><div className="voice-v06-progress"><i style={{width:summary.percent+'%'}}/></div><p>가이드 완료 여부는 사용자가 선택한 발음 라벨과 음향 품질만 확인합니다. 실제 발음이나 음역대가 맞는지는 자동 검증하지 않습니다.</p></div>
    <div className="voice-profile-actions"><Button icon="wave" onClick={()=>setExpanded(isExpanded?'':v.id)}>{isExpanded?'샘플·분석 접기':'샘플·분석 보기'}</Button><input id={'voice-add-'+v.id} type="file" multiple accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm" hidden onChange={e=>{const list=e.target.files;if(list?.length)addSamples(v,list);e.target.value='';}}/><Button icon="plus" disabled={busy} onClick={()=>document.getElementById('voice-add-'+v.id)?.click()}>샘플 추가</Button><Button icon="mic" onClick={()=>{setGuideOpen(guideActive?'':v.id);setExpanded(v.id);setGuideFile(null);}}>녹음 가이드</Button><Button icon="download" disabled={busy||recording||!samples.length} onClick={()=>downloadDataset(v)}>데이터셋 ZIP 내보내기</Button></div>
    {guideActive&&<div className="voice-guide-panel"><div className="voice-guide-heading"><strong>발음 · 음역별 샘플 녹음</strong><span>학습용 데이터 수집 단계 — AI 모델 학습은 수행하지 않음</span></div><div className="voice-guide-checklist">{VOICE_GUIDES.map(g=><button key={g.id} type="button" className={'voice-guide-chip '+(guideTarget===g.id?'active ':'')+(done.has(g.id)?'complete':'')} onClick={()=>{setGuideTarget(g.id);setGuideFile(null);}}><span>{done.has(g.id)?'✓ ':'○ '}{g.title}</span></button>)}</div><div className="voice-guide-instructions"><strong>{getVoiceGuide(guideTarget)?.title}</strong><p>{getVoiceGuide(guideTarget)?.prompt}</p><small>{getVoiceGuide(guideTarget)?.notes}</small></div><div className="voice-guide-controls"><label className="voice-guide-file">오디오 파일 선택 <input aria-label="가이드 샘플 오디오 선택" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm" disabled={recording||busy} onChange={e=>{const f=e.target.files?.[0];if(checkFile(f))setGuideFile(f);e.target.value='';}}/></label>{recording?<Button icon="wave" onClick={stopRecord}>■ 녹음 중지 ({niceTime(elapsed)})</Button>:<Button icon="mic" disabled={busy} onClick={()=>startRecord('guide')}>가이드 마이크 녹음</Button>}<input type="text" aria-label="샘플 메모" placeholder="메모 (선택)" value={guideNotes} onChange={e=>setGuideNotes(e.target.value)} maxLength={150}/><Button variant="primary" icon="save" disabled={busy||recording||!guideFile} onClick={()=>saveGuide(v)}>이 가이드에 샘플 저장</Button></div>{guideFile&&<p className="voice-guide-selected">선택한 파일: {guideFile.name} · {(guideFile.size/1024/1024).toFixed(2)}MB</p>}<p className="voice-guide-caveat">무리해서 고음을 내지 마세요. 진짜 발음 일치·목소리 신원·학습 적합성은 검사하지 않습니다. 권한이 있는 목소리만 녹음하세요.</p></div>}
+   {isExpanded&&trainedModels.length>0&&<div className="voice-samples">
+    <strong>로컬 DiffSinger 가창 학습 모델 · 실제 가중치 보존본</strong>
+    {trainedModels.map(model=><div className="voice-sample-head" key={model.id}>
+     <span>{model.experiment||model.name} · {model.checkpointAssetId?'가중치 보존':'경로만 등록된 기존 기록'}</span>
+     <Button icon="download" disabled={busy||recording||!model.checkpointAssetId}
+      onClick={()=>downloadArchivedCheckpoint(model)}>원본 Acoustic 가중치 다운로드</Button>
+    </div>)}
+   </div>}
    {isExpanded&&<div className="voice-samples">{samples.length?samples.map((s,i)=><div className="voice-sample" key={s.id}><div className="voice-sample-head"><strong>샘플 {i+1} · {s.fileName||'녹음 파일'}</strong><span>{s.analysis?`분석 완료 · ${niceTime(s.analysis.duration)}`:s.analysisError?'분석 불가':'분석 전'}</span></div><div className="voice-v06-tag-row"><label>녹음 가이드 <select aria-label={'샘플 '+(i+1)+' 발음 음역 라벨'} value={s.capturePromptId||''} onChange={e=>updateSample(v,s,{capturePromptId:e.target.value})}><option value="">지정하지 않음</option>{VOICE_GUIDES.map(g=><option key={g.id} value={g.id}>{g.title}</option>)}</select></label><span className={'voice-v06-quality quality-'+checkSampleQuality(s.analysis).status}>{checkSampleQuality(s.analysis).title}</span></div><div className="voice-v06-issues">{checkSampleQuality(s.analysis).issues.map((issue,j)=><span key={j}>• {issue}</span>)}</div><AssetPreview id={s.id} kind="audio"/>{s.analysis?<AnalysisView analysis={s.analysis}/>:<p className="voice-no-data">{s.analysisError||'원본 파일은 보관 중이지만 분석하지 않았습니다.'}</p>}<label className="voice-v06-note">샘플 메모 <input key={s.id} type="text" defaultValue={s.notes||''} maxLength={150} placeholder="발성이나 녹음 상태 기록" onBlur={e=>{if((s.notes||'')!==e.target.value)updateSample(v,s,{notes:e.target.value});}}/></label><div className="voice-sample-actions"><Button disabled={busy} icon="wave" onClick={()=>rerun(v,s)}>다시 분석</Button><Button disabled={busy} icon="trash" onClick={()=>deleteSample(v,s)}>샘플 삭제</Button></div></div>):<div className="voice-not-analyzed">이 프로필에 저장된 오디오가 없습니다. 샘플 추가 버튼으로 음성 파일을 넣어 주세요.</div>}</div>}
   </section>;
  })}</div>:<Empty icon="mic" title="등록한 목소리가 없습니다" description="마이크로 직접 녹음하거나 오디오 파일을 등록해 주세요. 기초 피치 분석이 함께 제공됩니다." action={<Button variant="primary" icon="mic" onClick={()=>setOpen(true)}>내 목소리 등록</Button>}/>}
