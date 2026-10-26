@@ -48,8 +48,7 @@ func refreshAssetList(){
   text:=fmt.Sprintf("[%s] %s",a.Kind,a.Path)
   sendMessage.Call(assetUI.list,lbAddString,0,uintptr(unsafe.Pointer(utf16(text))))
  }
- if path=="" {setText(assetUI.status,"선택된 프로젝트 없음")}
- else{setText(assetUI.status,fmt.Sprintf("%s: 등록된 자산 %d개  |  원본 파일을 수정하지 않습니다.",p.Name,len(p.Assets)))}
+ if path=="" {setText(assetUI.status,"선택된 프로젝트 없음")} else{setText(assetUI.status,fmt.Sprintf("%s: 등록된 자산 %d개  |  원본 파일을 수정하지 않습니다.",p.Name,len(p.Assets)))}
  refreshProjectStatus()
 }
 func chooseLocalMedia() (string,bool) {
