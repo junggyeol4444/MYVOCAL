@@ -5,10 +5,12 @@ package main
 import (
  "errors"
  "fmt"
+ "os"
  "path/filepath"
  "strconv"
  "strings"
  "syscall"
+ "unicode/utf8"
  "unsafe"
 )
 
@@ -20,6 +22,7 @@ const (
  idProjectSave=123
  idProjectEditorSave=741
  idProjectEditorClose=742
+ idProjectLyricImport=743
 )
 type projectWinUI struct {
  hwnd uintptr
@@ -56,6 +59,14 @@ func chooseNativeProjectFile()(string,bool){
  if filepath.Base(path)!="project.json"{showError(errors.New("project.json 파일을 선택하세요"));return "",false}
  return path,true
 }
+func chooseLocalLyricsTXT()(string,bool){
+ var buf [32768]uint16
+ filter:=syscall.StringToUTF16("한국어 가사 텍스트\x00*.txt\x00\x00")
+ opts:=openFileName{Size:uint32(unsafe.Sizeof(openFileName{})),Owner:projectWin.hwnd,File:&buf[0],MaxFile:uint32(len(buf)),Filter:&filter[0],Flags:0x00000800|0x00080000|0x00001000}
+ found,_,_:=openDialog.Call(uintptr(unsafe.Pointer(&opts)))
+ if found==0{return "",false}
+ return syscall.UTF16ToString(buf[:]),true
+}
 func projectWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
  switch message{
  case wmCreate:
@@ -71,6 +82,7 @@ func projectWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr
   sendMessage.Call(projectWin.lyrics,0x00C5,300000,0)
   callCreate("BUTTON","프로젝트 저장",wsVisible|wsChild,22,679,230,38,hwnd,idProjectEditorSave)
   callCreate("BUTTON","편집 창 닫기",wsVisible|wsChild,265,679,180,38,hwnd,idProjectEditorClose)
+  callCreate("BUTTON","가사 TXT 불러오기",wsVisible|wsChild,460,679,190,38,hwnd,idProjectLyricImport)
   projectWin.status=callCreate("STATIC","",wsVisible|wsChild,22,728,800,48,hwnd,0)
   loadProjectEditorFields()
   return 0
@@ -80,6 +92,20 @@ func projectWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr
    if err:=saveProjectEditorFields();err!=nil{showError(err)}else{
     appendLog("\r\n네이티브 프로젝트 정보·가사 저장 완료\r\n")
     refreshProjectStatus()
+   }
+   return 0
+  }
+  if id==idProjectLyricImport{
+   if path,ok:=chooseLocalLyricsTXT();ok{
+    stat,err:=os.Lstat(path)
+    if err==nil&&(!stat.Mode().IsRegular()||stat.Size()>300000){err=errors.New("가사 텍스트는 300KB 이하의 일반 파일이어야 합니다")}
+    if err==nil{
+     var raw []byte
+     raw,err=os.ReadFile(path)
+     if err==nil&&!utf8.Valid(raw){err=errors.New("가사 TXT는 UTF-8 인코딩이어야 합니다")}
+     if err==nil{setText(projectWin.lyrics,string(raw))}
+    }
+    if err!=nil{showError(err)}
    }
    return 0
   }
