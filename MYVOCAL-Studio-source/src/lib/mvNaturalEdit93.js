@@ -59,6 +59,18 @@ export function applyMvInstruction93(project,plan){
  }
  const historyEntry=multi?{sceneId:plan.sceneId,changes:changes.map(({field,before,after})=>({field,before,after}))}:
   {sceneId:plan.sceneId,field:plan.field,before:plan.before,after:plan.after};
+ // The actual local model is user-selected and its result is never applied
+ // without this same reviewed, lock-safe original Step93 transition.
+ if(plan.aiInterpretation51?.provider==='local-ollama'&&
+  /^[a-zA-Z0-9][a-zA-Z0-9_.:/-]{0,119}$/.test(plan.aiInterpretation51.model||'')&&
+  typeof plan.aiInterpretation51.originalInstruction==='string'&&
+  plan.aiInterpretation51.originalInstruction.length<=1000){
+  historyEntry.aiInterpretation51={
+   provider:'local-ollama',model:plan.aiInterpretation51.model,
+   originalInstruction:plan.aiInterpretation51.originalInstruction,
+   reviewedByUser:true,neuralMediaGenerated:false
+  };
+ }
  const history=[...(project.videoEdits93?.history||[]),historyEntry].slice(-20);
  const patch=Object.fromEntries(changes.map(c=>[c.field,c.after]));
  return {...project,scenes:project.scenes.map(s=>s.id===plan.sceneId?{...s,...patch}:s),
