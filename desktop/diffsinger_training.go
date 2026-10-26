@@ -203,9 +203,7 @@ func (a *appServer) diffSingerTrainingStart(w http.ResponseWriter,r *http.Reques
   if runErr==nil{checkpoint,runErr=diffSingerCheckpointIn(output)}
   j.mu.Lock()
   if j.id==id{
-   if ctx.Err()!=nil{j.state="cancelled";j.message="실제 신경망 학습이 중지되거나 실행 제한 시간에 도달했습니다"}
-   else if runErr!=nil{j.state="failed";j.message="설치된 학습 엔진 실행 실패: "+runErr.Error()}
-   else {j.state="completed";j.message="실제 가중치 파일 생성됨. 추론 호환성과 한국어 발음·음질은 미확인";j.checkpoint=checkpoint}
+   if ctx.Err()!=nil {j.state="cancelled";j.message="실제 신경망 학습이 중지되거나 실행 제한 시간에 도달했습니다"} else if runErr!=nil {j.state="failed";j.message="설치된 학습 엔진 실행 실패: "+runErr.Error()} else {j.state="completed";j.message="실제 가중치 파일 생성됨. 추론 호환성과 한국어 발음·음질은 미확인";j.checkpoint=checkpoint}
    j.cancel=nil
   }
   j.mu.Unlock()
