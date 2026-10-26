@@ -115,6 +115,7 @@ func (a *appServer) routes() *http.ServeMux {
  mux.HandleFunc("/api/motion/pose", a.motionPoseAnalyze)
  mux.HandleFunc("/api/music/midi/soundfont", a.midiSoundfont)
 	mux.HandleFunc("/api/local-ai/storyboard", a.localAIStoryboard)
+ mux.HandleFunc("/api/local-ai/mv-edit", a.localAIMVEdit)
 	mux.HandleFunc("/api/images/health", a.imageHealth)
 	mux.HandleFunc("/api/images/generate", a.imageGenerate)
 	mux.HandleFunc("/api/person-mv/generate", a.personMVGenerate)
