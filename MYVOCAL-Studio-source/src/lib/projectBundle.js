@@ -114,7 +114,19 @@ export async function importProjectBundle(file){
  project={...project,id:genId('prj'),title:project.title+' (복원)',createdAt:now(),updatedAt:now(),voiceId:mapping[project.voiceId]||project.voiceId||'',characterId:mapping[project.characterId]||project.characterId||'',...(project.singingEngine?.modelId&&modelIdMap[project.singingEngine.modelId]?{singingEngine:{...project.singingEngine,modelId:modelIdMap[project.singingEngine.modelId]}}:{}),
  ...(project.singingModelId?{singingModelId:modelIdMap[project.singingModelId]||project.singingModelId}:{}),
  ...(project.virtualSingerId?{virtualSingerId:virtualSingerIdMap[project.virtualSingerId]||project.virtualSingerId}:{}),tracks:project.tracks.map(t=>({...t,id:genId('trk'),clips:(t.clips||[]).map(c=>({...c,id:genId('clip'),assetId:assetMap[c.assetId]||c.assetId}))})),scenes:(project.scenes||[]).map(s=>({...s,id:genId('scn'),characterId:mapping[s.characterId]||s.characterId||'',...(s.personMv?{personMv:{...s.personMv,personId:mapping[s.personMv.personId]||s.personMv.personId,referenceAssetId:assetMap[s.personMv.referenceAssetId]||s.personMv.referenceAssetId}}:{}),...(s.characterMv?{characterMv:{...s.characterMv,characterId:mapping[s.characterMv.characterId]||s.characterMv.characterId,referenceAssetId:assetMap[s.characterMv.referenceAssetId]||s.characterMv.referenceAssetId}}:{}),...(s.imageAssetId?{imageAssetId:assetMap[s.imageAssetId]||s.imageAssetId}:{}),...(s.videoClipAssetId?{videoClipAssetId:assetMap[s.videoClipAssetId]||s.videoClipAssetId}:{}),...(s.videoGeneration?{videoGeneration:{...s.videoGeneration,sourceKey:""}}:{}),...(s.characterReplace94?{characterReplace94:{...s.characterReplace94,history:(s.characterReplace94.history||[]).map(h=>({...h,scene:patchHistoricalScene(h.scene||{})}))}}:{}),...(s.regeneration92?{regeneration92:{...s.regeneration92,sourceAssetId:assetMap[s.regeneration92.sourceAssetId]||s.regeneration92.sourceAssetId,history:(s.regeneration92.history||[]).map(h=>({...h,imageAssetId:assetMap[h.imageAssetId]||h.imageAssetId,videoClipAssetId:assetMap[h.videoClipAssetId]||h.videoClipAssetId}))}}:{}),...(s.imageGeneration?{imageGeneration:{...s.imageGeneration,key:''}}:{})}))};
- if(Array.isArray(original.deliverables))project.deliverables=original.deliverables.map(o=>({...o,assetId:assetMap[o.assetId]||o.assetId}));
+ // Original #36: scene-level directions derived from the real user's drum
+  // PCM must reference the regenerated project track and restored WAV asset.
+  project.scenes=project.scenes.map(scene=>{
+   const rhythm=scene.rhythmDirection36;
+   if(!rhythm)return scene;
+   const index=oldTrackIds.indexOf(rhythm.sourceTrackId);
+   const newAsset=assetMap[rhythm.sourceAssetId];
+   if(index<0||!project.tracks[index]?.id||!newAsset)
+    throw Error('백업의 실제 드럼 기반 MV 장면에 음원 원본이나 트랙이 누락됐습니다.');
+   return {...scene,rhythmDirection36:{...rhythm,
+    sourceTrackId:project.tracks[index].id,sourceAssetId:newAsset}};
+  });
+  if(Array.isArray(original.deliverables))project.deliverables=original.deliverables.map(o=>({...o,assetId:assetMap[o.assetId]||o.assetId}));
  // 실제 두 Voice·캐릭터와 기존 독립 WAV 트랙 연결을 복원 후 신규 ID로 갱신.
  // 다른 사람의 백업 원본·기존 라이브러리 파일을 덮어쓰거나 교체하지 않는다.
  if(original.duetSingers?.version===1){
