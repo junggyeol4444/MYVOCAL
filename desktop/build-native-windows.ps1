@@ -46,4 +46,4 @@ if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 Compress-Archive -LiteralPath @($exe, $workers, $guide) -DestinationPath $zip
 Write-Host "Native EXE: $exe"
 Write-Host "Package: $zip"
-Write-Host '원본 HTML/JS 소스·사용자 데이터는 삭제하지 않았습니다.'
+Write-Host 'MYVOCAL 네이티브 Windows EXE와 오프라인 엔진 패키지 생성 완료.'
