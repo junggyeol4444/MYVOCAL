@@ -5,6 +5,7 @@
 import {characterArtworkAssets,validateCharacterArtwork,generateCharacterMvImage} from './characterToMv.js';
 import {personPhotoAssets,validatePersonSource,generatePersonMvImage} from './imageToMv.js';
 import {checkComfy,validateGeneratedImage} from './mvSceneImages.js';
+import {attachIdentityLoRA} from './characterIdentityLoRA.js';
 import {readSourceFrame} from './mvSceneVideos.js';
 import {getFile,putFileNew,removeFile} from './assetDb.js';
 import {normalizeCharacterIdentity,MAX_CHARACTER_ASSETS} from './characterIdentity.js';
@@ -24,7 +25,7 @@ const authorized=profile=>!!profile&&
  ['owned','self'].includes(profile.rights)||(profile.rights==='licensed'&&!!safe(profile.rightsNote)));
 const originalAssets=profile=>profile?.kind==='person'?personPhotoAssets(profile):characterArtworkAssets(profile);
 function snapshot(p){return JSON.stringify({id:p.id,name:p.name,kind:p.kind,rights:p.rights,
- rightsNote:p.rightsNote,appearance:p.appearance,assets:p.assets});}
+ rightsNote:p.rightsNote,appearance:p.appearance,assets:p.assets,identityTraining:p.identityTraining});}
 function guard(p,current,signal){
  if(signal?.aborted||typeof current!=='function'||current()!==p)
   throw Error('생성 취소 또는 캐릭터 원본 변경. 기존 자료는 유지됩니다.');
@@ -93,7 +94,8 @@ export async function generateStyleTransferCandidates(profile,options,{
   onProgress(index,4,'실제 설치 SD 추론 '+(index+1)+' / 4');
   const payload={port:options.port,checkpoint:options.checkpoint,imageData,
    prompt,negative,width:768,height:768,steps:24,denoise:options.denoise,seed};
-  const blob=await (profile.kind==='person'?personInference:characterInference)(payload,session,signal);
+  const blob=await (profile.kind==='person'?personInference:characterInference)(
+   attachIdentityLoRA(payload,profile),session,signal);
   guard(profile,current,signal);
   validateGeneratedImage(blob);
   candidates.push({blob,seed,style:options.style,sourceAssetId:source.id});
