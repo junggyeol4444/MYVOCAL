@@ -1,4 +1,4 @@
-import React,{useRef,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {Button,Notice,Panel} from './UI';
 import {planMvBatch,runMvBatch} from '../lib/mvBatchProduction.js';
 import {runFullLocalMv} from '../lib/fullMvProduction.js';
@@ -64,13 +64,32 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [duetLeadCharacterId,setDuetLeadCharacterId]=useState(''),[duetHarmonyCharacterId,setDuetHarmonyCharacterId]=useState('');
  const [makeNeuralAdlib,setMakeNeuralAdlib]=useState(false);
  const [alsoConvertRVC,setAlsoConvertRVC]=useState(false),[registeredRVCId,setRegisteredRVCId]=useState('');
- const [makeAutoScore,setMakeAutoScore]=useState(false),[scoreModel,setScoreModel]=useState('');
+ const [makeAutoScore,setMakeAutoScore]=useState(()=>
+  project.productionLaunch55?.version===1&&
+  (project.productionLaunch55?.requested?.lyrics===true||
+   project.productionLaunch55?.requested?.composition===true));
+ const [scoreModel,setScoreModel]=useState('');
  const [makeNeuralSceneDirection,setMakeNeuralSceneDirection]=useState(false);
  const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(''),[soundfontFile,setSoundfontFile]=useState('');
  const [makeNeuralAudioStems,setMakeNeuralAudioStems]=useState(false);
  const [stemExportRole,setStemExportRole]=useState('melody'),[stemExportBusy,setStemExportBusy]=useState(false),[stemExportStatus,setStemExportStatus]=useState('');
  const [scoreModels,setScoreModels]=useState([]),[scorePrompt,setScorePrompt]=useState(project.title||'');
  const [scoreModelError,setScoreModelError]=useState('');
+ // Resolve the models already installed on this Windows PC for the one-click
+ // flow. Never download or silently substitute a different model.
+ useEffect(()=>{
+  if(project.productionLaunch55?.version!==1||
+     !(project.productionLaunch55?.requested?.lyrics||
+       project.productionLaunch55?.requested?.composition))return;
+  let active=true;
+  getInstalledLocalModels().then(names=>{
+   if(!active)return;
+   setScoreModels(names);
+   setScoreModel(previous=>previous&&names.includes(previous)?previous:names[0]||'');
+   if(!names.length)setScoreModelError('PC에 설치된 로컬 작사·작곡 Ollama 모델이 없습니다.');
+  }).catch(err=>{if(active)setScoreModelError('로컬 작사 모델 조회 실패: '+err.message);});
+  return()=>{active=false};
+ },[project.id,project.productionLaunch55?.version]);
  const [faceNeuralSync,setFaceNeuralSync]=useState(false),[personId,setPersonId]=useState('');
  const [faceRights,setFaceRights]=useState(false),[faceModelRights,setFaceModelRights]=useState(false);
  const [facePython,setFacePython]=useState(''),[faceRoot,setFaceRoot]=useState(''),[faceCheckpoint,setFaceCheckpoint]=useState('');
