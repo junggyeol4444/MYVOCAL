@@ -24,7 +24,8 @@ $required = @(
   'musicgen_worker.py',
   'rvc_official_worker.py', 'rvc_pitch_coverage.py',
   'rvc_training_dataset_quality.py', 'rvc_inference_audio_quality.py',
-  'music_stems_worker.py', 'score_vocal_worker.py', 'viseme_2d_worker.py'
+  'music_stems_worker.py', 'score_vocal_worker.py', 'viseme_2d_worker.py',
+  'midi_soundfont_worker.py'
 )
 foreach ($name in $required) {
     $source = Join-Path $PSScriptRoot $name
