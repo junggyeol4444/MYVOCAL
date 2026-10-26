@@ -20,6 +20,15 @@ export function buildSceneImageRequest(project,scene,character=null,direction=nu
  // Preserve exact Step77/78 fingerprints for legacy scenes; append a photo identity only for Step79 scenes.
  if(scene.personMv)fingerprint.push(scene.characterId||'',scene.personMv.personId||'',scene.personMv.referenceAssetId||'',scene.personMv.denoise??null);
  if(scene.characterMv)fingerprint.push('Step80-character',scene.characterId||'',scene.characterMv.characterId||'',scene.characterMv.referenceAssetId||'',scene.characterMv.denoise??null);
+ const rhythm=scene.generatedBy==='full-song-auto-scene'&&
+  scene.rhythmDirection36?.version===1&&
+  scene.rhythmDirection36?.source==='real-stored-drums-pcm'&&
+  (project.tracks||[]).some(t=>t.id===scene.rhythmDirection36.sourceTrackId&&
+   t.clips?.some(c=>c.assetId===scene.rhythmDirection36.sourceAssetId))?
+  scene.rhythmDirection36:null;
+ if(rhythm)fingerprint.push('real-drum-pcm-direction-v1',
+  rhythm.sourceTrackId,rhythm.sourceAssetId,rhythm.bucket,rhythm.energy,
+  rhythm.svdMotionBucket);
  const identityLoRA=activeIdentityLoRA(character);
  if(identityLoRA&&(scene.personMv||scene.characterMv||
     ['person','character'].includes(autoReference?.kind)))
@@ -37,6 +46,7 @@ export function buildSceneImageRequest(project,scene,character=null,direction=nu
   scene.expression&&`Facial expression: ${text(scene.expression)}`,
   scene.action&&`Action: ${text(scene.action)}`,scene.camera&&`Camera: ${text(scene.camera)}`,
   scene.lighting&&`Lighting: ${text(scene.lighting)}`,
+  rhythm&&`Actual original drum PCM guided composition: ${text(rhythm.imageDirection,200)}`,
   scene.characterLookId&&scene.characterLookHair&&`Selected hairstyle: ${text(scene.characterLookHair,180)}`,
   scene.characterLookId&&scene.characterLookAccessories&&`Selected accessories: ${text(scene.characterLookAccessories,180)}`,
   measuredStyle&&`MV reference video measured color palette RGB ${measuredStyle.color.join(', ')}, measured brightness grade ${measuredStyle.brightness}, contrast ${measuredStyle.contrast}`,
