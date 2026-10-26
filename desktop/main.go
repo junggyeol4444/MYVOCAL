@@ -40,6 +40,7 @@ type appServer struct {
 	manager     managedEngine
  training    rvcTrainingManager
  diffSingerTraining diffSingerTrainingJob
+ characterTraining characterTrainJob
 	migrationMode bool
  nativeInprocess bool
  hostMode string
@@ -139,6 +140,10 @@ func (a *appServer) routes() *http.ServeMux {
  mux.HandleFunc("/api/training/diffsinger/cancel", a.diffSingerTrainingCancel)
  mux.HandleFunc("/api/training/diffsinger/model", a.diffSingerTrainingModel)
  mux.HandleFunc("/api/training/diffsinger/dictionary", a.diffSingerTrainingDictionary)
+ mux.HandleFunc("/api/training/character/start", a.characterTrainStart)
+ mux.HandleFunc("/api/training/character/status", a.characterTrainStatus)
+ mux.HandleFunc("/api/training/character/cancel", a.characterTrainCancel)
+ mux.HandleFunc("/api/training/character/model", a.characterTrainModel)
 	mux.HandleFunc("/api/mv/lipsync2d", a.viseme2DRender)
  mux.HandleFunc("/api/training/rvc/start", a.rvcTrainingStart)
  mux.HandleFunc("/api/training/rvc/status", a.rvcTrainingStatus)
@@ -314,6 +319,7 @@ func run() error {
  defer app.stopManagedEngine()
  defer app.training.stop()
  defer app.diffSingerTraining.stop()
+ defer app.characterTraining.stop()
  // Experimental direct WebView2 handler. Preserve the existing fixed origin
  // and legacy network mode unless explicitly opted in for Windows GUI testing.
  if mode==hostWebView2 && os.Getenv("MYVOCAL_NATIVE_INPROCESS")=="1" {
