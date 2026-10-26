@@ -1,34 +1,48 @@
-# MYVOCAL Studio — 네이티브 EXE 개발 현황
+# MYVOCAL Studio — Windows EXE 개발 상태
 
-기존 웹 UI(React/HTML/HTTP/WebView2)를 EXE 창에 표시하는 방식은 사용자 요구와 다르므로, 별도 Windows Win32 컨트롤 기반 네이티브 GUI 소스를 구현했다.
+## 사용자 지정 출력
 
-- 실제 빌드 실행 경로: desktop/build-windows.ps1 → desktop/build-native-windows.ps1
-- 네이티브 GUI: desktop/native/main_windows.go
-- 실제 로컬 엔진 직결: desktop/native/runner.go
-- 기존 Python 근거 소스: desktop/musicgen_worker.py, rvc_official_worker.py, music_stems_worker.py, score_vocal_worker.py, viseme_2d_worker.py
-- HTTP 리스너, HTML 페이지, 브라우저, WebView2, 로컬 웹 서버를 새 네이티브 GUI에서 실행하지 않음. 외부 모델 다운로드도 하지 않음.
-- 원본 HTML·React 프로젝트 및 기존 사용자 브라우저 프로필·IndexedDB는 삭제하거나 자동으로 이전하지 않음. 기존 프로젝트 데이터는 그대로 남음.
+- 실행 파일: Windows 10/11 x64 네이티브 Win32 GUI `MYVOCAL-Studio.exe`
+- GUI: Win32 버튼·입력·목록·파일 선택·폴더 선택, Windows API 사용
+- 사용 금지: 웹 UI, HTML, HTTP 서버, 브라우저, WebView2
+- 외부 사이트·클라우드 서버 사용하지 않음. 설치된 로컬 Python/모델은 직접 실행.
+- 사용자 자료는 임의 삭제·덮어쓰기·이동하지 않음.
 
-## 현재 연결된 일부 기능
+## 2026-10-27 main 웹 소스 제거
 
-1. 기존 로컬 MusicGen 모델로 실제 WAV 생성 (새 출력 파일만 생성)
-2. 설치된 공식 RVC를 통한 녹음 데이터셋 학습·신규 모델 생성
-3. 기존 로컬 Demucs로 4/6개 음원 stem 분리
-4. 원본 가창 WAV와 MIDI 음표 JSON을 이용한 오프라인 음정 보정
-5. 기존 이미지·보컬 WAV·음소 JSON을 통한 2D 립싱크 WebM 생성
-6. 기존 RVC 체크포인트를 이용한 직접 보컬 WAV 변환 (선택적 FAISS 인덱스)
-7. 설치된 DiffSinger 학습 체크포인트와 음소/F0 악보를 이용한 직접 신경망 가창 WAV 생성
+요청대로 현재 main 트리에서 기존 HTML·React·JavaScript 웹 앱, HTTP 라우팅/호스트 Go 코드, WebView2 로더·브라우저 호스트, 구형 웹 배포 파일과 소스 참조를 삭제했다.
 
-미완료: 기존 기획안 66개 기능 전체 네이티브 GUI 포팅 및 7가지 현재 연결 기능의 실제 통합검증, React/IndexedDB 프로젝트 저장소의 네이티브 무손실 이관, 본인 음색으로 한국어 전곡 AI 가창 실품질 검증, 일괄 Music+MV 원클릭 통합, 3D 캐릭터 동작, Windows 10/11 GUI 전체 사용자 동선 및 GPU 모델 실측. 이 문서나 커밋을 최종 완성으로 표시하지 말 것.
+- 정리 커밋: `05959fa5e8bd4ef30a209c85661956422d0341ab`
+- 제거 735개 파일, 남은 26개 파일 (이후 네이티브 소스 갱신 반영)
+- 기존 브라우저 프로젝트의 사용자 PC 데이터는 저장소 정리와 무관하며 접근·삭제하지 않았다.
+- 원본 66개 기획안은 `docs/MYVOCAL-원본66개-기획안.md`에 유지한다.
+- EXE용 네이티브 소스: `desktop/native/`; 로컬 AI 엔진: `desktop/*_worker.py` 및 보조 Python 파일.
 
-## 네이티브 빌드
+## 현재 개발된 로컬 GUI 기능 (전체 66개 완료 아님)
 
-PowerShell에서 저장소 루트 기준으로 실행:
+1. MusicGen 모델로 오프라인 WAV 작곡
+2. RVC 녹음 학습으로 새로운 체크포인트 생성
+3. Demucs 악기 분리
+4. MIDI 음정 보정 및 가창 녹음 편집
+5. 2D 캐릭터 립싱크 영상
+6. RVC 모델로 보컬 음색 변환
+7. DiffSinger 모델로 음소/F0 기반 신경망 가창
+8. 3~6분 MusicGen 장편 생성과 중단 재개
+9. Win32 내장 오프라인 PCM 믹싱
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\desktop\build-windows.ps1
+입력에서 로컬 파일/폴더를 선택하는 Windows 전용 대화상자 코드를 구현했다. Python/AI 모델을 함께 묶은 것이 아니라 기존 설치된 로컬 실행 환경을 사용한다.
 
-생성되는 MYVOCAL-Studio.exe, MYVOCAL-Studio-workers 디렉터리와 사용 안내를 ZIP으로 묶는다. 모델 및 Python 의존성은 사용자 PC에 기존 설치된 것을 사용하며 강제 재설치/유료 API 의존 없음. 기능 관련 모델이 없으면 작업을 실행하지 않고 오류를 출력한다.
+## 아직 개발해야 하는 기능
 
-## 개발 순서
+원본 기획안 전체 66개를 순수 네이티브 화면과 로컬 기능으로 구현하는 작업이 남았다. 특히 기존 프로젝트 데이터의 무손실 이용, 다양한 작사·작곡·편곡과 편집 작업, 캐릭터 일관성과 2D/3D 실사 MV, 보컬-영상 합성, 완전한 음악+MV 원클릭 제작 흐름은 미완성이다.
 
-사용자 지정 순서: 남은 개발 완료 → 검증 → 발견 오류 수정. 이번 작업은 코드 추가·Windows PE32+ 교차 빌드 단계이며 Windows 실기기 실행/모델 결과 성공으로 주장하지 않는다. 사용자 음성·사진·프로젝트 자산 삭제 또는 무단 덮어쓰기 금지.
+이 단계에서 전체 사용자 기능 동등성을 주장하지 않는다. 저장소에서 기존 웹 소스를 삭제했다고 프로젝트 데이터가 네이티브에서 자동으로 열리는 것도 아니다.
+
+## 빌드 및 배포
+
+Windows PowerShell (저장소 루트):
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\desktop\build-windows.ps1`
+
+최종 출력: `MYVOCAL-Studio.exe` 및 `MYVOCAL-Studio-workers`를 포함한 `MYVOCAL-Studio-Native-Windows.zip`.
+
+진행 순서는 사용자가 지정한 **남은 기능 개발 → 전체 검증 → 오류 수정**. Windows 실기기 GUI 조작, GPU 모델 품질 등 확인하지 않은 사항은 완료라고 하지 않는다.
