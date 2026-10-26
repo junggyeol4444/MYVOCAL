@@ -10,7 +10,7 @@ const clamp=n=>Math.max(0,Math.min(1,n));
 export function savedRhythmSources(project){
  if(!project?.id)return [];
  return (project.tracks||[]).filter(t=>
-  t&&!t.mute&&t.generatedBy==='musicgen-independent-audio'&&
+  t&&t.generatedBy==='musicgen-independent-audio'&&
   t.sourceRole==='drums'&&t.clips?.length===1&&
   t.clips[0]?.assetId&&
   t.clips[0].startBar===1&&
