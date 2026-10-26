@@ -26,6 +26,11 @@ function parseSectionDirective(command){
 const snapshot=p=>JSON.stringify({id:p?.id,scenes:p?.scenes,sections:p?.sections,
  bpm:p?.bpm,locks:[p?.outfitLock,p?.backgroundLock,p?.cameraLock]});
 export const isSectionNaturalInstruction=text=>typeof text==='string'&&!!parseSectionDirective(text);
+export function sectionNaturalTargets(project,scope){
+ if(scope!=='전체'&&!Object.hasOwn(SECTION,scope)&&scope!=='마지막 후렴')
+  throw Error('지원하지 않는 음악 구간입니다.');
+ return targets(project,scope);
+}
 function targets(project,scope){
  if(!Array.isArray(project.scenes)||!project.scenes.length)throw Error('현재 프로젝트의 장면이 없습니다.');
  let ranges;
