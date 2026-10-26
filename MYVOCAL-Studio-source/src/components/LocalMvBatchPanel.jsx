@@ -34,6 +34,7 @@ import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
 import {directAutoMvScenesWithLocalAI} from '../lib/autoMvNeuralSceneDirection.js';
 import {applyPcmDirectedMv36} from '../lib/musicReactiveMvScenes36.js';
 import {savedRhythmSources} from '../lib/musicReactiveDance30.js';
+import {selectSoloVocalPcm33} from '../lib/soloVocalPcmLipOverlay33.js';
 import {buildNeuralMusicPrompts} from '../lib/neuralMusicPromptTimeline.js';
 import {planScoreMatchedMusicGenSegments} from '../lib/neuralStemScoreTiming.js';
 import {renderAndStoreNeuralMidiStems} from '../lib/autoMvSourceStems.js';
@@ -588,15 +589,22 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     const lipMode=fullMouth&&(makeDuet||movieProject?.duetSingers?.version===1)?
      'duet-vocal-pcm':soloPcmLip&&!(makeDuet||movieProject?.duetSingers?.version===1)?
      'solo-vocal-pcm':lipNeeded?'manual-phoneme':'none';
+    let actualVocalTrackId='';
+    if(lipMode==='solo-vocal-pcm')
+     actualVocalTrackId=selectSoloVocalPcm33(movieProject,characters,{
+      vocalTrackId:soloPcmLipTrackId
+     }).track.id;
     let previousMovie=null;
     if(resumeProduction)previousMovie=await savedNativeMovie55(movieProject,characters,{
-     loadFile:getFile,lipIncluded:lipNeeded,lipMode,signal:controller.signal,
+     loadFile:getFile,lipIncluded:lipNeeded,lipMode,
+     vocalTrackId:actualVocalTrackId,signal:controller.signal,
      current,onProgress:setMessage
     });
     const result=previousMovie?{
      file:previousMovie.file,seconds:Math.max(0,...movieProject.scenes.map(s=>Number(s.end)||0)),
      generatedImages:0,generatedVideos:0,audioIncluded:true,
-     lipIncluded:lipNeeded,lipMode:previousMovie.lipMode,source:'existing-local-webm'
+     lipIncluded:lipNeeded,lipMode:previousMovie.lipMode,
+     lipVocalTrackId:actualVocalTrackId,source:'existing-local-webm'
     }:await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,
       duetPcmLip:fullMouth&&(makeDuet||movieProject?.duetSingers?.version===1),
       soloPcmLip:soloPcmLip&&!(makeDuet||movieProject?.duetSingers?.version===1),
@@ -606,7 +614,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      throw Error('실제 재생 가능한 보컬·반주 믹스가 WebM에 포함되지 않았습니다. 무음 영상은 완성된 음악+MV로 저장하지 않습니다.');
     const recordedWebmRevision=previousMovie?previousMovie.sourceRevision55:
       await fingerprintNativeMovie55(current(),characters,{
-       includeLipSync:!!result.lipIncluded,lipMode:result.lipMode
+       includeLipSync:!!result.lipIncluded,lipMode:result.lipMode,
+       vocalTrackId:result.lipVocalTrackId
       });
     const outputName='MYVOCAL-'+String(project.title||'project').replace(/[^가-힣a-zA-Z0-9_-]/g,'_').slice(0,40)+'-auto-MV';
     const finishedFiles=[];
@@ -615,7 +624,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       ...(suffix==='-립싱크'?{variant:'face-lip'}:{}),
       ...(!previousMovie&&ext==='webm'&&!suffix?{
        sourceRevision55:recordedWebmRevision,lipIncluded55:!!result.lipIncluded,
-       lipMode55:result.lipMode
+       lipMode55:result.lipMode,
+       ...(result.lipMode==='solo-vocal-pcm'?{lipVocalTrackId55:result.lipVocalTrackId}:{})
       }:{})
      });
      const url=URL.createObjectURL(blob),a=document.createElement('a');
