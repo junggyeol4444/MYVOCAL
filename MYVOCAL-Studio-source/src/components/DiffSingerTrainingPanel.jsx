@@ -12,12 +12,13 @@ function restore(){try{const v=JSON.parse(window.localStorage.getItem(KEY)||'{}'
 const session=()=>window.__MYVOCAL_SESSION_KEY;
 const dl=file=>{const url=URL.createObjectURL(file),anchor=document.createElement('a');
  anchor.href=url;anchor.download=file.name;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),5000);};
-export default function DiffSingerTrainingPanel({voice,notify}){
+export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle}){
  const [config,setConfig]=useState(restore),[bundle,setBundle]=useState(null),[rights,setRights]=useState(false);
  const [busy,setBusy]=useState(false),[state,setState]=useState(null),[error,setError]=useState('');
  const previousVoice=useRef(voice?.id),alive=useRef(true);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  useEffect(()=>{previousVoice.current=voice?.id;setRights(false);setBundle(null);setError('');},[voice?.id]);
+ useEffect(()=>{if(suggestedBundle&&!busy)setBundle(suggestedBundle);},[suggestedBundle]);
  useEffect(()=>{let cancelled=false;
   const poll=async()=>{try{const v=await readDiffSingerTrainingStatus({session:session()});
    if(!cancelled&&alive.current)setState(v);}catch(e){if(!cancelled&&alive.current)setError(e.message);}};
@@ -51,6 +52,7 @@ export default function DiffSingerTrainingPanel({voice,notify}){
  }
  const working=state?.state==='running'||state?.state==='preparing';
  return <Panel title="본인 한국어 Singing · 실제 로컬 DiffSinger 학습" description="기존 EXE 안에서 내 노래 녹음·가사·MIDI의 학습 ZIP을 설치된 DiffSinger 신경망 학습 스크립트에 전달합니다. 실제 GPU 학습은 로컬 환경과 설치 모델에 달려 있습니다.">
+  {suggestedBundle&&<Notice>이 프로젝트의 실제 녹음에서 추출한 한국어 가사·MIDI 학습 데이터가 자동으로 전달됐습니다. 새 학습을 시작할 때 권한 확인은 별도로 필요합니다.</Notice>}
   <Field label="Singing Workbench에서 내보낸 실제 가창 학습 데이터 ZIP">
    <input type="file" accept=".zip,application/zip" disabled={busy||working}
     onChange={e=>setBundle(e.target.files?.[0]||null)}/>
