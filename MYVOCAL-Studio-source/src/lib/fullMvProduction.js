@@ -43,9 +43,30 @@ export async function runFullLocalMv({
   const pending=planMvBatch(project,{includeReferences});
   // A completed project can be exported again without GPU models installed.
   // Never invoke or require an external inference engine when no scenes need it.
-  generated=pending.total>0?await batch({project,data,checkpoint,videoModel,port,session,imageSteps,width,height,
-    frames,fps,videoSteps,motion,includeReferences,autoVirtualSinger,current,currentData,commit,signal,
-    progress:s=>onProgress('이미지/영상 생성: '+s)}):{generatedImages:0,generatedVideos:0};
+  generated={generatedImages:0,generatedVideos:0};
+  // Long-form original #55: produce up to 120 short SVD clips in bounded
+  // 20-scene groups. Each independently completed scene is committed to the
+  // ORIGINAL project's IndexedDB and is automatically skipped on retry.
+  // Never clear/recreate a previously generated video after cancellation.
+  const groupSize=20;
+  for(let offset=0;offset<pending.sceneIds.length;offset+=groupSize){
+   if(signal?.aborted)throw Error('실제 긴 곡의 MV 생성 취소. 기존 장면 파일은 유지합니다.');
+   const stage=current();
+   if(!stage||stage.id!==project.id)throw Error('긴 곡 MV 장면 생성 도중 프로젝트가 변경됐습니다.');
+   const group=pending.sceneIds.slice(offset,offset+groupSize);
+   const chunk=await batch({
+    project:stage,data,checkpoint,videoModel,port,session,
+    imageSteps,width,height,frames,fps,videoSteps,motion,
+    includeReferences,autoVirtualSinger,onlySceneIds:group,
+    current,currentData,commit,signal,
+    progress:s=>onProgress('전체 '+pending.total+'장면 중 '+(offset+1)+'~'+
+     (offset+group.length)+' / '+s)
+   });
+   generated.generatedImages+=Number(chunk?.generatedImages||0);
+   generated.generatedVideos+=Number(chunk?.generatedVideos||0);
+   onProgress('실제 SD/SVD 장면 '+Math.min(pending.total,offset+group.length)+
+    '/'+pending.total+'개 구간별 저장 · 완료 파일 보존');
+  }
   if(signal?.aborted)throw Error('완성 MV 제작을 취소했습니다.');
   const latest=current();
   if(!latest||latest.id!==project.id)throw Error('자동 생성 중 프로젝트가 바뀌었습니다.');
