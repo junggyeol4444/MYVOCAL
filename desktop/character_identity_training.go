@@ -8,6 +8,7 @@ package main
 // run before a genuine safetensors artifact is present.
 import (
  "context"
+ "bytes"
  "crypto/rand"
  "encoding/hex"
  "errors"
@@ -85,7 +86,7 @@ func checkCharacterTrainImage(part io.Reader)([]byte,string,error){
  }
  kind:=http.DetectContentType(raw)
  if kind!="image/png"&&kind!="image/jpeg"{return nil,"",errors.New("실제 PNG/JPEG 사진·원화만 학습할 수 있습니다")}
- size,format,err:=image.DecodeConfig(strings.NewReader(string(raw)))
+ size,format,err:=image.DecodeConfig(bytes.NewReader(raw))
  if err!=nil||(format!="png"&&format!="jpeg")||size.Width<256||size.Height<256||
   size.Width>4096||size.Height>4096||int64(size.Width)*int64(size.Height)>16000000{
   return nil,"",errors.New("학습 사진은 256~4096px의 실제 PNG/JPEG여야 합니다")
@@ -182,7 +183,9 @@ func(a *appServer)characterTrainStart(w http.ResponseWriter,r *http.Request){
  if _,err=rand.Read(secret[:]);err!=nil{jsonError(w,500,"학습 작업 ID 생성 실패");return}
  jobID:=hex.EncodeToString(secret[:])
  token:="mv"+jobID
- jobRoot:=filepath.Join(dataDir(),"character-identity-training",jobID)
+ parent:=filepath.Join(dataDir(),"character-identity-training")
+ if err=os.MkdirAll(parent,0700);err!=nil{jsonError(w,500,"학습 자료 전용 폴더 생성 실패");return}
+ jobRoot:=filepath.Join(parent,jobID)
  if err=os.Mkdir(jobRoot,0700);err!=nil{jsonError(w,500,"개별 학습 작업 폴더 생성 실패");return}
  dataset:=filepath.Join(jobRoot,"dataset")
  photos:=filepath.Join(dataset,"10_"+token)
@@ -218,9 +221,9 @@ func(a *appServer)characterTrainStart(w http.ResponseWriter,r *http.Request){
   err:=trainCharacterIdentity(ctx,j,root,python,base,dataset,output,token,steps,rank)
   j.mu.Lock()
   if j.id==jobID{
-   if ctx.Err()!=nil{j.state="cancelled";j.message="캐릭터 신경망 학습 취소 또는 제한 시간 종료"}
-   else if err!=nil{j.state="failed";j.message=err.Error()}
-   else{j.state="completed";j.message="신규 LoRA 가중치 생성. 인물·캐릭터 일치율 및 ComfyUI 모델 호환성은 미검증"}
+   if ctx.Err()!=nil{j.state="cancelled";j.message="캐릭터 신경망 학습 취소 또는 제한 시간 종료"
+   }else if err!=nil{j.state="failed";j.message=err.Error()
+   }else{j.state="completed";j.message="신규 LoRA 가중치 생성. 인물·캐릭터 일치율 및 ComfyUI 모델 호환성은 미검증"}
    j.cancel=nil
   }
   j.mu.Unlock()
