@@ -13,9 +13,10 @@ import {convertRegisteredRVC} from './rvcStoredConversion.js';
 import {persistNeuralVocalTake} from './neuralVocalPersist.js';
 import {makeOriginalLyricAdlibAlignment} from './mvNeuralAdlib.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
+import {diffSingerExpression} from './diffSingerExpressiveF0.js';
 
 export async function generateAndStoreDiffSingerMvSinging(project,{
- voice,model,session,confirmed=false,signal,
+ voice,model,session,confirmed=false,signal,singingStyle='Natural',
  convertRVC=false,rvcOptions=null,registeredRVCModel=null,
  scoreAlignment=null,scoreAlignmentKind='harmony',saveOptions,onProgress=()=>{},
  synthesize=synthesizeDiffSingerWav,convert=convertLongSingingWithRVC
@@ -30,6 +31,7 @@ export async function generateAndStoreDiffSingerMvSinging(project,{
  if(typeof session!=='string'||session.length<8||!saveOptions||
   typeof saveOptions.current!=='function')
   throw Error('Windows EXE 로컬 세션 및 원본 보존 프로젝트 저장 연결이 필요합니다.');
+ diffSingerExpression(singingStyle);
  const matched=listedDiffSingerModels(voice,[model||{}])[0];
  if(!matched||matched.id!==model.id||!model.dictionaryAssetId||
   !/^[a-f0-9]{64}$/i.test(String(model.dictionarySha256||'')))
@@ -69,7 +71,7 @@ export async function generateAndStoreDiffSingerMvSinging(project,{
  onProgress('설치된 DiffSinger 실제 Acoustic·Vocoder 신경망으로 원곡 가창 중');
  const vocal=await synthesize(alignment,{
   python:model.python,root:model.root,experiment:model.experiment,
-  dictionary,phonemePlan,rightsConfirmed:true,session,signal
+  dictionary,phonemePlan,singingStyle,rightsConfirmed:true,session,signal
  });
  guard();
  if(!(vocal instanceof Blob)||vocal.size<44||vocal.size>90*1024*1024)
@@ -120,6 +122,7 @@ export async function generateAndStoreDiffSingerMvSinging(project,{
  const job={id:saveOptions.newId('ds-mv'),at:new Date().toISOString(),
   mode:convertRVC?'DiffSinger + RVC 신경망 가창':'DiffSinger 신경망 가창',
   engine:'등록한 본인 DiffSinger',modelId:model.id,experiment:model.experiment,
+  singingExpressionStyle:singingStyle,expressionScope:'F0 pitch phrasing only (not neural timbre change)',
   notes:alignment.cues?.length||0,result:'실제 신경망 WAV 생성 후 신규 보컬 자산 저장'};
  const result=await persistNeuralVocalTake(project,convertRVC?[vocal,finished]:[finished],{
   ...saveOptions,signal,job
