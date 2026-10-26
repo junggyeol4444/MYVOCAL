@@ -23,6 +23,7 @@ import {generateAndStoreDiffSingerMvSinging} from '../lib/diffSingerMvSinging.js
 import {generateAndStoreDiffSingerMvHarmony} from '../lib/diffSingerMvHarmony.js';
 import {generateAndStoreDiffSingerMvAdlib} from '../lib/diffSingerMvAdlib.js';
 import {listedDiffSingerModels} from '../lib/diffSingerVoiceRegistry.js';
+import {trainedKoreanVoiceRoute,identityReadyForMv} from '../lib/autoProductionVoiceRouting.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
 import {SINGING_STYLES} from '../lib/singingStyleControl.js';
@@ -40,7 +41,9 @@ import {persistProductionDeliverables} from '../lib/productionOutputPersist.js';
 export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,imagePort,imageSteps,imageSize,videoFrames,videoFps,videoSteps,videoMotion,current,commit,session,notify}){
  const cancelRef=useRef(null),stemExportCancelRef=useRef(null),duetSceneCancelRef=useRef(null);
  const dataRef=useRef(data);dataRef.current=data;
- const [includeReferences,setIncludeReferences]=useState(false);
+ const [includeReferences,setIncludeReferences]=useState(()=>
+  project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true&&
+  !!project.characterId&&identityReadyForMv(project,data));
  const [duetPcmCasting,setDuetPcmCasting]=useState(false);
  const [duetSceneBusy,setDuetSceneBusy]=useState(false),[duetSceneStatus,setDuetSceneStatus]=useState('');
  const [autoVirtualSinger,setAutoVirtualSinger]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true&&project.videoMode==='auto'&&!project.characterId);
@@ -49,7 +52,12 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.composition===true||project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.arrangement===true),[musicDuration,setMusicDuration]=useState(180);
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.singing===true),[singingPort,setSingingPort]=useState('7867');
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
- const [singingBackend,setSingingBackend]=useState('external'),[diffSingerModelId,setDiffSingerModelId]=useState(''),[diffSingerDuetModelId,setDiffSingerDuetModelId]=useState('');
+ const trainedRoute=trainedKoreanVoiceRoute(project,data);
+ const [singingBackend,setSingingBackend]=useState(()=>
+   project.productionLaunch55?.version===1&&trainedRoute?'diffsinger':'external');
+ const [diffSingerModelId,setDiffSingerModelId]=useState(()=>
+   project.productionLaunch55?.version===1?trainedRoute?.modelId||'':'');
+ const [diffSingerDuetModelId,setDiffSingerDuetModelId]=useState('');
  const [singingStyle,setSingingStyle]=useState(project.singingStyle||'Natural');
  const [makeHarmony,setMakeHarmony]=useState(false),[harmonyDirection,setHarmonyDirection]=useState('above');
  const [makeDuet,setMakeDuet]=useState(false),[duetVoiceId,setDuetVoiceId]=useState('');
