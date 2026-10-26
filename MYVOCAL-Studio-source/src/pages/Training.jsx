@@ -7,6 +7,7 @@ import {genId} from '../lib/schema';
 import {getFile,putFile,removeFile,deleteFilesAtomic} from '../lib/assetDb';
 import {modelDependents} from '../lib/voiceDeletionSafety.js';
 import {TRAINING_ENGINES,TRAINING_PRESETS,assessTrainingData,createTrainingPlan,packageTrainingPlan,validateCheckpoint,buildCheckpointRecord,sha256File} from '../lib/voiceTraining';
+import {voicePitchVowelCoverage6} from '../lib/voiceCoverage6.js';
 const byteText=n=>n>1024*1024?(n/1024/1024).toFixed(1)+' MB':Math.round(n/1024)+' KB';
 const formatDate=s=>{try{return new Date(s).toLocaleString('ko-KR')}catch{return '-'}};
 function saveBlob(bytes,fileName){const url=URL.createObjectURL(new Blob([bytes],{type:'application/zip'}));const a=document.createElement('a');a.href=url;a.download=fileName;a.click();setTimeout(()=>URL.revokeObjectURL(url),2500)}
@@ -14,6 +15,7 @@ export default function Training({data,add,remove,notify,navigate}){
  const [voiceId,setVoiceId]=useState(''),[engineId,setEngineId]=useState('generic'),[preset,setPreset]=useState('standard'),[notes,setNotes]=useState('');
  const [busy,setBusy]=useState(false),[checkpoint,setCheckpoint]=useState(null),[checkpointEngine,setCheckpointEngine]=useState('generic');
  const voices=data.voices||[],voice=voices.find(v=>v.id===voiceId)||voices[0],selected=voice?.id||'';
+ const coverage=(()=>{if(!voice)return null;try{return voicePitchVowelCoverage6(voice)}catch{return null}})();
  const quality=voice?assessTrainingData(voice):null,plans=(data.trainingPlans||[]).filter(p=>p.voiceId===selected),models=(data.voiceModels||[]).filter(m=>m.voiceId===selected&&m.engineId!=='sampler');
  const run=async fn=>{if(busy)return;setBusy(true);try{await fn()}catch(e){notify('작업 실패: '+e.message)}finally{setBusy(false)}};
  const create=()=>run(async()=>{const job=createTrainingPlan(voice,{engineId,preset,notes});add('trainingPlans',job);setNotes('');notify('학습 데이터 준비 기록을 저장했습니다. 모델 학습은 실행되지 않았습니다.');});
@@ -68,6 +70,32 @@ export default function Training({data,add,remove,notify,navigate}){
     <div><span>발음 가이드 확보</span><strong>{quality.labeled}<i> / 12</i></strong><small>품질 통과·라벨 지정</small></div>
     <div><span>추정 총 길이</span><strong>{quality.seconds}s</strong><small>음성 파일 길이 합계</small></div>
    </div>
+   {coverage&&<Panel title="원본 #6 · 실제 피치와 사용자 발음 라벨로 부족한 녹음 찾기"
+    description="기존 녹음 WAV의 음정 측정값과 사용자가 지정한 저음/중음/고음 × ㅏ/ㅓ/ㅣ/ㅜ 라벨을 종합합니다. 실제 음소를 인식한 결과가 아니며 학습 품질이 보장되지는 않습니다.">
+     <p>실제 분석 유성 프레임 {coverage.usablePitchObservations}개 ·
+      발음 가이드에서 음역을 확인한 조합 {coverage.covered}/{coverage.total}개</p>
+     {coverage.measuredRange&&<p className="muted">실제로 측정된 음역 후보:
+      저음 {coverage.measuredRange.low} / 중음 {coverage.measuredRange.middle} /
+      고음 {coverage.measuredRange.high}</p>}
+     <div className="mv7-list">
+      {coverage.slots.map(slot=><div key={slot.id} className="mv7-item">
+       <strong>{slot.title}</strong><small> ·
+        {slot.status==='recorded-at-measured-target'?'선택 라벨의 음정 범위 측정':
+         slot.status==='label-recorded-pitch-range-uncertain'?'라벨은 등록됨 · 목표 음정 확인 필요':
+         '품질 통과한 라벨 녹음 없음'}
+        {slot.targetMidi!==null?' · 기준 음정 '+slot.measuredTargetNote:''}</small>
+      </div>)}
+     </div>
+     {coverage.suggestions.length>0&&<><strong>다음 녹음 권장</strong>
+      {coverage.suggestions.map(s=><p key={s.promptId} className="mv7-hint">
+       {s.title}: {s.guidance}</p>)}
+      <Button icon="mic" onClick={()=>navigate('voices')}>부족한 모음·음역 추가 녹음</Button>
+     </>}
+     <Notice>ㅏ/ㅓ/ㅣ/ㅜ는 사용자가 녹음 당시 선택한 라벨입니다.
+      실제 발음 식별·가성/진성 판별·신경망 학습 성공 여부는 측정하지 않습니다.
+      실제 측정 음역 안에서만 다음 노트를 추천하며 목에 무리가 있으면 녹음을 중단하세요.
+      기존 녹음·모델과 학습 결과는 변경하지 않습니다.</Notice>
+    </Panel>}
    <div className="mv7-columns"><Panel title="1. 학습 데이터 사전 점검" description="아래는 보조 지표입니다. 학습 가능 여부나 발음의 정확성을 보증하지 않습니다.">
     {quality.issues.length?<div className="mv7-issues">{quality.issues.map((issue,i)=><p key={i}><Icon name="info" size={15}/>{issue}</p>)}</div>:<p className="mv7-good"><Icon name="check" size={17}/>기초 점검 경고 없음 · 실제 학습 성공 보장은 아님</p>}
     <Notice>프로필 권한: <strong>{voice.rights==='self'?'본인 목소리':voice.rights==='owned'?'내가 제작한 자료':voice.rights==='licensed'?'사용 허가': 'Reference 분석용'}</strong> · 권한이 없는 자료는 학습 준비 ZIP으로 내보내지 않습니다.</Notice>
