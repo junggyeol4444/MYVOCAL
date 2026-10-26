@@ -49,7 +49,9 @@ func readMIDIEditor()(string,int,int,error){
  if err!=nil||bpm<20||bpm>320{return "",0,0,errors.New("BPM은 20~320의 정수입니다")}
  program,err:=strconv.Atoi(strings.TrimSpace(readText(midiUI.program)))
  if err!=nil||program<0||program>127{return "",0,0,errors.New("악기 번호는 0~127의 정수입니다")}
- if _,err=parseMidiNotes(notes);err!=nil{return "",0,0,err}
+ if strings.HasPrefix(strings.TrimSpace(notes),"@"){
+  if _,err=parseMultiTrackMIDI(notes);err!=nil{return "",0,0,err}
+ }else if _,err=parseMidiNotes(notes);err!=nil{return "",0,0,err}
  return notes,bpm,program,nil
 }
 func saveMIDIDraft()error{
@@ -92,7 +94,7 @@ func midiWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   midiUI.bpm=callCreate("EDIT","120",wsChild|wsVisible|wsBorder|esAutoHScroll,93,47,110,29,hwnd,0)
   callCreate("STATIC","악기(0~127)",wsChild|wsVisible,234,50,120,24,hwnd,0)
   midiUI.program=callCreate("EDIT","0",wsChild|wsVisible|wsBorder|esAutoHScroll,355,47,110,29,hwnd,0)
-  callCreate("STATIC","음표 한 줄: MIDI 피치(0~127), 시작박, 길이박, 세기(1~127)  예: 60 0 1 100",wsChild|wsVisible,20,89,800,25,hwnd,0)
+  callCreate("STATIC","음표: 피치 시작박 길이박 세기  |  다중악기: @ Piano 0 / @ Bass 32",wsChild|wsVisible,20,89,800,25,hwnd,0)
   midiUI.notes=callCreate("EDIT","",wsChild|wsVisible|wsBorder|wsVScroll|esMultiline|esAutoVScroll,20,120,790,420,hwnd,0)
   sendMessage.Call(midiUI.notes,0x00C5,250000,0)
   callCreate("BUTTON","음표·BPM 저장",wsChild|wsVisible,20,552,225,42,hwnd,idMIDISaveDraft)
@@ -116,7 +118,10 @@ func midiWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
    if err!=nil{showError(err);return 0}
    path,ok:=chooseMIDIOutput()
    if !ok{return 0}
-   if err=exportNativeMIDI(context.Background(),path,bpm,program,notes);err!=nil{showError(err);return 0}
+   if strings.HasPrefix(strings.TrimSpace(notes),"@"){
+    err=exportNativeMultiMIDI(context.Background(),path,bpm,notes)
+   }else{err=exportNativeMIDI(context.Background(),path,bpm,program,notes)}
+   if err!=nil{showError(err);return 0}
    if err=updateStudioMIDI(notes,program,bpm);err!=nil{showError(err);return 0}
    if err=importStudioAsset(path);err!=nil{showError(err)}
    setText(midiUI.status,fmt.Sprintf("MIDI 파일 생성 완료: %s",path))
