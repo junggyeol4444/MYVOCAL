@@ -179,7 +179,9 @@ export async function exportSingingTakeDataset(project,alignment,recording,dicti
        values.some(v=>!Number.isFinite(v)||v<.005||v>20)||
        Math.abs(values.reduce((sum,v)=>sum+v,0)-audio.metrics.seconds)>.035)
      throw Error(key+'의 검수 음소 길이 합계가 실제 WAV 길이와 맞지 않습니다.');
-    score.ph_dur=values.map(v=>String(round(v))).join(' ');
+    // Preserve user-reviewed precision; per-phone rounding could accumulate
+    // enough drift to desynchronise a long phrase from its actual PCM WAV.
+    score.ph_dur=parts.join(' ');
     label.phonemeTiming='user-reviewed durations, not automated forced alignment';
     label.phonemeReview={source:'user-supplied JSON',matchedAudioSeconds:audio.metrics.seconds};
    }
