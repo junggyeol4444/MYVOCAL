@@ -1,6 +1,7 @@
 // Step77 — non-destructive scene-image prompt/metadata layer.
 // Images stay in the existing IndexedDB asset store, not project localStorage JSON.
 import {activeMvStyleGrade91} from './mvStyleReapply91.js';
+import {activeIdentityLoRA} from './characterIdentityLoRA.js';
 const imageFields=['title','description','location','outfit','expression','action','camera','lighting'];
 const text=(v,max=320)=>String(v??'').replace(/[\x00-\x1f]/g,' ').trim().slice(0,max);
 export const MAX_SCENE_IMAGE_BYTES=12*1024*1024;
@@ -19,6 +20,10 @@ export function buildSceneImageRequest(project,scene,character=null,direction=nu
  // Preserve exact Step77/78 fingerprints for legacy scenes; append a photo identity only for Step79 scenes.
  if(scene.personMv)fingerprint.push(scene.characterId||'',scene.personMv.personId||'',scene.personMv.referenceAssetId||'',scene.personMv.denoise??null);
  if(scene.characterMv)fingerprint.push('Step80-character',scene.characterId||'',scene.characterMv.characterId||'',scene.characterMv.referenceAssetId||'',scene.characterMv.denoise??null);
+ const identityLoRA=activeIdentityLoRA(character);
+ if(identityLoRA&&(scene.personMv||scene.characterMv||
+    ['person','character'].includes(autoReference?.kind)))
+  fingerprint.push('installed-local-character-lora',identityLoRA.loraName,identityLoRA.loraStrength);
  const autoSinger=autoReference?.source==='project-generated-singer'&&autoReference.kind==='auto-generated';
  if(autoSinger&&!scene.personMv&&!scene.characterMv)
   fingerprint.push('project-generated-singer-v1',autoReference.assetId,autoReference.denoise);
