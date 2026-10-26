@@ -8,7 +8,7 @@ import (
  "fmt"
  "os"
  "path/filepath"
- "regexp"
+ "unicode"
  "strings"
  "sync"
  "time"
@@ -45,7 +45,11 @@ var (
  studioCurrent studioProject
  studioPath string
 )
-var safeProjectTitle = regexp.MustCompile(`[^p{L}p{N}s._()-]`)
+func sanitizeStudioTitle(name string)string {
+ var b strings.Builder
+ for _,r:=range name {if unicode.IsLetter(r)||unicode.IsDigit(r)||unicode.IsSpace(r)||r=='.'||r=='_'||r=='('||r==')'||r=='-' {b.WriteRune(r)}else{b.WriteByte('_')}}
+ return b.String()
+}
 
 func nativeProjectsRoot() (string,error) {
  base:=os.Getenv("LOCALAPPDATA")
@@ -67,7 +71,7 @@ func createStudioProject(name string) (studioProject,error) {
  var token [10]byte
  if _,err=rand.Read(token[:]);err!=nil{return studioProject{},err}
  id:=hex.EncodeToString(token[:])
- title:=safeProjectTitle.ReplaceAllString(name,"_")
+ title:=sanitizeStudioTitle(name)
  title=strings.Trim(title," .")
  if title==""{title="MYVOCAL"}
  if len([]rune(title))>48{title=string([]rune(title)[:48])}
