@@ -29,6 +29,8 @@ type personMVRequest struct {
 	Steps          int     `json:"steps"`
 	Seed           int64   `json:"seed"`
 	Denoise        float64 `json:"denoise"`
+	LoraName string `json:"loraName"`
+	LoraStrength float64 `json:"loraStrength"`
 	RightsAttested bool    `json:"rightsAttested"`
 	// 원본 13·58항: 모델이 MYVOCAL에서 실제 생성한 첫 가수 이미지만 자동 재참조.
 	// 실존 인물의 사진 권한 동의와 자동 생성 원본 출처는 섞어 취급하지 않는다.
@@ -58,6 +60,13 @@ func validatePersonMVRequest(x personMVRequest, automatic bool) ([]byte, string,
 	if err := validateImageRequest(imageGenerationRequest{Port: x.Port, Checkpoint: x.Checkpoint, Prompt: x.Prompt, Negative: x.Negative, Width: x.Width, Height: x.Height, Steps: x.Steps, Seed: x.Seed}); err != nil {
 		return nil, "", err
 	}
+	if x.LoraName!="" {
+        if !validIdentityLoRAName(x.LoraName)||x.LoraStrength<0.4||x.LoraStrength>1.2 {
+            return nil,"",errors.New("로컬 신경망 캐릭터 LoRA 모델명과 강도 0.4~1.2를 확인하세요")
+        }
+    }else if x.LoraStrength!=0 {
+        return nil,"",errors.New("LoRA 모델 이름 없이 강도를 적용할 수 없습니다")
+    }
 	if x.Denoise < 0.15 || x.Denoise > 0.75 {
 		return nil, "", errors.New("사진 변환 강도 범위: 0.15~0.75")
 	}
@@ -70,17 +79,26 @@ func validatePersonMVRequest(x personMVRequest, automatic bool) ([]byte, string,
 }
 
 func buildPersonMVWorkflow(x personMVRequest, uploaded string) map[string]any {
-	return map[string]any{
+    // Keep legacy Step79/Step80 no-LoRA graph byte-for-byte equivalent.
+    modelRef:=[]any{"1",0};clipRef:=[]any{"1",1}
+    if x.LoraName!=""{modelRef=[]any{"10",0};clipRef=[]any{"10",1}}
+	graph:=map[string]any{
 		"1": map[string]any{"class_type": "CheckpointLoaderSimple", "inputs": map[string]any{"ckpt_name": x.Checkpoint}},
-		"2": map[string]any{"class_type": "CLIPTextEncode", "inputs": map[string]any{"text": x.Prompt, "clip": []any{"1", 1}}},
-		"3": map[string]any{"class_type": "CLIPTextEncode", "inputs": map[string]any{"text": x.Negative, "clip": []any{"1", 1}}},
+		"2": map[string]any{"class_type": "CLIPTextEncode", "inputs": map[string]any{"text": x.Prompt, "clip": clipRef}},
+		"3": map[string]any{"class_type": "CLIPTextEncode", "inputs": map[string]any{"text": x.Negative, "clip": clipRef}},
 		"4": map[string]any{"class_type": "LoadImage", "inputs": map[string]any{"image": uploaded}},
 		"5": map[string]any{"class_type": "ImageScale", "inputs": map[string]any{"image": []any{"4", 0}, "upscale_method": "lanczos", "width": x.Width, "height": x.Height, "crop": "center"}},
 		"6": map[string]any{"class_type": "VAEEncode", "inputs": map[string]any{"pixels": []any{"5", 0}, "vae": []any{"1", 2}}},
-		"7": map[string]any{"class_type": "KSampler", "inputs": map[string]any{"seed": x.Seed, "steps": x.Steps, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": x.Denoise, "model": []any{"1", 0}, "positive": []any{"2", 0}, "negative": []any{"3", 0}, "latent_image": []any{"6", 0}}},
+		"7": map[string]any{"class_type": "KSampler", "inputs": map[string]any{"seed": x.Seed, "steps": x.Steps, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": x.Denoise, "model": modelRef, "positive": []any{"2", 0}, "negative": []any{"3", 0}, "latent_image": []any{"6", 0}}},
 		"8": map[string]any{"class_type": "VAEDecode", "inputs": map[string]any{"samples": []any{"7", 0}, "vae": []any{"1", 2}}},
 		"9": map[string]any{"class_type": "SaveImage", "inputs": map[string]any{"images": []any{"8", 0}, "filename_prefix": "MYVOCAL_Step79"}},
 	}
+    if x.LoraName!=""{
+        graph["10"]=map[string]any{"class_type":"LoraLoader","inputs":map[string]any{
+            "model":[]any{"1",0},"clip":[]any{"1",1},"lora_name":x.LoraName,
+            "strength_model":x.LoraStrength,"strength_clip":x.LoraStrength}}
+    }
+    return graph
 }
 func personImageOutput(raw []byte, id string) (string, string, bool, error) {
 	var entries map[string]struct {
@@ -175,6 +193,11 @@ func (a *appServer) referenceMVGenerate(w http.ResponseWriter, r *http.Request, 
 		jsonError(w, 400, "선택한 체크포인트가 없습니다")
 		return
 	}
+    if x.LoraName!=""{
+        if err:=ensureComfyIdentityLoRA(ctx,x.Port,x.LoraName);err!=nil{
+            jsonError(w,400,err.Error());return
+        }
+    }
 	for _, node := range []string{"LoadImage", "ImageScale", "VAEEncode", "KSampler", "VAEDecode", "SaveImage"} {
 		body, status, callErr := comfyCall(ctx, x.Port, "GET", "/object_info/"+node, nil)
 		var nodes map[string]json.RawMessage
