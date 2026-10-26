@@ -4,7 +4,7 @@ import {makeDiatonicHarmonyAlignment} from './mvHarmonySinging.js';
 import {generateAndStoreDiffSingerMvSinging} from './diffSingerMvSinging.js';
 
 export async function generateAndStoreDiffSingerMvHarmony(project,{
- voice,model,session,confirmed=false,direction='above',convertRVC=false,
+ voice,model,session,confirmed=false,direction='above',convertRVC=false,singingStyle='Natural',
  rvcOptions=null,registeredRVCModel=null,signal,saveOptions,onProgress=()=>{},duet=null
 }={}){
  if(!saveOptions||typeof saveOptions.onChange!=='function'||typeof saveOptions.current!=='function')
@@ -28,7 +28,7 @@ export async function generateAndStoreDiffSingerMvHarmony(project,{
  let named=null;
  const originalTrackIds=new Set((project.tracks||[]).map(track=>track.id));
  const result=await generateAndStoreDiffSingerMvSinging(project,{
-  voice,model,session,confirmed,scoreAlignment:harmonyScore,
+  voice,model,session,confirmed,singingStyle,scoreAlignment:harmonyScore,
   convertRVC,rvcOptions,registeredRVCModel,signal,onProgress,
   saveOptions:{...saveOptions,onChange:next=>{
    if(signal?.aborted||saveOptions.current()!==project)
