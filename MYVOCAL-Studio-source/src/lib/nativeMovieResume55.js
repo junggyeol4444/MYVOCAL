@@ -4,11 +4,13 @@
 // export revision, and reads the actual already-stored local WebM blob.
 // Never creates a fake completed movie, substitutes media or deletes output.
 import {mvExportRevision} from './mvExportRevision.js';
+import {audioEnd} from './audioEngine.js';
 
 export async function fingerprintNativeMovie55(project,characters,{
  includeLipSync=false
 }={}){
  if(!project?.id||!Array.isArray(characters))throw Error('원곡·캐릭터를 선택하세요.');
+ if(!(audioEnd(project)>0))throw Error('원곡 음악·보컬의 실제 오디오 트랙이 없는 MV는 음악 포함 완성물로 기록할 수 없습니다.');
  if(typeof crypto?.subtle?.digest!=='function')
   throw Error('Windows WebView2의 로컬 SHA-256 다이제스트 기능이 필요합니다.');
  const raw=JSON.stringify({version:1,
