@@ -12,6 +12,7 @@ export function applySceneVideo(project,sceneId,assetId,sourceKey,details={}){
  if(typeof sourceKey!=='string'||!sourceKey||sourceKey.length>12000)throw Error('영상 출처를 확인할 수 없습니다.');
  if(!['image/webp','video/mp4'].includes(details.mime)||![14,25].includes(details.frames)||![6,8].includes(details.fps))throw Error('영상 메타데이터 오류');
  return {...project,scenes:project.scenes.map(s=>s.id===sceneId?{...s,videoClipAssetId:assetId,videoGeneration:{source:'ComfyUI SVD local',sourceKey,checkpoint:String(details.checkpoint||'').slice(0,220),frames:details.frames,fps:details.fps,seed:details.seed,mime:details.mime,
+   ...(Number.isInteger(details.motion)&&details.motion>=1&&details.motion<=255?{motion:details.motion}:{}),
    ...(Number.isFinite(details.actualDurationSec)?{actualDurationSec:details.actualDurationSec}:{}),
    ...(Number.isInteger(details.actualFrames)?{actualFrames:details.actualFrames}:{}),
    createdAt:new Date().toISOString()}}:s)};
