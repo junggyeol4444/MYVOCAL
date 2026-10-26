@@ -54,6 +54,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [duetSceneBusy,setDuetSceneBusy]=useState(false),[duetSceneStatus,setDuetSceneStatus]=useState('');
  const [autoVirtualSinger,setAutoVirtualSinger]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true&&project.videoMode==='auto'&&!project.characterId);
  const [saveFullMovie,setSaveFullMovie]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true),[fullMouth,setFullMouth]=useState(false);
+ const [soloPcmLip,setSoloPcmLip]=useState(false);
  const [makeMp4,setMakeMp4]=useState(true),[exportWav,setExportWav]=useState(true);
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.composition===true||project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.arrangement===true),[musicDuration,setMusicDuration]=useState(180);
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.singing===true),[singingPort,setSingingPort]=useState('7867');
@@ -578,7 +579,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     // with identical real scene, music and lip snapshots can reuse its
     // previously stored WebM instead of silently re-recording all frames.
     const characters=dataRef.current?.characters||[];
-    const lipNeeded=!!(lipPlacement||fullMouth||
+    const lipNeeded=!!(lipPlacement||fullMouth||soloPcmLip||
      automaticSingingVisemes(movieProject,characters)&&
       reviewedCharacterMouthPlacement(movieProject,characters));
     let previousMovie=null;
@@ -592,6 +593,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      lipIncluded:lipNeeded,source:'existing-local-webm'
     }:await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,
       duetPcmLip:fullMouth&&(makeDuet||movieProject?.duetSingers?.version===1),
+      soloPcmLip:soloPcmLip&&!(makeDuet||movieProject?.duetSingers?.version===1),
       prewarmedAudioContext:warmed,onProgress:setMessage});
     if(result.audioIncluded!==true)
      throw Error('실제 재생 가능한 보컬·반주 믹스가 WebM에 포함되지 않았습니다. 무음 영상은 완성된 음악+MV로 저장하지 않습니다.');
@@ -811,6 +813,15 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <Notice>동일한 본인·허가받은 실제 사람으로 연결된 장면에만 적용합니다. 원본 MV WebM도 별도 보존하며, 실제 Wav2Lip 모델이 MP4를 생성하지 못하면 성공이라고 보고하지 않습니다.</Notice>
   </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 2D 립싱크 입 모양 포함 (듀엣은 두 가수 실제 WAV PCM 사용)</label>}
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={soloPcmLip}
+   onChange={e=>{setSoloPcmLip(e.target.checked);if(e.target.checked)setFullMouth(true);}}/>
+   2D 한 명의 가수: 실제 저장된 가창 WAV PCM 강약으로 3~6분 한국어 음소 립싱크·휴지 입닫기 (반주/드럼 WAV 제외)</label>}
+  {saveFullMovie&&soloPcmLip&&<Notice>
+   원곡에 혼자 노래하는 등록 2D 캐릭터와 실제 가창 WAV 트랙 하나,
+   한국어 MIDI/가사 음소 시간표 또는 수동 입 모양이 필요합니다.
+   등록된 2D 입 영역 또는 사용자가 검토한 MV 입 위치에 실제 보컬 발성 PCM을 연결합니다.
+   듀엣 가수 두 명인 경우 별도의 두 보컬 립싱크를 사용하며, 임의 사람 얼굴 추적은 하지 않습니다.
+  </Notice>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={resumeProduction}
    onChange={e=>setResumeProduction(e.target.checked)}/>
    중단된 전체 음악+MV 제작 이어하기: 이전에 성공해 원곡에 저장된 실제 MIDI/WAV 트랙은
