@@ -16,7 +16,7 @@ import {assertUsableSingingWav} from './singingOutputValidation.js';
 export async function generateAndStoreDiffSingerMvSinging(project,{
  voice,model,session,confirmed=false,signal,
  convertRVC=false,rvcOptions=null,registeredRVCModel=null,
- saveOptions,onProgress=()=>{},
+ scoreAlignment=null,saveOptions,onProgress=()=>{},
  synthesize=synthesizeDiffSingerWav,convert=convertLongSingingWithRVC
 }={}){
  if(!project?.id||!Array.isArray(project.tracks)||!voice||
@@ -43,8 +43,17 @@ export async function generateAndStoreDiffSingerMvSinging(project,{
   throw Error('등록 가창 모델의 한국어 발음 사전 파일 또는 SHA-256이 일치하지 않습니다.');
  const dictionary=parseDiffSingerDictionary(await dictionaryFile.text());
  guard();
- const alignment=project.vocalAlignment;
- const phonemePlan=project.phonemePlan&&!isPhonemePlanStale(alignment,project.phonemePlan)?project.phonemePlan:null;
+ // Harmony is a new generated score, not a mutation of the user's MIDI.
+ // Only accept a copy anchored to the same original alignment and cue timings.
+ if(scoreAlignment&&(scoreAlignment.sourceKey!==project.vocalAlignment.sourceKey||
+  !Array.isArray(scoreAlignment.cues)||
+  scoreAlignment.cues.length!==project.vocalAlignment.cues.length||
+  scoreAlignment.cues.some((cue,i)=>cue.startSec!==project.vocalAlignment.cues[i].startSec||
+   cue.endSec!==project.vocalAlignment.cues[i].endSec||cue.lyric!==project.vocalAlignment.cues[i].lyric)))
+  throw Error('가창 화음 악보는 현재 원본의 가사·MIDI 타이밍과 같아야 합니다.');
+ const alignment=scoreAlignment||project.vocalAlignment;
+ const phonemePlan=scoreAlignment?null:
+  (project.phonemePlan&&!isPhonemePlanStale(alignment,project.phonemePlan)?project.phonemePlan:null);
  onProgress('설치된 DiffSinger 실제 Acoustic·Vocoder 신경망으로 원곡 가창 중');
  const vocal=await synthesize(alignment,{
   python:model.python,root:model.root,experiment:model.experiment,
