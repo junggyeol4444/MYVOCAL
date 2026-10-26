@@ -55,12 +55,15 @@ func (w diffSingerTrainingLog) Write(p []byte)(int,error){
 }
 type diffSingerTrainingSettings struct {
  Python,Root,Script,VoiceID string
+ Mode,Config string
  Args []string
 }
 var diffSingerTakeName=regexp.MustCompile(`^(?:wavs/take-[0-9]{3}\.wav|labels/take-[0-9]{3}\.json|score/take-[0-9]{3}\.ds|manifest\.json|transcriptions\.csv|README\.txt)$`)
 
 func validateDiffSingerTrainingSettings(v diffSingerTrainingSettings)error{
  if len(v.VoiceID)==0||len(v.VoiceID)>128||strings.ContainsAny(v.VoiceID,"/\\\x00\r\n"){return errors.New("학습 Voice ID 오류")}
+ if v.Mode=="official"{return validateOfficialDiffSinger(v.Root,v.Python,v.Config)}
+ if v.Mode!=""&&v.Mode!="custom"{return errors.New("지원하지 않는 DiffSinger 학습 방식입니다")}
  if !filepath.IsAbs(v.Root)||!filepath.IsAbs(v.Python)||!filepath.IsAbs(v.Script)||
   len(v.Root)>2048||len(v.Python)>2048||len(v.Script)>2048||
   strings.ContainsAny(v.Root+v.Python+v.Script,"\x00\r\n"){return errors.New("설치 폴더, Python.exe, 학습 스크립트의 절대 경로가 필요합니다")}
@@ -153,10 +156,15 @@ func (a *appServer) diffSingerTrainingStart(w http.ResponseWriter,r *http.Reques
  if err:=r.ParseMultipartForm(1<<20);err!=nil{jsonError(w,400,"학습 ZIP 또는 요청 크기 오류");return}
  if r.MultipartForm!=nil{defer r.MultipartForm.RemoveAll()}
  if r.FormValue("rights")!="confirmed"{jsonError(w,403,"실제 녹음 및 모델 사용 권한 확인이 필요합니다");return}
+ mode:=r.FormValue("mode")
+ if mode==""{mode="custom"}
  var args []string
- if json.Unmarshal([]byte(r.FormValue("args")),&args)!=nil{jsonError(w,400,"학습 명령 인수 JSON 오류");return}
+ if mode!="official"&&json.Unmarshal([]byte(r.FormValue("args")),&args)!=nil{
+  jsonError(w,400,"학습 명령 인수 JSON 오류");return
+ }
  settings:=diffSingerTrainingSettings{Python:r.FormValue("python"),Root:r.FormValue("root"),
-  Script:r.FormValue("script"),VoiceID:r.FormValue("voiceId"),Args:args}
+  Script:r.FormValue("script"),VoiceID:r.FormValue("voiceId"),Args:args,
+  Mode:mode,Config:r.FormValue("config")}
  if err:=validateDiffSingerTrainingSettings(settings);err!=nil{jsonError(w,400,err.Error());return}
  items:=r.MultipartForm.File["bundle"]
  if len(items)!=1||items[0].Size<100||items[0].Size>diffSingerDatasetLimit{
@@ -180,27 +188,34 @@ func (a *appServer) diffSingerTrainingStart(w http.ResponseWriter,r *http.Reques
  ctx,cancel:=context.WithTimeout(context.Background(),12*time.Hour)
  j.mu.Lock()
  j.id=id;j.voiceID=settings.VoiceID;j.state="running";j.directory=dir
- j.message=fmt.Sprintf("실제 한국어 가창 WAV %d개로 외부 신경망 학습 실행 중",count)
+ j.message=fmt.Sprintf("실제 한국어 가창 WAV %d개로 DiffSinger %s 신경망 학습 실행 중",count,settings.Mode)
  j.started=time.Now();j.log="";j.checkpoint="";j.cancel=cancel
  j.mu.Unlock()
  accepted=true
  go func(){
   defer cancel()
-  cmdArgs:=[]string{settings.Script}
-  for _,arg:=range settings.Args{cmdArgs=append(cmdArgs,strings.ReplaceAll(strings.ReplaceAll(arg,"{dataset}",dataset),"{output}",output))}
-  cmd:=exec.CommandContext(ctx,settings.Python,cmdArgs...)
-  cmd.Dir=settings.Root;cmd.Stdin=nil
-  cmd.Env=append(os.Environ(),"HF_HUB_OFFLINE=1","TRANSFORMERS_OFFLINE=1","HF_HUB_DISABLE_TELEMETRY=1")
-  cmd.Stdout=diffSingerTrainingLog{j};cmd.Stderr=diffSingerTrainingLog{j}
-  if runtime.GOOS=="windows"{
-   cmd.Cancel=func()error{
-    if cmd.Process==nil{return os.ErrProcessDone}
-    kill:=exec.Command("taskkill","/PID",strconv.Itoa(cmd.Process.Pid),"/T","/F")
-    if e:=kill.Run();e!=nil{return cmd.Process.Kill()};return nil
+  checkpoint:=""
+  var runErr error
+  if settings.Mode=="official"{
+   checkpoint,runErr=runOfficialDiffSingerTraining(ctx,settings.Root,settings.Python,
+    settings.Config,dataset,output,id,diffSingerTrainingLog{j})
+  }else{
+   cmdArgs:=[]string{settings.Script}
+   for _,arg:=range settings.Args{cmdArgs=append(cmdArgs,strings.ReplaceAll(strings.ReplaceAll(arg,"{dataset}",dataset),"{output}",output))}
+   cmd:=exec.CommandContext(ctx,settings.Python,cmdArgs...)
+   cmd.Dir=settings.Root;cmd.Stdin=nil
+   cmd.Env=append(os.Environ(),"HF_HUB_OFFLINE=1","TRANSFORMERS_OFFLINE=1","HF_HUB_DISABLE_TELEMETRY=1")
+   cmd.Stdout=diffSingerTrainingLog{j};cmd.Stderr=diffSingerTrainingLog{j}
+   if runtime.GOOS=="windows"{
+    cmd.Cancel=func()error{
+     if cmd.Process==nil{return os.ErrProcessDone}
+     kill:=exec.Command("taskkill","/PID",strconv.Itoa(cmd.Process.Pid),"/T","/F")
+     if e:=kill.Run();e!=nil{return cmd.Process.Kill()};return nil
+    }
    }
+   runErr=cmd.Run()
+   if runErr==nil{checkpoint,runErr=diffSingerCheckpointIn(output)}
   }
-  runErr:=cmd.Run();checkpoint:=""
-  if runErr==nil{checkpoint,runErr=diffSingerCheckpointIn(output)}
   j.mu.Lock()
   if j.id==id{
    if ctx.Err()!=nil {j.state="cancelled";j.message="실제 신경망 학습이 중지되거나 실행 제한 시간에 도달했습니다"} else if runErr!=nil {j.state="failed";j.message="설치된 학습 엔진 실행 실패: "+runErr.Error()} else {j.state="completed";j.message="실제 가중치 파일 생성됨. 추론 호환성과 한국어 발음·음질은 미확인";j.checkpoint=checkpoint}
