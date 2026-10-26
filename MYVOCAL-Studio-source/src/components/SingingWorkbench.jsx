@@ -49,6 +49,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const [registeredRvcModelId,setRegisteredRvcModelId]=useState('');
  const [directLongSinging,setDirectLongSinging]=useState(false);
  const [neuralDataset,setNeuralDataset]=useState(null);
+ const [trainedDiffSinger,setTrainedDiffSinger]=useState(null);
  const latestUrl=useRef('');
  const externalAbortRef=useRef(null),latestProject=useRef(p);latestProject.current=p;
  useEffect(()=>()=>externalAbortRef.current?.abort(),[]);
@@ -56,7 +57,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
  const alignment=p.vocalAlignment&&!isAlignmentStale(p,p.vocalAlignment)?p.vocalAlignment:null;
  const phonemePlan=alignment&&p.phonemePlan&&!isPhonemePlanStale(alignment,p.phonemePlan)?p.phonemePlan:null;
  const voice=usable.find(v=>v.id===voiceId)||usable[0];
- useEffect(()=>setNeuralDataset(null),[p.id,voice?.id]);
+ useEffect(()=>{setNeuralDataset(null);setTrainedDiffSinger(null);},[p.id,voice?.id]);
  const replaceableVocalTracks=(p.tracks||[]).filter(t=>t.type==='vocal'&&!t.mute&&Array.isArray(t.clips)&&t.clips.length);
  const duetCharacters=(data.characters||[]).filter(c=>['self','owned','licensed'].includes(c.rights)&&
   (c.rights!=='licensed'||String(c.rightsNote||'').trim())&&
@@ -318,9 +319,9 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
    {alignment&&<Notice>가사 발음 힌트: {alignment.cues.filter(c=>c.lyric?.trim()&&c.lyric.trim()!=='—').slice(0,5).map(c=>`${c.lyric.slice(0,8)} → ${guideSyllableSequence(c.lyric).map(s=>`${guideOnsetLabel(s.onset)}+${guideVowelLabel(s.vowel)}`).join('·')}`).join(' / ')||'가사가 있는 음표 없음'} · 한 음표 최대 24음절 · 자음 힌트는 실제 발음이 아닙니다.</Notice>}
    {!alignment&&<Notice>먼저 가사·MIDI 싱크를 생성하세요. 등록된 목소리가 없어도 실행할 수 있습니다.</Notice>}
   </Panel>
-  <DiffSingerNeuralPanel project={p} onChange={onChange} notify={notify} voice={voice} registeredModels={data.voiceModels||[]}/>
+  <DiffSingerNeuralPanel project={p} onChange={onChange} notify={notify} voice={voice} registeredModels={data.voiceModels||[]} trainedSuggestion={trainedDiffSinger?.voiceId===voice?.id?trainedDiffSinger:null}/>
   <SingingTakeDatasetPanel project={p} voice={voice} alignment={alignment} notify={notify} onDatasetReady={setNeuralDataset}/>
-  <DiffSingerTrainingPanel voice={voice} notify={notify} suggestedBundle={neuralDataset?.projectId===p.id&&neuralDataset?.voiceId===voice?.id?neuralDataset.file:null}/>
+  <DiffSingerTrainingPanel voice={voice} notify={notify} suggestedBundle={neuralDataset?.projectId===p.id&&neuralDataset?.voiceId===voice?.id?neuralDataset.file:null} onModelReady={setTrainedDiffSinger}/>
    <RvcVoiceConversion project={p} onChange={onChange} notify={notify} sourceSuggestion={sourceVocal?.file||result?.file||null} registeredModels={data.voiceModels||[]} selectedVoiceId={voice?.id||''} voiceRights={voice?.rights||''}/>
   <Panel title="C. 별도 로컬 Singing 엔진 연결" description="Windows EXE가 같은 PC의 127.0.0.1에 사용자가 실행한 별도 로컬 프로세스로 가사·음표·모델 참조를 보내고 WAV를 받아옵니다. v1.2부터 설치된 엔진의 프로세스를 직접 시작할 수 있습니다.">
    <EngineManager port={port} onPort={setPort} requestBridge={requestBridge} notify={notify}/>
