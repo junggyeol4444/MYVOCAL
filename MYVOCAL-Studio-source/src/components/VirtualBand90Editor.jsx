@@ -45,6 +45,12 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
  const stemSignature=(project.tracks||[]).filter(t=>t?.generatedBy==='musicgen-independent-audio').map(t=>t.id+':'+(t.clips?.[0]?.assetId||'')).join('|');
  const available=eligibleBandCharacters(characters),byId=new Map(characters.map(c=>[c.id,c]));
  const rhythmSources=savedRhythmSources(project);
+ const danceForStage=(character,member)=>{
+  const original=plan.pcmDances?.[character.id];
+  // The WebGL/Canvas band renderer uses member-local time for its VRM and
+  // motion reference. Actual PCM choreography is bound to song-absolute time.
+  return original?{...original,playbackOffsetSec:member.startSec}:usableDancePlan(character);
+ };
  const rolePerformance=useMemo(()=>{
   const plans=new Map();
   if(plan.durationSec<150)return plans;
@@ -129,8 +135,8 @@ export default function VirtualBand90Editor({project,characters,onSave,notify}){
   const active=bandFrame90(project,characters,plan,Math.max(0,Math.min(plan.durationSec,t)));const tileW=Math.floor(w/Math.max(1,active.length));
   active.forEach((member,i)=>{const c=byId.get(member.characterId),src=sources.current.get(c.id),x=i*tileW;ctx.save();ctx.beginPath();ctx.rect(x,0,tileW,h);ctx.clip();
    ctx.fillStyle=i%2?'#252d48':'#182b43';ctx.fillRect(x,0,tileW,h);
-   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,pcmStageLighting(c.stage3d||null,rolePerformance.get(c.id)?.pcmEnergy,t),lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,plan.pcmDances?.[c.id]||usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(src.element,x,0,tileW,h-62);}
-    else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,plan.pcmDances?.[c.id]||usableDancePlan(c),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
+   try{if(src?.kind==='3d'){src.renderer.render(stageRigSettings(src.settings),t-member.startSec,pcmStageLighting(c.stage3d||null,rolePerformance.get(c.id)?.pcmEnergy,t),lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,danceForStage(c,member),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(src.element,x,0,tileW,h-62);}
+    else if(src?.kind==='2d'){if(c.animation2d&&c.layerPlan?.reviewed){const off=document.createElement('canvas');off.width=c.layerPlan.width;off.height=c.layerPlan.height;drawAnimationFrame(off.getContext('2d'),src.element,c.layerPlan,c.animation2d,t-member.startSec,off.width,off.height,lipByMember.get(c.id)||c.lipSync,liveSingerExpression.get(c.id)?.plan||usableExpressionPlan(c),liveSingerExpression.get(c.id)?.character||c,danceForStage(c,member),rolePerformance.get(c.id)||usablePerformance89(c),true);ctx.drawImage(off,x,0,tileW,h-62);}else ctx.drawImage(src.element,x,0,tileW,h-62);}
     else if(src?.kind==='person'&&src.element.readyState>=2){
      const lip=lipByMember.get(c.id);
      let drawn=false;
