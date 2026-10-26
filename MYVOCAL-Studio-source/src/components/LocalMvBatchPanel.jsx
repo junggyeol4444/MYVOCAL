@@ -628,7 +628,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      <option value="">현재 Voice의 학습된 모델 선택</option>
      {availableDiffSingerModels.map(m=><option value={m.id} key={m.id}>{m.name}{m.dictionaryAssetId?' · 발음 사전 등록':' · 발음 사전 미등록'}</option>)}
     </select>
-    <Notice>저장된 한국어 발음 사전과 실제 Acoustic 체크포인트를 Windows EXE에서 실행합니다. 기존 Singing 포트는 사용하지 않습니다. 이 경로에서는 원곡 선율·3도 화음을 실제 신경망 가창으로 생성할 수 있지만, 별도 가창 스타일은 기존 Singing 엔진 전용입니다. 원곡 가사의 실제 MIDI 휴지에서 Ad-lib를 생성하며, 두 가수 듀엣에는 각자의 실제 DiffSinger 모델·발음 사전이 필요합니다.</Notice>
+    <Notice>저장된 한국어 발음 사전과 실제 Acoustic 체크포인트를 Windows EXE에서 실행합니다. 기존 Singing 포트는 사용하지 않습니다. 이 경로에서는 원곡 선율·3도 화음을 실제 신경망 가창으로 생성할 수 있지만, 가성·속삭임 음색 변환은 이 모델에서 지원하지 않지만, 별도의 MIDI/F0 표현 스타일은 선택할 수 있습니다. 원곡 가사의 실제 MIDI 휴지에서 Ad-lib를 생성하며, 두 가수 듀엣에는 각자의 실제 DiffSinger 모델·발음 사전이 필요합니다.</Notice>
    </label>}
    <label>가창에 사용할 등록 목소리<select value={singingVoiceId} disabled={busy} onChange={e=>{setSingingVoiceId(e.target.value);setSingingRights(false);setDiffSingerModelId('');}}>
      <option value="">프로젝트 목소리 / 첫 번째 사용 허가 목소리</option>
@@ -636,7 +636,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    </select></label>
    <label>노래 스타일 (Voice 음색과 별도{singingBackend==='diffsinger'?' · MIDI/F0 발성 표현':''})<select disabled={busy} value={singingStyle} onChange={e=>setSingingStyle(e.target.value)}>
     {(singingBackend==='diffsinger'?DIFFSINGER_EXPRESSIVE_STYLES:SINGING_STYLES).map(style=><option key={style} value={style}>{style}</option>)}
-   </select></label>}
+   </select></label>
    <label><input type="checkbox" checked={makeHarmony} disabled={busy} onChange={e=>setMakeHarmony(e.target.checked)}/> 원곡 MIDI로 실제 신경망 Singing 3도 화음도 별도 WAV/DAW 트랙 생성</label>}
    {makeHarmony&&<label><input type="checkbox" disabled={busy} checked={makeDuet} onChange={e=>setMakeDuet(e.target.checked)}/> 서로 다른 실제 목소리 2명과 캐릭터 2명으로 듀엣 노래·MV 제작</label>}
    {makeHarmony&&makeDuet&&<div className="mv7-item">
