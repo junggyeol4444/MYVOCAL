@@ -3,17 +3,42 @@ import {Button,Field,Icon,Notice,Panel,SectionHead} from '../components/UI';
 import {steps} from '../lib/schema';
 import {validateGenreMix} from '../lib/genreMix';
 import GenreMixEditor from '../components/GenreMixEditor';
+import {virtualSingerProjectSelection,resolveVirtualSingerProfile} from '../lib/virtualSingerProjectBinding.js';
 const options=[['lyrics','가사 초안'],['composition','코드·작곡'],['arrangement','MIDI 편곡'],['singing','AI Singing (로컬 신경망 모델 필요)'],['mix','Mix 준비'],['master','Master 준비'],['storyboard','영상 장면 초안'],['musicVideo','AI Music Video (로컬 SD/SVD 모델 필요)']];
 export default function AutoCreate({data,createProject}){
- const [pipeline97,setPipeline97]=useState(true);const [title,setTitle]=useState('');const [prompt,setPrompt]=useState('');const [genreMix,setGenreMix]=useState([{name:'Rock',weight:100}]);const [genreAuto,setGenreAuto]=useState(false);const [mixError,setMixError]=useState('');const [voice,setVoice]=useState('');const [videoMode,setVideoMode]=useState('auto');const [char,setChar]=useState('');const [withVideo,setWithVideo]=useState(true);const [selected,setSelected]=useState(Object.fromEntries(options.map(([k])=>[k,true])));
- const submit=(e,openMv=false)=>{e.preventDefault();try{const validated=validateGenreMix(genreMix);setMixError('');createProject({title:title.trim()||'새 음악 프로젝트',prompt:prompt.trim(),genre:validated[0].name,genreMix:validated,genreAuto,voiceId:voice,characterId:char,videoMode,withVideo,options:{...selected,storyboard:withVideo&&selected.storyboard,musicVideo:withVideo&&selected.musicVideo},pipeline97,openMv:openMv&&withVideo&&selected.musicVideo});}catch(err){setMixError(err.message);}};
+ const [pipeline97,setPipeline97]=useState(true);const [title,setTitle]=useState('');const [prompt,setPrompt]=useState('');const [genreMix,setGenreMix]=useState([{name:'Rock',weight:100}]);const [genreAuto,setGenreAuto]=useState(false);const [mixError,setMixError]=useState('');const [virtualSingerId,setVirtualSingerId]=useState(''),[virtualSingerError,setVirtualSingerError]=useState('');const [voice,setVoice]=useState('');const [videoMode,setVideoMode]=useState('auto');const [char,setChar]=useState('');const [withVideo,setWithVideo]=useState(true);const [selected,setSelected]=useState(Object.fromEntries(options.map(([k])=>[k,true])));
+ const submit=(e,openMv=false)=>{e.preventDefault();try{const validated=validateGenreMix(genreMix);setMixError('');createProject({title:title.trim()||'새 음악 프로젝트',prompt:prompt.trim(),genre:validated[0].name,genreMix:validated,genreAuto,voiceId:voice,characterId:char,virtualSingerId,
+ singingModelId:virtualSingerId?virtualSingerProjectSelection(virtualSingerId,data).singingModelId:'',
+ singingStyle:virtualSingerId?virtualSingerProjectSelection(virtualSingerId,data).singingStyle:'Natural',
+ videoMode,withVideo,options:{...selected,storyboard:withVideo&&selected.storyboard,musicVideo:withVideo&&selected.musicVideo},pipeline97,openMv:openMv&&withVideo&&selected.musicVideo});}catch(err){setMixError(err.message);}};
  return <><SectionHead eyebrow="OFFLINE MUSIC WORKSPACE" title="음악과 뮤직비디오 만들기" description="설명과 장르를 입력하면 가사·코드·MIDI·장면 초안을 실제 편집 가능한 프로젝트로 만들고 엽니다. 신경망 실제 신경망 가창·영상은 아래 제작 화면에서 로컬 모델을 선택한 후 실행합니다."/><div className="two-column create-columns"><form className="panel create-form" onSubmit={submit}><div className="panel-top"><div><h3>새 프로젝트 설정</h3><p>기본 정보부터 원하는 창작 방향까지</p></div><span className="mini-step">01 / 03</span></div>
  <Field label="프로젝트 이름"><input value={title} maxLength={80} onChange={e=>setTitle(e.target.value)} placeholder="예: 다시 만나는 밤"/></Field>
  <Field label="만들고 싶은 노래 설명"><textarea rows={5} value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder={'애니메이션 록 발라드를 만들어줘.\n오래 헤어져 있던 친구를 다시 만나는 이야기.\n마지막 후렴은 웅장하게.'}/></Field>
- <div className="form-two"><Field label="목소리"><select value={voice} onChange={e=>setVoice(e.target.value)}><option value="">선택 안 함 (나중에 연결)</option>{data.voices.map(v=><option value={v.id} key={v.id}>{v.name}</option>)}</select></Field><div className="genre-auto-toggle"><label><input type="checkbox" checked={genreAuto} onChange={e=>setGenreAuto(e.target.checked)}/> AI AUTO (추후 AI 엔진 연결)</label><small>현재는 선택한 혼합 비율을 저장하고 로컬 작곡 기준으로 사용합니다.</small></div></div>
+ {(data.virtualSingers||[]).length>0&&<Field label="내 Virtual Singer (목소리·캐릭터·학습 모델 일괄 적용)">
+  <select value={virtualSingerId} onChange={e=>{
+   const id=e.target.value;
+   if(!id){setVirtualSingerId('');setVirtualSingerError('');return;}
+   try{
+    const linked=virtualSingerProjectSelection(id,data);
+    setVirtualSingerId(id);setVoice(linked.voiceId);setChar(linked.characterId);
+    setVideoMode(linked.videoMode);setVirtualSingerError('');
+   }catch(error){setVirtualSingerError(error.message);}
+  }}>
+  <option value="">개별 목소리·캐릭터 직접 선택</option>
+  {(data.virtualSingers||[]).map(v=>{
+   let label=v.name;try{const p=resolveVirtualSingerProfile(v.id,data);
+    label+=' · '+p.voice.name+' / '+p.character.name+
+      (p.trainedSingingReady?' / 로컬 DiffSinger 연결':' / 실제 가창 모델 확인 필요');
+   }catch{label+=' · 라이브러리 연결 확인 필요';}
+   return <option key={v.id} value={v.id}>{label}</option>;
+  })}
+  </select>
+  {virtualSingerError&&<small role="alert">{virtualSingerError}</small>}
+ </Field>}
+ <div className="form-two"><Field label="목소리"><select value={voice} onChange={e=>{setVoice(e.target.value);setVirtualSingerId('');}}> <option value="">선택 안 함 (나중에 연결)</option>{data.voices.map(v=><option value={v.id} key={v.id}>{v.name}</option>)}</select></Field><div className="genre-auto-toggle"><label><input type="checkbox" checked={genreAuto} onChange={e=>setGenreAuto(e.target.checked)}/> AI AUTO (추후 AI 엔진 연결)</label><small>현재는 선택한 혼합 비율을 저장하고 로컬 작곡 기준으로 사용합니다.</small></div></div>
  <GenreMixEditor mix={genreMix} onChange={value=>{setGenreMix(value);setMixError('')}}/>{mixError&&<p className="genre-mix-validation" role="alert">{mixError}</p>}
  <div className="input-separator"/><div className="field-label">뮤직비디오 제작</div><div className="toggle-line"><div><strong>음악 + 영상 프로젝트</strong><p>영상 타임라인과 스토리보드를 함께 준비</p></div><input type="checkbox" checked={withVideo} onChange={e=>setWithVideo(e.target.checked)}/></div>
- {withVideo&&<><div className="choice-grid">{[['auto','✦','AI 자동 캐릭터'],['character','◈','내 캐릭터'],['person','◉','실제 사람']].map(([value,icon,label])=><button type="button" key={value} onClick={()=>setVideoMode(value)} className={`choice ${videoMode===value?'selected':''}`}><span>{icon}</span>{label}</button>)}</div>{videoMode!=='auto'&&<Field label="메인 캐릭터"><select value={char} onChange={e=>setChar(e.target.value)}><option value="">나중에 선택</option>{data.characters.filter(c=>videoMode==='person'?c.kind==='person':c.kind!=='person').map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select></Field>}</>}
+ {withVideo&&<><div className="choice-grid">{[['auto','✦','AI 자동 캐릭터'],['character','◈','내 캐릭터'],['person','◉','실제 사람']].map(([value,icon,label])=><button type="button" key={value} onClick={()=>{setVideoMode(value);setVirtualSingerId('');}} className={`choice ${videoMode===value?'selected':''}`}><span>{icon}</span>{label}</button>)}</div>{videoMode!=='auto'&&<Field label="메인 캐릭터"><select value={char} onChange={e=>{setChar(e.target.value);setVirtualSingerId('');}}><option value="">나중에 선택</option>{data.characters.filter(c=>videoMode==='person'?c.kind==='person':c.kind!=='person').map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select></Field>}</>}
  <div className="input-separator"/><div className="field-label">제작 항목 (미연결 AI 기능은 실행되지 않음)</div><div className="checkbox-grid">{options.map(([key,name])=><label className="check-item" key={key}><input type="checkbox" checked={selected[key]} onChange={e=>setSelected(prev=>({...prev,[key]:e.target.checked}))}/>{name}</label>)}</div>
  <label className="check-item"><input type="checkbox" checked={pipeline97} onChange={e=>setPipeline97(e.target.checked)}/> 가사·MIDI·스토리보드 초안도 함께 만들어 열기 (끄면 빈 프로젝트)</label>
  <Button variant="primary" className="full-width large-button" icon="spark" onClick={submit}>{pipeline97?'곡 만들고 편집기 열기':'빈 프로젝트 열기'}</Button>
