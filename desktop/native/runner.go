@@ -3,6 +3,7 @@ package main
 import (
  "bytes"
  "context"
+ "encoding/json"
  "errors"
  "fmt"
  "io"
@@ -19,8 +20,10 @@ const (
  taskDemucs
  taskScoreVocal
  taskLipSync
+ taskRVCConvert
+ taskDiffSinger
 )
-var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV"}
+var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)"}
 
 type request struct {
  Task int
@@ -32,7 +35,7 @@ type request struct {
  Prompt string
  Option string
 }
-type jobSpec struct {exe string;args []string;output string}
+type jobSpec struct {exe string;args []string;output string;cwd string}
 
 func requireExistingFile(path string)error{
  if !filepath.IsAbs(path){return fmt.Errorf("절대 파일 경로가 필요합니다: %s",path)}
@@ -102,6 +105,32 @@ func prepareRequest(r request)(jobSpec,error){
   if err!=nil||interval< -24||interval>24{return jobSpec{},errors.New("반음 보정은 -24~24입니다")}
   script="score_vocal_worker.py"
   args=[]string{"--input",r.Input,"--score",r.Auxiliary,"--output",r.Output,"--interval",strconv.Itoa(interval)}
+ case taskRVCConvert:
+  if err:=requireDirectory(r.Engine);err!=nil{return jobSpec{},err}
+  if err:=requireExistingFile(filepath.Join(r.Engine,"infer","cli.py"));err!=nil{return jobSpec{},errors.New("설치된 RVC infer/cli.py가 없습니다")}
+  if err:=requireExistingFile(r.Input);err!=nil{return jobSpec{},err}
+  if err:=requireExistingFile(r.Auxiliary);err!=nil{return jobSpec{},err}
+  if strings.ToLower(filepath.Ext(r.Auxiliary))!=".pth"{return jobSpec{},errors.New("훈련된 RVC 모델은 .pth여야 합니다")}
+  pitch,err:=strconv.Atoi(strings.TrimSpace(r.Option));if err!=nil||pitch< -24||pitch>24{return jobSpec{},errors.New("RVC 음정은 -24~24입니다")}
+  rate:="0"
+  if r.Prompt!=""{if err:=requireExistingFile(r.Prompt);err!=nil{return jobSpec{},err};if filepath.Ext(r.Prompt)!=".index"{return jobSpec{},errors.New("인덱스 확장자는 .index여야 합니다")};rate="0.5"}
+  args=[]string{"infer/cli.py","--model",r.Auxiliary,"--input",r.Input,"--output",r.Output,"--pitch",strconv.Itoa(pitch),"--f0-method","pm","--index-rate",rate}
+  if r.Prompt!=""{args=append(args,"--index",r.Prompt)}
+  return jobSpec{exe:r.Python,args:args,output:r.Output,cwd:r.Engine},nil
+ case taskDiffSinger:
+  if err:=requireDirectory(r.Engine);err!=nil{return jobSpec{},err}
+  if err:=requireExistingFile(filepath.Join(r.Engine,"scripts","infer.py"));err!=nil{return jobSpec{},errors.New("DiffSinger scripts/infer.py가 없습니다")}
+  if err:=requireExistingFile(r.Input);err!=nil{return jobSpec{},err}
+  if r.Prompt!="confirmed"{return jobSpec{},errors.New("사용 권리가 확인된 자료만 이용하세요. 권리 확인 칸에 confirmed 입력")}
+  experiment:=strings.TrimSpace(r.Auxiliary)
+  if experiment==""||len(experiment)>80||strings.Trim(experiment,"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")!=""{return jobSpec{},errors.New("DiffSinger 학습 실험 이름이 올바르지 않습니다")}
+  if err:=requireDirectory(filepath.Join(r.Engine,"checkpoints",experiment));err!=nil{return jobSpec{},errors.New("실제 학습 체크포인트 폴더가 없습니다")}
+  buf,err:=os.ReadFile(r.Input);if err!=nil||len(buf)>(4<<20){return jobSpec{},errors.New("DiffSinger 악보 파일이 없거나 너무 큽니다")}
+  var segments []map[string]interface{}
+  if json.Unmarshal(buf,&segments)!=nil||len(segments)<1||len(segments)>60{return jobSpec{},errors.New("DiffSinger 악보는 1~60개 구간 JSON 배열이어야 합니다")}
+  for _,seg:=range segments{for _,key:=range []string{"offset","ph_seq","ph_dur","f0_seq","f0_timestep"}{if _,ok:=seg[key];!ok{return jobSpec{},fmt.Errorf("DiffSinger 구간에 %s 필드가 없습니다",key)}}}
+  args=[]string{filepath.Join(r.Engine,"scripts","infer.py"),"acoustic",r.Input,"--exp",experiment,"--out",filepath.Dir(r.Output),"--title","MYVOCAL-Neural-Singing"}
+  return jobSpec{exe:r.Python,args:args,output:r.Output,cwd:r.Engine},nil
  case taskLipSync:
   if err:=requireExistingFile(r.Engine);err!=nil{return jobSpec{},fmt.Errorf("캐릭터 이미지: %w",err)}
   if err:=requireExistingFile(r.Input);err!=nil{return jobSpec{},fmt.Errorf("가창 WAV: %w",err)}
@@ -117,11 +146,12 @@ func prepareRequest(r request)(jobSpec,error){
 func executeJob(ctx context.Context,r request,logLine func(string))error{
  job,err:=prepareRequest(r);if err!=nil{return err}
  // Existing MusicGen worker uses wb; generate in scratch and publish new WAV exclusively.
- if r.Task==taskMusicGen{
+ if r.Task==taskMusicGen||r.Task==taskRVCConvert||r.Task==taskDiffSinger{
   dir,e:=os.MkdirTemp("","myvocal-native-musicgen-");if e!=nil{return e}
   defer os.RemoveAll(dir)
   scratch:=filepath.Join(dir,"generated.wav")
-  for i:=0;i<len(job.args)-1;i++{if job.args[i]=="--output"{job.args[i+1]=scratch;break}}
+  if r.Task==taskDiffSinger{scratch=filepath.Join(dir,"MYVOCAL-Neural-Singing.wav")}
+  for i:=0;i<len(job.args)-1;i++{if job.args[i]=="--output"{job.args[i+1]=scratch;break};if job.args[i]=="--out"{job.args[i+1]=dir;break}}
   if err=runProcess(ctx,job,logLine);err!=nil{return err}
   if err=requireExistingFile(scratch);err!=nil{return fmt.Errorf("MusicGen WAV 출력이 없습니다: %w",err)}
   wav,err:=os.Open(scratch);if err!=nil{return err};defer wav.Close()
@@ -144,6 +174,7 @@ func executeJob(ctx context.Context,r request,logLine func(string))error{
 }
 func runProcess(ctx context.Context,job jobSpec,logLine func(string))error{
  cmd:=exec.CommandContext(ctx,job.exe,job.args...)
+ if job.cwd!=""{cmd.Dir=job.cwd}
  cmd.Env=append(os.Environ(),"HF_HUB_OFFLINE=1","TRANSFORMERS_OFFLINE=1","HF_DATASETS_OFFLINE=1")
  streamR,streamW:=io.Pipe();cmd.Stdout=streamW;cmd.Stderr=streamW
  done:=make(chan struct{})
