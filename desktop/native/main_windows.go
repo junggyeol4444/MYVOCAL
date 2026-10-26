@@ -46,6 +46,8 @@ var (
  kernel32=syscall.NewLazyDLL("kernel32.dll")
  gdi32=syscall.NewLazyDLL("gdi32.dll")
  comdlg32=syscall.NewLazyDLL("comdlg32.dll")
+ shell32=syscall.NewLazyDLL("shell32.dll")
+ ole32=syscall.NewLazyDLL("ole32.dll")
  registerClass=user32.NewProc("RegisterClassExW")
  createWindow=user32.NewProc("CreateWindowExW")
  defWindowProc=user32.NewProc("DefWindowProcW")
@@ -67,6 +69,9 @@ var (
  getStockObject=gdi32.NewProc("GetStockObject")
  openDialog=comdlg32.NewProc("GetOpenFileNameW")
  saveDialog=comdlg32.NewProc("GetSaveFileNameW")
+ browseForFolder=shell32.NewProc("SHBrowseForFolderW")
+ getPathFromList=shell32.NewProc("SHGetPathFromIDListW")
+ freePIDL=ole32.NewProc("CoTaskMemFree")
 )
 type point struct {X,Y int32}
 type msg struct {Hwnd uintptr;Message uint32;_ uint32;WParam,LParam uintptr;Time uint32;Pt point;LPrivate uint32}
@@ -94,6 +99,13 @@ type openFileName struct {
  CustData,Hook,TemplateName uintptr
  ReservedPtr uintptr
  ReservedInt,FlagsEx uint32
+}
+type browseInfo struct {
+ Owner,Root uintptr
+ DisplayName,Title *uint16
+ Flags uint32
+ Callback,Param uintptr
+ Image int32
 }
 type nativeUI struct{
  hwnd,chooser,start,cancelButton,logEdit uintptr
@@ -160,13 +172,55 @@ func updateFields(){
   enabled:=!strings.Contains(fieldNames[task][i],"미사용")
   v:=uintptr(0);if enabled{v=1}
   enableWindow.Call(ui.edits[i],v)
+  if !pathField(task,i){v=0}
   enableWindow.Call(ui.browses[i],v)
  }
  defaults:=[]string{"12","20","htdemucs","0","","0","","180","100"}
  setText(ui.edits[6],defaults[task])
  appendLog("\r\n모드: "+taskNames[task]+" (기존 사용자 파일은 덮어쓰지 않습니다)\r\n")
 }
+// Desktop-only Windows folder selection. No browser or remote file picker.
+func directoryField(task,index int)bool{
+ switch task{
+ case taskMusicGen,taskLongMusicGen:return index==1
+ case taskRVC:return index==1||index==2
+ case taskDemucs:return index==1||index==4
+ case taskRVCConvert,taskDiffSinger:return index==1
+ }
+ return false
+}
+func pathField(task,index int)bool{
+ if directoryField(task,index){return true}
+ if index==0{return task!=taskMixWAV}
+ if index==4{return true}
+ if index==2{return task==taskDemucs||task==taskScoreVocal||task==taskLipSync||task==taskRVCConvert||task==taskDiffSinger||task==taskMixWAV}
+ if index==3{return task==taskScoreVocal||task==taskLipSync||task==taskRVCConvert||task==taskMixWAV}
+ if index==5{return task==taskRVCConvert}
+ if index==6{return task==taskLipSync}
+ if index==1{return task==taskLipSync}
+ return false
+}
+func folderPicker() (string,bool){
+ var display [260]uint16
+ title:=utf16("로컬 폴더 선택")
+ info:=browseInfo{Owner:ui.hwnd,DisplayName:&display[0],Title:title,Flags:0x0001|0x0010}
+ pidl,_,_:=browseForFolder.Call(uintptr(unsafe.Pointer(&info)))
+ if pidl==0{return "",false}
+ defer freePIDL.Call(pidl)
+ var name [32768]uint16
+ ok,_,_:=getPathFromList.Call(pidl,uintptr(unsafe.Pointer(&name[0])))
+ if ok==0{return "",false}
+ path:=syscall.UTF16ToString(name[:])
+ if path==""{return "",false}
+ return path,true
+}
 func filePicker(index int){
+ task:=getTask()
+ if !pathField(task,index){return}
+ if directoryField(task,index){
+  if value,ok:=folderPicker();ok{setText(ui.edits[index],value)}
+  return
+ }
  var buf [32768]uint16
  old:=readText(ui.edits[index]);if old!=""{copy(buf[:],syscall.StringToUTF16(old))}
  // OFN_PATHMUSTEXIST|OFN_EXPLORER; output mode permits choosing a new file.
