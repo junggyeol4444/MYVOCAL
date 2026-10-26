@@ -15,7 +15,14 @@ export default function AutoSingerRegisterPanel({project,characters=[],voices=[]
  const eligibleVoices=(voices||[]).filter(v=>['self','owned','licensed'].includes(v.rights)&&
   (v.rights!=='licensed'||String(v.rightsNote||'').trim()));
  const chosenVoice=eligibleVoices.find(v=>v.id===voiceId);
- const modelChoices=(models||[]).filter(m=>m.voiceId===voiceId&&m.engineId!=='sampler'&&m.assetId);
+ const modelChoices=(models||[]).filter(m=>m.voiceId===voiceId&&
+  (m.engineId==='rvc'&&!!m.assetId&&/^[a-f0-9]{64}$/i.test(String(m.sha256||''))||
+   m.engineId==='diffsinger'&&
+   m.modelKind==='local-installed-acoustic'&&
+   m.status==='checkpoint-produced-in-unverified-environment'&&
+   m.source==='official-diffsinger-acoustic-training'&&
+   /^myvocal-[a-f0-9]{24}$/.test(String(m.experiment||''))&&
+   !!m.dictionaryAssetId&&/^[a-f0-9]{64}$/i.test(String(m.dictionarySha256||''))));
  const linked=registered&&(virtualSingers||[]).some(v=>v.characterId===registered.id&&v.voiceId===voiceId);
  const linkVoice=()=>{
   try{
@@ -60,7 +67,7 @@ export default function AutoSingerRegisterPanel({project,characters=[],voices=[]
     <option value="">기존 Voice 선택</option>
     {eligibleVoices.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
    </select></Field>
-   <Field label="등록된 실제 음색 모델 (선택, 샘플 미리보기 제외)"><select value={modelId} disabled={!voiceId} onChange={e=>setModelId(e.target.value)}>
+   <Field label="실제 등록된 RVC 또는 발음 사전 포함 DiffSinger 가창 모델"><select value={modelId} disabled={!voiceId} onChange={e=>setModelId(e.target.value)}>
     <option value="">현재 목소리만 연결 · 신경망 모델 미연결</option>
     {modelChoices.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
    </select></Field>
