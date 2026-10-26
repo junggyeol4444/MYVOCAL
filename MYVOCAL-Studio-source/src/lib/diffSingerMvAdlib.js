@@ -5,7 +5,7 @@ import {makeOriginalLyricAdlibAlignment} from './mvNeuralAdlib.js';
 import {generateAndStoreDiffSingerMvSinging} from './diffSingerMvSinging.js';
 
 export async function generateAndStoreDiffSingerMvAdlib(project,{
- voice,model,session,confirmed=false,signal,saveOptions,onProgress=()=>{}
+ voice,model,session,confirmed=false,singingStyle='Natural',signal,saveOptions,onProgress=()=>{}
 }={}){
  if(!saveOptions||typeof saveOptions.current!=='function'||
   typeof saveOptions.onChange!=='function')
@@ -14,7 +14,7 @@ export async function generateAndStoreDiffSingerMvAdlib(project,{
  const originals=new Set(project.tracks.map(t=>t.id));
  let named=null;
  const result=await generateAndStoreDiffSingerMvSinging(project,{
-  voice,model,session,confirmed,signal,scoreAlignment:score,
+  voice,model,session,confirmed,singingStyle,signal,scoreAlignment:score,
   scoreAlignmentKind:'adlib',onProgress,
   saveOptions:{...saveOptions,onChange:next=>{
    if(signal?.aborted||saveOptions.current()!==project)
