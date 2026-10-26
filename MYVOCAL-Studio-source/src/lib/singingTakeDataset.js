@@ -59,15 +59,21 @@ function sliceWav(source,start,end){
  return {bytes:out,metrics:{seconds:round((last-first)/source.rate),rmsDbfs:round(20*Math.log10(Math.max(rms,1e-9))),
   peak:round(peak),clippedPercent:round(100*clipped/samples)}};
 }
-export function planSingingTakePhrases(project,alignment,{recordingStartSec=0}={}){
+export function planSingingTakePhrases(project,alignment,{recordingStartSec=0,recordingEndSec=360,clipToRange=false}={}){
  if(!project||isAlignmentStale(project,alignment))throw Error('프로젝트 가사·MIDI가 변경됐습니다. 싱크를 다시 생성하세요.');
  validateAlignment(alignment);
- if(!Number.isFinite(recordingStartSec)||recordingStartSec<0||recordingStartSec>360)
-  throw Error('녹음 시작 위치는 원곡 기준 0~360초입니다.');
+ if(!Number.isFinite(recordingStartSec)||recordingStartSec<0||recordingStartSec>360||
+  !Number.isFinite(recordingEndSec)||recordingEndSec<=recordingStartSec||recordingEndSec>360.001)
+  throw Error('녹음 시작·종료 위치는 원곡 기준 0~360초입니다.');
  const cues=[...alignment.cues].sort((a,b)=>a.startSec-b.startSec);
  const phrases=[];let current=[];
  const flush=()=>{if(!current.length)return;phrases.push(current);current=[];};
  for(const cue of cues){
+  if(clipToRange){
+   if(cue.endSec<=recordingStartSec+.0001||cue.startSec>=recordingEndSec-.0001)continue;
+   if(cue.startSec<recordingStartSec-.001||cue.endSec>recordingEndSec+.001)
+    throw Error('녹음 파일의 시작·끝에서 MIDI 음표가 잘립니다. 원곡 시작 초나 녹음 구간을 조정하세요.');
+  }
   const lyric=String(cue.lyric||'').trim();
   if(!lyric||lyric==='—'||lyric==='-'||lyric==='_'||lyric==='SP'){flush();continue;}
   if(cue.startSec<recordingStartSec-.001)
@@ -83,65 +89,92 @@ export function planSingingTakePhrases(project,alignment,{recordingStartSec=0}={
  return phrases.map((cues,i)=>({index:i+1,startSec:cues[0].startSec,
   endSec:cues[cues.length-1].endSec,cues}));
 }
+// A singer can contribute several independently recorded takes to one new,
+// isolated training ZIP. Each take has an explicit absolute position on the
+// existing MIDI timeline. Original WAVs and the project are read-only.
 export async function exportSingingTakeDataset(project,alignment,recording,dictionary,{
  voice,recordingStartSec=0,rightsConfirmed=false,signal}={}){
  if(!voice||!permitted.has(voice.rights)||rightsConfirmed!==true)
   throw Error('본인 또는 허가받은 노래 녹음·가사·모델 학습 권한을 확인하세요.');
- if(!(recording instanceof Blob)||recording.size<44||recording.size>MAX_WAV_BYTES)
-  throw Error('원본 노래 녹음 WAV 파일을 선택하세요 (최대 120MB).');
  if(!(dictionary instanceof Map)||!dictionary.size)
   throw Error('현재 학습할 DiffSinger 모델의 한국어 발음 사전을 선택하세요.');
- const phrases=planSingingTakePhrases(project,alignment,{recordingStartSec});
- const source=wav16(await recording.arrayBuffer());
- if(signal?.aborted)throw Error('데이터셋 만들기가 취소됐습니다.');
- const entries=[],manifest=[],transcriptions=['name,ph_seq,ph_dur'],maxSeconds=source.frames/source.rate;
+ const takes=Array.isArray(recording)?recording:
+  [{file:recording,startSec:recordingStartSec}];
+ if(!takes.length||takes.length>12)
+  throw Error('하나의 학습 자료는 서로 다른 실제 WAV 녹음 1~12개를 지원합니다.');
+ const entries=[],manifest=[],recordingInfo=[],transcriptions=['name,ph_seq,ph_dur'];
  const lexicon=[...dictionary].map(([word,phonemes])=>{
-  if(typeof word!=='string'||!word||/[^\p{L}\p{N}_+-]/u.test(word)||
+  if(typeof word!=='string'||!word||/[^\\p{L}\\p{N}_+-]/u.test(word)||
    !Array.isArray(phonemes)||!phonemes.length||
-   phonemes.some(p=>typeof p!=='string'||!/^[\p{L}\p{N}_/+-]+$/u.test(p)))
+   phonemes.some(p=>typeof p!=='string'||!/^[\\p{L}\\p{N}_/+-]+$/u.test(p)))
    throw Error('실제 한국어 DiffSinger 학습 발음 사전에 유효하지 않은 단어·음소가 있습니다.');
-  return word+'\t'+phonemes.join(' ');
- }).join('\n')+'\n';
+  return word+'\\t'+phonemes.join(' ');
+ }).join('\\n')+'\\n';
  if(encoder.encode(lexicon).length>2*1024*1024)
   throw Error('DiffSinger 학습 발음 사전은 2MB 이하여야 합니다.');
- let size=0;
- for(const phrase of phrases){
+ let totalAudio=0,phraseIndex=0;
+ for(const [takeIndex,take] of takes.entries()){
   if(signal?.aborted)throw Error('데이터셋 만들기가 취소됐습니다.');
-  const from=phrase.startSec-recordingStartSec,to=phrase.endSec-recordingStartSec;
-  if(from<0||to>maxSeconds+.0001)throw Error(phrase.index+'번 가사 구간이 실제 녹음 WAV 길이를 벗어납니다.');
-  const audio=sliceWav(source,from,Math.min(to,maxSeconds));
-  const ds=buildKoreanDiffSingerDS({cues:phrase.cues},dictionary);
-  if(ds.length!==1)throw Error(phrase.index+'번 음소·음정 학습 구간을 만들 수 없습니다.');
-  const key='take-'+String(phrase.index).padStart(3,'0');
-  const label={format:'MYVOCAL_SINGING_TAKE_LABEL',version:1,voiceId:voice.id,
-   projectId:project.id,sourceKey:alignment.sourceKey,
-   originalStartSec:round(phrase.startSec),originalEndSec:round(phrase.endSec),
-   recordingStartSec:round(recordingStartSec),
-   noteCues:phrase.cues.map(c=>({lyric:c.lyric,pitch:c.pitch,
-    startSec:round(c.startSec-phrase.startSec),endSec:round(c.endSec-phrase.startSec)})),
-   phonemeTiming:'MIDI-derived, not audio forced-aligned',
-   audioMetrics:audio.metrics};
-  const paths={audio:'wavs/'+key+'.wav',label:'labels/'+key+'.json',score:'score/'+key+'.ds'};
-  const score={...ds[0],offset:0};
-  transcriptions.push([key,score.ph_seq,score.ph_dur].join(','));
-  entries.push({name:paths.audio,data:audio.bytes},
-   {name:paths.label,data:encoder.encode(JSON.stringify(label,null,2))},
-   {name:paths.score,data:encoder.encode(JSON.stringify([score],null,2))});
-  size+=audio.bytes.length;
-  if(size>MAX_WAV_BYTES)throw Error('학습용 구간 WAV 합계가 120MB를 넘었습니다.');
-  manifest.push({...paths,seconds:audio.metrics.seconds,rmsDbfs:audio.metrics.rmsDbfs,
-   clippedPercent:audio.metrics.clippedPercent});
+  const file=take?.file,start=Number(take?.startSec);
+  if(!(file instanceof Blob)||file.size<44||file.size>MAX_WAV_BYTES||
+    !Number.isFinite(start)||start<0||start>=360)
+   throw Error((takeIndex+1)+'번 녹음 WAV 파일·원곡 시작 초를 확인하세요.');
+  const source=wav16(await file.arrayBuffer());
+  const maxSeconds=source.frames/source.rate,end=start+maxSeconds;
+  if(end>360.001)throw Error((takeIndex+1)+'번 녹음이 원곡 360초를 초과합니다.');
+  const phrases=planSingingTakePhrases(project,alignment,{
+   recordingStartSec:start,recordingEndSec:end,
+   clipToRange:Array.isArray(recording)
+  });
+  if(phraseIndex+phrases.length>MAX_PHRASES)
+   throw Error('모든 녹음의 가창 학습 구간 합계는 최대 60개입니다.');
+  recordingInfo.push({index:takeIndex+1,name:String(file.name||'recording.wav').slice(0,120),
+   startSec:round(start),seconds:round(maxSeconds),
+   sampleRate:source.rate,channels:source.channels,phrases:phrases.length});
+  for(const phrase of phrases){
+   if(signal?.aborted)throw Error('데이터셋 만들기가 취소됐습니다.');
+   const from=phrase.startSec-start,to=phrase.endSec-start;
+   if(from<-.0001||to>maxSeconds+.0001)
+    throw Error((takeIndex+1)+'번 녹음의 가사·MIDI 구간이 실제 WAV 길이를 벗어납니다.');
+   const audio=sliceWav(source,Math.max(0,from),Math.min(to,maxSeconds));
+   const ds=buildKoreanDiffSingerDS({cues:phrase.cues},dictionary);
+   if(ds.length!==1)throw Error('녹음 '+(takeIndex+1)+'의 음소·음정 학습 구간을 만들 수 없습니다.');
+   phraseIndex++;
+   const key='take-'+String(phraseIndex).padStart(3,'0');
+   const label={format:'MYVOCAL_SINGING_TAKE_LABEL',version:1,voiceId:voice.id,
+    projectId:project.id,sourceKey:alignment.sourceKey,recordingIndex:takeIndex+1,
+    originalStartSec:round(phrase.startSec),originalEndSec:round(phrase.endSec),
+    recordingStartSec:round(start),
+    noteCues:phrase.cues.map(c=>({lyric:c.lyric,pitch:c.pitch,
+     startSec:round(c.startSec-phrase.startSec),endSec:round(c.endSec-phrase.startSec)})),
+    phonemeTiming:'MIDI-derived, not audio forced-aligned',
+    audioMetrics:audio.metrics};
+   const paths={audio:'wavs/'+key+'.wav',label:'labels/'+key+'.json',score:'score/'+key+'.ds'};
+   const score={...ds[0],offset:0};
+   transcriptions.push([key,score.ph_seq,score.ph_dur].join(','));
+   entries.push({name:paths.audio,data:audio.bytes},
+    {name:paths.label,data:encoder.encode(JSON.stringify(label,null,2))},
+    {name:paths.score,data:encoder.encode(JSON.stringify([score],null,2))});
+   totalAudio+=audio.bytes.length;
+   if(totalAudio>MAX_WAV_BYTES)throw Error('모든 녹음의 학습용 WAV 합계가 120MB를 넘었습니다.');
+   manifest.push({...paths,recordingIndex:takeIndex+1,
+    seconds:audio.metrics.seconds,rmsDbfs:audio.metrics.rmsDbfs,
+    clippedPercent:audio.metrics.clippedPercent});
+  }
  }
  const meta={format:'MYVOCAL_SINGING_TAKE_DATASET',version:1,voiceId:voice.id,
   projectId:project.id,alignmentSourceKey:alignment.sourceKey,
-  recordingName:String(recording.name||'recording.wav').slice(0,120),
-  sampleRate:source.rate,channels:source.channels,rights:voice.rights,
-  recordingStartSec,phrases:manifest,trained:false,
-  note:'실제 노래 녹음에서 PCM 구간을 추출했습니다. 음소 시간은 가사·MIDI 추정이며 음성 강제 정렬/신경망 학습은 수행하지 않았습니다. 학습 전 수동 라벨 검수와 모델별 전처리가 필요합니다.'};
- entries.unshift({name:'transcriptions.csv',data:encoder.encode(transcriptions.join('\n')+'\n')},
+  recordingName:recordingInfo.length===1?recordingInfo[0].name:'multiple recordings',
+  sampleRate:recordingInfo.length===1?recordingInfo[0].sampleRate:null,
+  channels:recordingInfo.length===1?recordingInfo[0].channels:null,
+  rights:voice.rights,
+  recordingStartSec:recordingInfo.length===1?recordingInfo[0].startSec:null,
+  recordings:recordingInfo,phrases:manifest,trained:false,
+  note:'여러 실제 가창 녹음의 PCM 구간을 원곡 MIDI 위치에 맞춰 추출했습니다. 음소 시간은 MIDI 추정이며 음성 강제 정렬/신경망 학습은 수행하지 않았습니다. 모델별 전처리 전 수동 라벨 검수가 필요합니다.'};
+ entries.unshift({name:'transcriptions.csv',data:encoder.encode(transcriptions.join('\\n')+'\\n')},
   {name:'dictionary.txt',data:encoder.encode(lexicon)},
   {name:'manifest.json',data:encoder.encode(JSON.stringify({...meta,pronunciationDictionary:'dictionary.txt'},null,2))},
-  {name:'README.txt',data:encoder.encode('MYVOCAL 한국어 가창 학습 데이터\nDiffSinger acoustic 원시 데이터 레이아웃: wavs/*.wav + transcriptions.csv (name,ph_seq,ph_dur) + dictionary.txt (한국어 실제 음소 TSV).\n실제 사용자 녹음 WAV와 원곡 가사·MIDI 시간표를 페어로 저장합니다.\n음소 시간은 실제 발음 강제 정렬 결과가 아닙니다. 반드시 라벨을 검수하고 설치한 DiffSinger 버전에 맞게 전처리하세요.\n이 파일은 학습된 모델이나 합성된 노래가 아닙니다.\n')});
+  {name:'README.txt',data:encoder.encode('MYVOCAL 한국어 가창 학습 데이터\\nDiffSinger acoustic 원시 데이터: wavs/*.wav + transcriptions.csv + dictionary.txt.\\n원곡 시작 초가 서로 다른 실제 사용자 녹음 여러 개를 한 번에 수집하며 원본은 변경하지 않습니다.\\n음소 시간은 강제 정렬 결과가 아닙니다. 설치된 모델에 맞게 라벨을 검수하세요.\\n')});
  return {bytes:makeZip(entries),manifest:meta,
   fileName:'MYVOCAL-'+String(project.title||'singing').replace(/[^a-zA-Z0-9가-힣_-]/g,'_').slice(0,45)+'-가창학습데이터.zip'};
 }
