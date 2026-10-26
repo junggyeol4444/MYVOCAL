@@ -8,6 +8,7 @@ import {downloadText} from '../lib/store.js';
 import {genreList} from '../lib/genres.js';
 import {createDancePlan,validateDancePlan,parseDanceLines,danceLines,danceAt,dancePose,danceReferences,saveDancePlan} from '../lib/characterDanceDirector.js';
 import {extractMotionCapture31,makeMotionCapture31} from '../lib/motionReferencePose31.js';
+import {savedRhythmSources,createMusicReactiveDance30} from '../lib/musicReactiveDance30.js';
 const MOVES={groove:'그루브',step:'스텝',bounce:'바운스',sway:'스웨이',wave:'팔 흔들기',pose:'포즈'};
 export default function CharacterDanceEditor({character,projects=[],onSave,notify}){
  const existing=(()=>{try{return character.dance88?validateDancePlan(character,character.dance88):null;}catch{return null;}})();
@@ -25,6 +26,33 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
  const [poseStatus,setPoseStatus]=useState('설치된 MediaPipe Task .task 모델 선택 필요');
  const [poseDraft,setPoseDraft]=useState(null);
  const poseAbort=useRef(null);
+ const [pcmDuration,setPcmDuration]=useState(180);
+ const [pcmRhythm,setPcmRhythm]=useState(''),[pcmBusy,setPcmBusy]=useState(false);
+ const [pcmStatus,setPcmStatus]=useState('실제 독립 드럼 WAV를 선택하면 오디오 강약으로 춤 큐를 생성합니다.');
+ const pcmAbort=useRef(null);
+ useEffect(()=>()=>pcmAbort.current?.abort(),[]);
+ const chosenProject=projects.find(p=>p.id===projectId);
+ const rhythmTracks=savedRhythmSources(chosenProject);
+ const generateAudioDance=async()=>{
+  if(pcmBusy||poseRunning||cameraBusy)return;
+  const source=chosenProject;
+  if(!source){setPcmStatus('먼저 실제 음악 프로젝트를 선택하세요.');return;}
+  const controller=new AbortController();pcmAbort.current=controller;
+  setPcmBusy(true);setPcmStatus('원곡 독립 드럼 PCM 파일 확인 중');
+  try{
+   const plan=await createMusicReactiveDance30(character,source,{
+    loadFile:getFile,signal:controller.signal,durationSec:Number(pcmDuration),
+    sourceTrackId:pcmRhythm||rhythmTracks[0]?.trackId,
+    current:()=>projects.find(p=>p.id===source.id),
+    onProgress:setPcmStatus
+   });
+   if(controller.signal.aborted)throw Error('PCM 춤 제작이 취소됐습니다.');
+   setBase(plan);setReferenceId('');setLines(danceLines(plan));setTime(0);
+   setPcmStatus('실제 드럼 WAV 강약에 따라 '+plan.cues.length+'개 전곡 춤 큐를 만들었습니다. 저장 버튼을 누르기 전까지 기존 춤은 그대로입니다.');
+  }catch(error){setPcmStatus('원본·기존 춤 보존 · WAV 기반 춤 생성 중단: '+error.message);}
+  finally{setPcmBusy(false);pcmAbort.current=null;}
+ };
+
  const [cameraDuration,setCameraDuration]=useState(10),[cameraBusy,setCameraBusy]=useState(false);
  const [cameraStatus,setCameraStatus]=useState('웹캠 사용 권한을 허용하면 로컬 WebM을 녹화할 수 있습니다.');
  const cameraAbort=useRef(null);
@@ -137,7 +165,27 @@ export default function CharacterDanceEditor({character,projects=[],onSave,notif
    {character.motionCaptured31&&<p>등록된 실제 동작: {character.motionCaptured31.frames?.length||0}프레임 · 기존 춤 계획과 별도 보관</p>}
    <Notice>Windows EXE에 설치된 오프라인 MediaPipe Tasks·OpenCV·Pose Task 모델이 필요합니다. 모델은 자동 설치/다운로드되지 않습니다. 2D 영상에서 검출한 상대 관절 회전을 VRM 본에 적용하는 실제 추출 기능이며, 깊이까지 추정한 완전한 3D 모션캡처는 아닙니다.</Notice>
   </div>
-  <p><Button onClick={regenerate}>현재 음악 설정으로 동작 큐 생성</Button></p>
+  <div className="mv7-item">
+   <strong>원본 30·46·47항 · 실제 MusicGen 드럼 WAV PCM 기반 전곡 춤 생성</strong>
+   <Notice>해당 프로젝트에 이미 저장된 독립 드럼 신경망 WAV를 실제 읽어 100ms별 PCM 강약을 분석하고, 원곡 BPM·장르·구간에 맞춰 2D/VRM 춤의 동작·강도를 조절합니다. 가짜 음악 데이터나 신경망 춤 추론으로 표시하지 않습니다. 기존 저장 춤을 변경하지 않고 새 초안만 생성합니다.</Notice>
+   <Field label="원곡 드럼 WAV 선택"><select disabled={pcmBusy} value={pcmRhythm}
+    onChange={e=>setPcmRhythm(e.target.value)}>
+    <option value="">이 음악의 실제 저장 드럼 WAV 자동 선택</option>
+    {rhythmTracks.map(track=><option key={track.trackId} value={track.trackId}>{track.name}</option>)}
+   </select></Field>
+   <Field label="영상 전체 길이 (3~6분 또는 2~30초)">
+    <select disabled={pcmBusy} value={pcmDuration} onChange={e=>setPcmDuration(Number(e.target.value))}>
+     <option value={180}>3분 (180초)</option><option value={240}>4분 (240초)</option>
+     <option value={300}>5분 (300초)</option><option value={360}>6분 (360초)</option>
+     <option value={10}>10초 구간</option><option value={30}>30초 구간</option>
+    </select>
+   </Field>
+   <div className="hstack"><Button disabled={pcmBusy||!rhythmTracks.length||poseRunning||cameraBusy}
+    onClick={generateAudioDance}>실제 드럼 WAV로 2D/VRM 춤 생성</Button>
+    {pcmBusy&&<Button onClick={()=>pcmAbort.current?.abort()}>PCM 분석 취소</Button>}</div>
+   <p role="status">{pcmStatus}</p>
+  </div>
+  <p><Button disabled={pcmBusy} onClick={regenerate}>현재 음악 설정으로 동작 큐 생성</Button></p>
   <p>동작: {Object.entries(MOVES).map(([a,b])=>`${a}=${b}`).join(' · ')}</p>
   <Field label="춤 큐 편집: 시작초,종료초,동작,강도(0~1),참고영상 시작초(선택)"><textarea rows={11} spellCheck={false} value={lines} onChange={e=>setLines(e.target.value)}/></Field>
   {error?<p role="alert">동작 큐 오류: {error}</p>:<><p>{plan.cues.length}개 마디별 동작 · {plan.bpm} BPM · {durationSec.toFixed(1)}초 · {plan.sections.length}개 구간</p>
