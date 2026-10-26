@@ -16,7 +16,7 @@ import {planRecordedSoloVocalPcmLip33} from './soloVocalPcmLipOverlay33.js';
 export async function runFullLocalMv({
  project,data,current,currentData,commit,session,checkpoint,videoModel,port,
  imageSteps,width,height,frames,fps,videoSteps,motion,includeReferences=false,autoVirtualSinger=false,
- includeAudio=true,includeCaptions=true,lipPlacement=null,prewarmedAudioContext=null,duetPcmLip=false,soloPcmLip=false,
+ includeAudio=true,includeCaptions=true,lipPlacement=null,prewarmedAudioContext=null,duetPcmLip=false,soloPcmLip=false,soloPcmLipTrackId='',
  signal,onProgress=()=>{}
 },{
  batch=runMvBatch,plan=planMvVideoRender,load=loadMvVideoAssets,record=recordMvWebm,
@@ -63,7 +63,7 @@ export async function runFullLocalMv({
    onProgress:message=>onProgress('두 가수 실제 WAV 입모양: '+message)
   }):soloPcmLip?await planRecordedSoloVocalPcmLip33(latest,chars,{
    loadFile:getAsset,current,signal,audioContext:prewarmedAudioContext,
-   placement:finalLip,
+   placement:finalLip,vocalTrackId:soloPcmLipTrackId,
    onProgress:message=>onProgress('한 가수 실제 보컬 WAV 입모양: '+message)
   }):finalLip?overlay(latest,chars,finalLip):null;
   const captionsState=includeCaptions?captions(latest):null;
