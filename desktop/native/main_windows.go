@@ -142,7 +142,7 @@ func getTask()int{
  if int32(ret)<0{return 0}
  return int(ret)
 }
-var fieldNames=[7][7]string{
+var fieldNames=[8][7]string{
  {"Python.exe","MusicGen 모델 폴더","입력 (미사용)","보조 (미사용)","출력 WAV","곡 설명","길이(3~28초)"},
  {"Python.exe","RVC 설치 폴더","학습 데이터 폴더","보조 (미사용)","출력 모델 .pth","설명 (미사용)","학습 Epochs"},
  {"Python.exe","Demucs 모델 폴더","입력 음악 WAV","보조 (미사용)","출력 폴더","설명 (미사용)","모델 이름"},
@@ -150,6 +150,7 @@ var fieldNames=[7][7]string{
  {"Python.exe","캐릭터 이미지","보컬 WAV","음소 싱크 JSON","출력 WebM","설명 (미사용)","FFmpeg.exe"},
  {"Python.exe","RVC 설치 폴더","원본 노래 WAV","학습 모델 .pth","출력 WAV","인덱스 .index (선택)","반음 이동"},
  {"Python.exe","DiffSinger 설치 폴더","악보 JSON(.ds)","실험 이름","출력 WAV","권리 확인: confirmed","옵션 (미사용)"},
+ {"Python.exe","MusicGen 모델 폴더","입력 (미사용)","보조 (미사용)","출력 WAV","곡 설명","길이(180~360초)"},
 }
 func updateFields(){
  task:=getTask()
@@ -160,7 +161,7 @@ func updateFields(){
   enableWindow.Call(ui.edits[i],v)
   enableWindow.Call(ui.browses[i],v)
  }
- defaults:=[]string{"12","20","htdemucs","0","","0",""}
+ defaults:=[]string{"12","20","htdemucs","0","","0","","180"}
  setText(ui.edits[6],defaults[task])
  appendLog("\r\n모드: "+taskNames[task]+" (기존 사용자 파일은 덮어쓰지 않습니다)\r\n")
 }

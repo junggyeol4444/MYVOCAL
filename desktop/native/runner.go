@@ -22,8 +22,9 @@ const (
  taskLipSync
  taskRVCConvert
  taskDiffSinger
+ taskLongMusicGen
 )
-var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)"}
+var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)","장편 AI 작곡 (MusicGen 3~6분·중단 재개)"}
 
 type request struct {
  Task int
@@ -80,6 +81,14 @@ func prepareRequest(r request)(jobSpec,error){
   if len([]rune(strings.TrimSpace(r.Prompt)))<2||len([]rune(r.Prompt))>600{return jobSpec{},errors.New("작곡 설명은 2~600자입니다")}
   script="musicgen_worker.py"
   args=[]string{"--model-dir",r.Engine,"--output",r.Output,"--prompt",r.Prompt,"--seconds",strconv.Itoa(seconds),"--seed","0"}
+ case taskLongMusicGen:
+  if err:=requireDirectory(r.Engine);err!=nil{return jobSpec{},err}
+  if err:=requireExistingFile(filepath.Join(r.Engine,"config.json"));err!=nil{return jobSpec{},errors.New("MusicGen 모델 폴더에 config.json이 없습니다")}
+  seconds,err:=strconv.Atoi(strings.TrimSpace(r.Option))
+  if err!=nil||seconds<180||seconds>360{return jobSpec{},errors.New("장편 MusicGen 길이는 180~360초입니다")}
+  if len([]rune(strings.TrimSpace(r.Prompt)))<2||len([]rune(r.Prompt))>600{return jobSpec{},errors.New("작곡 설명은 2~600자입니다")}
+  script="musicgen_worker.py"
+  args=[]string{"--model-dir",r.Engine,"--output",r.Output,"--prompt",r.Prompt,"--seconds","20","--seed","0"}
  case taskRVC:
   if err:=requireDirectory(r.Engine);err!=nil{return jobSpec{},err}
   if err:=requireDirectory(r.Input);err!=nil{return jobSpec{},err}
@@ -145,6 +154,7 @@ func prepareRequest(r request)(jobSpec,error){
 
 func executeJob(ctx context.Context,r request,logLine func(string))error{
  job,err:=prepareRequest(r);if err!=nil{return err}
+ if r.Task==taskLongMusicGen{return runLongMusicGen(ctx,r,job,logLine)}
  // Existing MusicGen worker uses wb; generate in scratch and publish new WAV exclusively.
  if r.Task==taskMusicGen||r.Task==taskRVCConvert||r.Task==taskDiffSinger{
   dir,e:=os.MkdirTemp("","myvocal-native-musicgen-");if e!=nil{return e}
