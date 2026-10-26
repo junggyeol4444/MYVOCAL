@@ -1,5 +1,14 @@
 # MYVOCAL Studio — 예약 자동 개발 전체 인수인계 복구 인덱스
 
+## 2026-10-26 19시 예약 개발 — 원본 인수인계 원문 보존
+- **기능 반영 직후 main HEAD**: `3f3fe6d96398fc87e6c99bebf1c6f55dcdeaf5d3`. 시작 `dd84dbd3bcfbdd71a6df499763a5f3194f8b8e2c`.
+- **실제 개발**: 기존 12개 가창 WAV→DiffSinger 학습 ZIP에 한국어 음소 시간 검수 JSON 생성·재입력·실제 WAV 길이/음소 순서 대조 기능을 추가. 기존 Windows EXE Singing Workbench GUI에 템플릿 내려받기·검수 JSON 선택·권한 확인 연결. Go 공식 DiffSinger 학습 경로에 검수된 ZIP의 WAV/CSV/DS/라벨 정합성 검사를 추가.
+- **수정 소스**: `MYVOCAL-Studio-source/src/lib/singingTakeDataset.js`, `MYVOCAL-Studio-source/src/components/SingingTakeDatasetPanel.jsx`, `desktop/diffsinger_training.go`. 기능 커밋 `9ebbcdd0f907b252877c2809441c04793c292b51`, `9f3fdadafa3454e3b6b1d878344f606da0ff1ea9`, `0fbd79997e9f8f2fd2e949620f311c40ea7e557b`, `3f3fe6d96398fc87e6c99bebf1c6f55dcdeaf5d3`.
+- **전체 누적 인수인계**: 현재 대화의 `MYVOCAL_20261026_매시간개발_전체누적인수인계.md` 원문 1,264,489바이트를 그대로 접두사 보존하고 이번 회차를 추가해 1,268,813바이트. SHA-256 `b47fb4e4a5bd129257abd1cdcc965edda5684e30969bf3dd50f7bc71ce49a476`.
+- **검증 보류**: 개발 미완료이므로 Go/JS 테스트·CI·Windows 10/11 EXE GUI·실제 GPU 학습/추론은 실행하지 않았음. 사용자가 직접 검수하는 음소 길이 기능이며 강제 정렬 AI 성능을 주장하지 않음.
+- **다음 회차**: 최신 main과 원본 66항을 다시 확인한 뒤 실제 한국어 음색 학습/가창, 장편 원천 신경망 6 stems, 캐릭터·실사 MV·립싱크, Music+MV 원클릭의 미완성 핵심 개발을 먼저 계속함. 원본 자산 보존, 다른 예약·저장소 수정 금지.
+
+
 ## 2026-10-26 18시 예약 개발 최신 회차 — 기존 인수인계 원문 유지
 - **main HEAD (기능 소스 완료 시점):** `62468addb31cc2cb5f113bca1c834c05762c3bd0`. 시작 시 `8fcdafba29fb959b00777be61ea00bfe2a457649`.
 - **이번 구현**: 실제 사용 권한 있는 한국어 Singing WAV 최대 12개를 서로 다른 원곡 MIDI 시작 초에 매핑하여 DiffSinger 학습용 한 ZIP으로 내보내는 다중 녹음 학습 데이터 기능. 녹음별 PCM 구간·음소 라벨·MIDI 타이밍·manifest 기록과 Windows EXE Singing Workbench의 추가 WAV 다중 선택/시각 입력 UI를 기존 프로젝트에 연결. 단일 WAV 호환 유지.
