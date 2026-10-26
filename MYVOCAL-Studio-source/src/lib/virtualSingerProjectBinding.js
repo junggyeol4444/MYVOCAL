@@ -25,7 +25,7 @@ export function resolveVirtualSingerProfile(id,data){
    model.source==='official-diffsinger-acoustic-training'&&
    typeof model.dictionaryAssetId==='string'&&!!model.dictionaryAssetId&&
    /^[a-f0-9]{64}$/i.test(String(model.dictionarySha256||''));
- return {id:singer.id,name:singer.name,voice,character,model,
+ return {id:singer.id,name:singer.name,style:singer.style||'Natural',voice,character,model,
   preferredSingingModelId:trained?model.id:'',
   trainedSingingReady:trained,videoMode:character.kind==='person'?'person':'character'};
 }
