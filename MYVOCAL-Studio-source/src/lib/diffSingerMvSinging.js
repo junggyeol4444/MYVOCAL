@@ -125,7 +125,10 @@ export async function generateAndStoreDiffSingerMvSinging(project,{
   singingExpressionStyle:singingStyle,expressionScope:'F0 pitch phrasing only (not neural timbre change)',
   notes:alignment.cues?.length||0,result:'실제 신경망 WAV 생성 후 신규 보컬 자산 저장'};
  const result=await persistNeuralVocalTake(project,convertRVC?[vocal,finished]:[finished],{
-  ...saveOptions,signal,job
+  ...saveOptions,signal,job,
+  singerBinding:saveOptions.singerBinding||{
+   voiceId:voice.id,...(project.characterId?{characterId:project.characterId}:{})
+  }
  });
  onProgress('DiffSinger 신경망 보컬 '+result.assets+'개 신규 편집 WAV 트랙에 저장');
  return {project:result.project,vocalAssets:result.assets,convertedWithRVC:convertRVC,
