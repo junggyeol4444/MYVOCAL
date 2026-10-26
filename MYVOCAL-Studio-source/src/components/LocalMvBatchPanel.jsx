@@ -92,7 +92,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   getInstalledLocalModels().then(names=>{
    if(!active)return;
    setScoreModels(names);
-   setScoreModel(previous=>previous&&names.includes(previous)?previous:names[0]||'');
+   setScoreModel(previous=>previous&&names.includes(previous)?previous:'');
    if(!names.length)setScoreModelError('PC에 설치된 로컬 작사·작곡 Ollama 모델이 없습니다.');
   }).catch(err=>{if(active)setScoreModelError('로컬 작사 모델 조회 실패: '+err.message);});
   return()=>{active=false};
