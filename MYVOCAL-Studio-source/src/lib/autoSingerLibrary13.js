@@ -77,9 +77,17 @@ export function prepareAutoSingerVoiceLink26(character,voice,{
  if(!['Natural','Ballad','Soft','Power','Rock','Whisper','Falsetto','Emotional'].includes(singingStyle))
   throw Error('지원하는 Singing Style을 선택하세요.');
  const model=modelId?models.find(m=>m.id===modelId):null;
- if(modelId&&(!model||model.voiceId!==voice.id||model.engineId==='sampler'||
-    !model.assetId))
-  throw Error('등록한 실제 RVC/가창 음색 모델만 선택할 수 있으며 샘플 미리보기는 사용할 수 없습니다.');
+ const actualDiffSinger=model?.engineId==='diffsinger'&&
+  model.modelKind==='local-installed-acoustic'&&
+  model.source==='official-diffsinger-acoustic-training'&&
+  model.status==='checkpoint-produced-in-unverified-environment'&&
+  /^myvocal-[a-f0-9]{24}$/.test(String(model.experiment||''))&&
+  typeof model.dictionaryAssetId==='string'&&model.dictionaryAssetId.length>0&&
+  /^[a-f0-9]{64}$/i.test(String(model.dictionarySha256||''));
+ const actualRVC=model?.engineId==='rvc'&&!!model.assetId&&
+  /^[a-f0-9]{64}$/i.test(String(model.sha256||''));
+ if(modelId&&(!model||model.voiceId!==voice.id||!actualDiffSinger&&!actualRVC))
+  throw Error('가상 가수는 동일 Voice에 등록된 실제 DiffSinger 발음 사전/Acoustic 또는 RVC 가중치만 연결할 수 있습니다.');
  const profileName=String(name||character.name||'').trim();
  if(!safeName(profileName))throw Error('등록할 가상 가수의 이름을 확인하세요.');
  const now=new Date().toISOString();
