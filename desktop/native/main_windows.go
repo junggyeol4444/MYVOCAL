@@ -108,7 +108,7 @@ type browseInfo struct {
  Image int32
 }
 type nativeUI struct{
- hwnd,chooser,start,cancelButton,logEdit uintptr
+ hwnd,chooser,start,cancelButton,logEdit,projectStatus uintptr
  labels [7]uintptr
  edits [7]uintptr
  browses [7]uintptr
@@ -239,13 +239,20 @@ func startTask(){
  ui.mu.Lock();busy:=ui.running;ui.mu.Unlock();if busy{return}
  r:=readRequest()
  if _,err:=prepareRequest(r);err!=nil{showError(err);return}
+ _,projectAtStart:=studioSnapshot()
  ctx,cancel:=context.WithCancel(context.Background())
  ui.mu.Lock();ui.cancel=cancel;ui.mu.Unlock()
  setRunning(true)
  appendLog("\r\n시작: "+taskNames[r.Task]+"\r\n")
  go func(){
   err:=executeJob(ctx,r,appendLog)
-  if err!=nil{appendLog("\r\n작업 실패: "+err.Error()+"\r\n")}else{appendLog("\r\n완료: "+taskNames[r.Task]+"\r\n")}
+  if err!=nil{appendLog("\r\n작업 실패: "+err.Error()+"\r\n")}else{
+   appendLog("\r\n완료: "+taskNames[r.Task]+"\r\n")
+   _,nowProject:=studioSnapshot()
+   if projectAtStart!=""&&projectAtStart==nowProject {
+    if assetErr:=recordStudioOutput(r.Task,r.Output);assetErr!=nil{appendLog("\r\n프로젝트 결과 연결 실패: "+assetErr.Error()+"\r\n")}
+   }
+  }
   ui.mu.Lock();ui.cancel=nil;ui.running=false;ui.mu.Unlock()
   postMessage.Call(ui.hwnd,wmAppLog,1,0)
  }()
@@ -268,12 +275,18 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   ui.start=callCreate("BUTTON","실제 로컬 엔진 실행",wsChild|wsVisible,180,412,245,35,hwnd,idStart)
   ui.cancelButton=callCreate("BUTTON","작업 취소",wsChild|wsVisible,437,412,140,35,hwnd,idCancel)
   ui.logEdit=callCreate("EDIT","준비 완료. 선택한 기존 모델·Python 환경만 사용합니다.\r\n",wsChild|wsVisible|wsBorder|wsVScroll|esMultiline|esAutoVScroll|esReadOnly,20,464,960,178,hwnd,0)
+  callCreate("BUTTON","새 프로젝트",wsChild|wsVisible,20,660,165,35,hwnd,idProjectNew)
+  callCreate("BUTTON","프로젝트 열기",wsChild|wsVisible,197,660,165,35,hwnd,idProjectOpen)
+  callCreate("BUTTON","가사·설정 편집",wsChild|wsVisible,374,660,170,35,hwnd,idProjectEdit)
+  callCreate("BUTTON","프로젝트 저장",wsChild|wsVisible,556,660,160,35,hwnd,idProjectSave)
+  ui.projectStatus=callCreate("STATIC",projectStatusText(),wsChild|wsVisible,20,705,960,46,hwnd,0)
   enableWindow.Call(ui.cancelButton,0)
   if pythonPath,err:=exec.LookPath("python.exe");err==nil&&filepath.IsAbs(pythonPath){setText(ui.edits[0],pythonPath)}
   updateFields()
   return 0
  case wmCommand:
   id:=int(wparam&0xffff);notify:=int((wparam>>16)&0xffff)
+  if handleProjectCommand(id){return 0}
   if id==idTask&&notify==cbnSelChange{updateFields();return 0}
   if id==idStart{startTask();return 0}
   if id==idCancel{ui.mu.Lock();f:=ui.cancel;ui.mu.Unlock();if f!=nil{f();appendLog("\r\n취소 요청 중...\r\n")};return 0}
@@ -282,6 +295,7 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   ui.mu.Lock();logText:=ui.logs;isRunning:=ui.running;ui.mu.Unlock()
   setText(ui.logEdit,logText)
   if !isRunning{setRunning(false)}
+  refreshProjectStatus()
   return 0
  case wmClose:
   ui.mu.Lock();running:=ui.running;ui.mu.Unlock()
@@ -300,7 +314,7 @@ func main(){
  wc:=wndClassEx{Size:uint32(unsafe.Sizeof(wndClassEx{})),WndProc:syscall.NewCallback(handleWindow),Instance:instance,Background:uintptr(6),ClassName:clsName}
  ret,_,e:=registerClass.Call(uintptr(unsafe.Pointer(&wc)))
  if ret==0{fmt.Fprintln(os.Stderr,"Window class:",e);return}
- hwnd:=callCreate("MYVOCALPureNativeWindows","MYVOCAL Studio - Native EXE",wsOverlappedWindow|wsVisible,100,50,1020,720,0,0)
+ hwnd:=callCreate("MYVOCALPureNativeWindows","MYVOCAL Studio - Native EXE",wsOverlappedWindow|wsVisible,100,50,1020,800,0,0)
  if hwnd==0{fmt.Fprintln(os.Stderr,"Windows GUI 생성 실패");return}
  showWindow.Call(hwnd,1);updateWindow.Call(hwnd)
  var m msg
