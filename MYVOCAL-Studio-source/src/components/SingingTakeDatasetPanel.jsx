@@ -5,7 +5,7 @@ import {exportSingingTakeDataset,planSingingTakePhrases} from '../lib/singingTak
 import {isAlignmentStale} from '../lib/lyricAlignment.js';
 
 // 기존 Windows EXE Singing Workbench의 사용자 녹음→학습용 PCM/음소 페어 내보내기.
-export default function SingingTakeDatasetPanel({project,voice,alignment,notify}){
+export default function SingingTakeDatasetPanel({project,voice,alignment,notify,onDatasetReady}){
  const [recording,setRecording]=useState(null),[dictionaryFile,setDictionaryFile]=useState(null);
  const [recordingStartSec,setRecordingStartSec]=useState('0');
  const [rights,setRights]=useState(false),[busy,setBusy]=useState(false);
@@ -33,11 +33,13 @@ export default function SingingTakeDatasetPanel({project,voice,alignment,notify}
     voice,recordingStartSec:Number(recordingStartSec),rightsConfirmed:true,signal:controller.signal});
    if(controller.signal.aborted||latest.current!==current)
     throw Error('프로젝트가 바뀌었거나 학습 자료 제작이 취소됐습니다.');
-   const url=URL.createObjectURL(new Blob([bundle.bytes],{type:'application/zip'}));
+   const readyFile=new File([bundle.bytes],bundle.fileName,{type:'application/zip'});
+   onDatasetReady?.({file:readyFile,projectId:current.id,voiceId:voice.id});
+   const url=URL.createObjectURL(readyFile);
    try{const a=document.createElement('a');a.href=url;a.download=bundle.fileName;a.click();}
    finally{setTimeout(()=>URL.revokeObjectURL(url),5000);}
    setStatus('실제 녹음에서 '+bundle.manifest.phrases.length+'개 WAV·가사·MIDI 음소 라벨을 내보냈습니다. 신경망 학습은 아직 실행하지 않았습니다.');
-   notify('원본 녹음을 보존하고 가창 학습용 페어 데이터를 ZIP으로 내보냈습니다.');
+   notify('원본 녹음을 보존하고 가창 학습용 데이터를 만들어 Windows 신경망 학습 화면에도 전달했습니다.');
   }catch(e){setError(e.message||String(e));notify('가창 학습 자료 생성 실패: '+(e.message||String(e)));}
   finally{if(abort.current===controller)abort.current=null;setBusy(false);}
  }
