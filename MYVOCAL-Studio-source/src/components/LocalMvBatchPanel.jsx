@@ -306,6 +306,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     let movieProject=base.project;
     if(makeAutoScore){
      const source=current();
+     const reused=resumeStep('neural-score',source);
+     if(!reused){
      if(!source||source.id!==project.id)throw Error('신경망 작사·작곡 중 프로젝트 변경');
      const scored=await generateNeuralScoreForMv(source,{
       model:scoreModel,prompt:scorePrompt||source.title||source.prompt||'한국어 오리지널 노래',
@@ -313,10 +315,15 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       session:base.session,current,onChange:commit,newId:genId,signal:controller.signal,onProgress:setMessage
      });
      movieProject=scored.project;
+     await completedStep('neural-score',source);
+     movieProject=current();
      setMessage('한국어 AI 가사 + '+scored.tracks+'악기 MIDI + '+scored.cues+'개 음표·음소 싱크 작성 완료');
+     }else movieProject=current();
     }
     if(makeSourceStems){
      const source=current();
+     const reused=resumeStep('soundfont-midi-stems',source);
+     if(!reused){
      if(!source||source.id!==project.id)throw Error('원천 악기 제작 중 프로젝트가 변경됐습니다.');
      const rendered=await renderAndStoreNeuralMidiStems(source,{
       python:musicPython,library:soundfontDll,soundfont:soundfontFile,gain:.2,
@@ -325,10 +332,15 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setMessage
      });
      movieProject=rendered.project;
+     await completedStep('soundfont-midi-stems',source);
+     movieProject=current();
      setMessage('원천 MIDI 6악기 SoundFont PCM WAV를 편집 트랙으로 저장했습니다.');
+     }else movieProject=current();
     }
     if(makeNeuralAudioStems){
      const source=current();
+     const reused=resumeStep('neural-audio-stems',source);
+     if(!reused){
      if(!source||source.id!==project.id)throw Error('독립 신경망 악기 생성 중 프로젝트가 변경됐습니다.');
      const result=await renderAndStoreNeuralAudioStems(source,{
       python:musicPython,modelDir:musicModelDir,
@@ -341,9 +353,15 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setMessage
      });
      movieProject=result.project;
+     await completedStep('neural-audio-stems',source);
+     movieProject=current();
      setMessage('MusicGen 개별 신경망 악기 WAV 6개를 신규 편집 트랙으로 저장했습니다.');
+     }else movieProject=current();
     }
     if(makeNeuralMusic){
+     const resumeMusicSource=current();
+     const reused=resumeStep('musicgen-demucs-master',resumeMusicSource);
+     if(!reused){
      if(!musicPython||!musicModelDir||!demucsRoot)throw Error('실제 MusicGen·Demucs Python, 모델 및 폴더 경로를 입력하세요.');
      const source=current();
      if(!source||source.id!==project.id)throw Error('음악 제작 중 프로젝트가 변경됐습니다.');
@@ -380,10 +398,15 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      const filled=extendMvToFullSong(linked,info.duration,{newId:genId});
      if(filled.added){commit(filled.project);setMessage('신규 MV 장면 '+filled.added+'개 추가 후 로컬 AI 영상 생성 준비 중');}
      movieProject=current();
+     await completedStep('musicgen-demucs-master',resumeMusicSource);
+     movieProject=current();
      setMessage('신경망 음악 + '+saved.assets+'개 PCM 악기 저장 완료. 실제 SD/SVD 영상·최종 WebM 렌더링 중');
+     }else movieProject=current();
     }
     if(makeNeuralSinging){
      let vocalProject=current();
+     const reused=resumeStep('neural-vocal',vocalProject);
+     if(!reused){
      if(!vocalProject||vocalProject.id!==project.id)throw Error('가창 생성 중 프로젝트가 변경됐습니다.');
      const singer=(dataRef.current?.voices||[]).find(v=>v.id===(singingVoiceId||vocalProject.voiceId))
       ||(dataRef.current?.voices||[]).find(v=>['self','owned','licensed'].includes(v.rights));
@@ -473,6 +496,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       movieProject=adlib.project;
       setMessage('원곡 한국어 가사와 MIDI 휴지의 실제 신경망 Ad-lib '+adlib.notes+'음표를 신규 보컬 트랙에 저장했습니다.');
      }
+     await completedStep('neural-vocal',vocalProject);
+     movieProject=current();
+     }else movieProject=current();
     }
     // Extend only unrendered tail scenes to the actual WAV length.
     const finalSource=current();
