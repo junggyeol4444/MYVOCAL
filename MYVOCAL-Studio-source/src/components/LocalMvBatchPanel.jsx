@@ -10,6 +10,7 @@ import {audioEnd,readAudioInfo,mixdownWav} from '../lib/audioEngine.js';
 import {runMusicProductionPipeline} from '../lib/musicProductionPipeline.js';
 import {persistNeuralMusicTracks} from '../lib/musicProductionCommit.js';
 import {readMusicGenPreferences} from '../lib/musicGenPreferences.js';
+import {readNativeProductionPaths,storeNativeProductionPaths} from '../lib/localProductionPaths55.js';
 import {makeImportedVocalTrack} from '../lib/lyricAlignment.js';
 import {genId} from '../lib/schema.js';
 import {putFilesAtomic,deleteFilesAtomic,getFile} from '../lib/assetDb.js';
@@ -70,7 +71,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    project.productionLaunch55?.requested?.composition===true));
  const [scoreModel,setScoreModel]=useState('');
  const [makeNeuralSceneDirection,setMakeNeuralSceneDirection]=useState(false);
- const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(''),[soundfontFile,setSoundfontFile]=useState('');
+ const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(()=>readNativeProductionPaths(window.localStorage).soundfontDll||''),
+  [soundfontFile,setSoundfontFile]=useState(()=>readNativeProductionPaths(window.localStorage).soundfontFile||'');
  const [makeNeuralAudioStems,setMakeNeuralAudioStems]=useState(false);
  const [stemExportRole,setStemExportRole]=useState('melody'),[stemExportBusy,setStemExportBusy]=useState(false),[stemExportStatus,setStemExportStatus]=useState('');
  const [scoreModels,setScoreModels]=useState([]),[scorePrompt,setScorePrompt]=useState(project.title||'');
@@ -106,10 +108,14 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const duetSinger=voices.find(v=>v.id===duetVoiceId);
  const availableDuetDiffSingerModels=listedDiffSingerModels(duetSinger,data.voiceModels||[]);
  const selectedDuetDiffSingerModel=availableDuetDiffSingerModels.find(model=>model.id===diffSingerDuetModelId)||null;
- const [musicPaths]=useState(()=>{try{return readMusicGenPreferences(window.localStorage)}catch{return {}}});
+ const [musicPaths]=useState(()=>{try{
+   const prior=readMusicGenPreferences(window.localStorage);
+   const saved=readNativeProductionPaths(window.localStorage);
+   return {...prior,...saved};
+  }catch{return {}}});
  const [musicPython,setMusicPython]=useState(musicPaths.python||'');
  const [musicModelDir,setMusicModelDir]=useState(musicPaths.modelDir||'');
- const [demucsRoot,setDemucsRoot]=useState('');
+ const [demucsRoot,setDemucsRoot]=useState(musicPaths.demucsRoot||'');
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
  let info;try{info=planMvBatch(project,{includeReferences})}catch(e){info={total:0,already:0,linked:0,error:e.message}}
  const exportSelectedStem=async()=>{
@@ -561,6 +567,11 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   <label><input type="checkbox" disabled={busy} checked={saveFullMovie} onChange={e=>setSaveFullMovie(e.target.checked)}/> 생성 후 음악·보컬·가사 포함 완성 MV WebM까지 한 번에 저장 (Windows WebView2 사용)</label>
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={exportWav} onChange={e=>setExportWav(e.target.checked)}/> 완성 음악·가창 믹스를 편집 가능한 16비트 스테레오 WAV로 함께 저장</label>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeMp4} onChange={e=>setMakeMp4(e.target.checked)}/> 완성 WebM과 함께 로컬 FFmpeg로 실제 MP4도 저장 (원본·립싱크 파일명 구분)</label>}
+  {saveFullMovie&&<div className="mv7-actions"><Button disabled={busy} onClick={()=>{try{
+     storeNativeProductionPaths(window.localStorage,{musicPython,musicModelDir,demucsRoot,soundfontDll,soundfontFile});
+     notify('이 PC에 설치된 음악·영상 엔진 경로만 다음 프로젝트용으로 저장했습니다. 음성·녹음·모델 파일 및 사용 권한 동의는 저장하지 않았습니다.');
+    }catch(error){setError('로컬 설치 경로 저장 실패: '+error.message);}
+   }}>현재 PC 로컬 엔진 경로 기억</Button></div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeAutoScore} onChange={e=>{setMakeAutoScore(e.target.checked);setScoreModelError('');}}/> 로컬 AI 한국어 작사·6악기 MIDI·음소 싱크까지 자동 생성 (기존 작성 가사 보존)</label>}
   {saveFullMovie&&makeAutoScore&&<div className="mv7-item">
    <label>노래 주제와 원하는 편곡<input disabled={busy} maxLength={1200} value={scorePrompt} onChange={e=>setScorePrompt(e.target.value)} placeholder="한국어 애니메이션 록 발라드, 마지막 후렴은 웅장하게"/></label>
