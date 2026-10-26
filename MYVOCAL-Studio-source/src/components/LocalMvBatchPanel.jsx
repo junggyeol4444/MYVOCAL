@@ -417,7 +417,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
        createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic};
       const adlib=singingBackend==='diffsinger'?
        await generateAndStoreDiffSingerMvAdlib(current(),{
-        voice:singer,model:selectedDiffSingerModel,session:base.session,confirmed:singingRights,
+        voice:singer,model:selectedDiffSingerModel,session:base.session,confirmed:singingRights,singingStyle,
         signal:controller.signal,onProgress:setMessage,saveOptions:adlibSave
        }):await generateAndStoreMvAdlib(current(),{
         voice:singer,port:Number(singingPort),modelId:sung.modelId,
