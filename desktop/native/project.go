@@ -176,6 +176,7 @@ func recordStudioOutput(task int,path string)error{
  stat,err:=os.Lstat(abs);if err!=nil{return err}
  if !stat.Mode().IsRegular()&&!stat.IsDir(){return errors.New("결과 경로가 파일이나 폴더가 아닙니다")}
  kind:="audio"
+ if task==taskAILyrics{kind="lyrics"}
  if task==taskLipSync{kind="video"}
  if task==taskRVC{kind="voice_model"}
  if task==taskDemucs{kind="stems"}
@@ -202,6 +203,7 @@ func importStudioAsset(path string)error{
  case ".mp4",".mov",".webm",".mkv":kind="video"
  case ".mid",".midi",".json",".ds":kind="score"
  case ".sf2",".sf3":kind="soundfont"
+ case ".txt":kind="lyrics"
  default:return fmt.Errorf("프로젝트에 지원되지 않는 자산 확장자입니다: %s",ext)
  }
  studioMu.Lock()
