@@ -20,6 +20,11 @@ export async function persistProductionDeliverables(project,outputs,{
  for(const output of outputs){
   guard();
   const kind=output?.kind,blob=output?.file,variant=output?.variant||'base';
+  const revision55=output?.sourceRevision55;
+  if(revision55!==undefined&&
+    (!/^[a-f0-9]{64}$/.test(revision55)||kind!=='webm'||variant!=='base'||
+     typeof output.lipIncluded55!=='boolean'))
+   throw Error('실제 음악·영상 SHA-256 이어하기 출처가 올바르지 않습니다.');
   const uniqueKey=kind+':'+variant;
   if(!Object.hasOwn(PRODUCTION_OUTPUT_TYPES,kind)||!['base','face-lip'].includes(variant)||
     (variant==='face-lip'&&kind!=='mp4')||selected.has(uniqueKey)||
@@ -37,7 +42,10 @@ export async function persistProductionDeliverables(project,outputs,{
   const file=new File([blob],name,{type:PRODUCTION_OUTPUT_TYPES[kind]});
   entries.push([assetId,file]);
   records.push({assetId,kind,variant,mime:file.type,name:file.name,size:file.size,createdAt:timestamp,
-   source:'real-local-music-mv-production'});
+   source:'real-local-music-mv-production',
+   ...(revision55?{sourceRevision55:revision55,
+    lipIncluded55:output.lipIncluded55}:{}),
+  });
  }
  guard();
  let saved=false;
