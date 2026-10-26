@@ -21,7 +21,14 @@ export function createFullSongBand90(project,characters,durationSec,{existing=pr
   startSec:Math.min(member.startSec,Math.max(0,durationSec-.001)),
   endSec:Math.abs(member.endSec-original.durationSec)<.001?durationSec:Math.min(member.endSec,durationSec)
  }));
- return validateBand90(project,characters,{...original,durationSec,members});
+ // A PCM-generated dance timeline belongs to the old song length. It
+ // must not be stretched or mislabeled as newly audio-analyzed choreography.
+ const {pcmDances:existingPcmDance,...retained}=original;
+ const sameDuration=Math.abs(original.durationSec-durationSec)<.001;
+ return validateBand90(project,characters,{
+  ...retained,durationSec,members,
+  ...(sameDuration&&existingPcmDance?{pcmDances:existingPcmDance}:{}),
+ });
 }
 export function validateBand90(project,characters,plan){
  if(!project?.id||!plan||plan.version!==1||!number(plan.durationSec,2,360)||!Number.isInteger(plan.fps)||![24,30].includes(plan.fps)||!Array.isArray(plan.members)||plan.members.length<1||plan.members.length>6)throw Error('STEP90 공연 인원·길이·FPS 오류');
