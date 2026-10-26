@@ -21,6 +21,7 @@ import {analyzeRecordedDuetScenes,recordedDuetCueSheet} from '../lib/duetVocalSc
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {generateAndStoreDiffSingerMvSinging} from '../lib/diffSingerMvSinging.js';
 import {generateAndStoreDiffSingerMvHarmony} from '../lib/diffSingerMvHarmony.js';
+import {generateAndStoreDiffSingerMvAdlib} from '../lib/diffSingerMvAdlib.js';
 import {listedDiffSingerModels} from '../lib/diffSingerVoiceRegistry.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
@@ -184,8 +185,6 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    if(makeNeuralSinging&&singingBackend==='diffsinger'){
     if(!selectedDiffSingerModel||!selectedDiffSingerModel.dictionaryAssetId)
      throw Error('한 번에 MV 제작에 사용할 학습 완료 DiffSinger 모델과 발음 사전을 선택하세요.');
-    if(makeNeuralAdlib)
-     throw Error('DiffSinger 가창 모드에서 별도 Ad-lib는 기존 Singing 엔진을 선택하세요.');
     if(makeHarmony&&makeDuet&&
        (!selectedDuetDiffSingerModel||!selectedDuetDiffSingerModel.dictionaryAssetId||
         !selectedDuetDiffSingerModel.dictionarySha256))
@@ -376,13 +375,17 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
        '원곡 메인 가창과 독립 신경망 3도 화음 WAV를 각각 편집 트랙에 저장했습니다.');
      }else setMessage('실제 신경망 한국어 가창 '+sung.vocalAssets+'개 저장 → 노래·장면 동기화 MV 제작 중');
      if(makeNeuralAdlib){
-      const adlib=await generateAndStoreMvAdlib(current(),{
-       voice:singer,port:Number(singingPort),modelId:sung.modelId,
-       session:base.session,confirmed:singingRights,singingStyle,
-       signal:controller.signal,onProgress:setMessage,
-       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
-        createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
-      });
+      const adlibSave={current,onChange:commit,newId:genId,readInfo:readAudioInfo,
+       createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic};
+      const adlib=singingBackend==='diffsinger'?
+       await generateAndStoreDiffSingerMvAdlib(current(),{
+        voice:singer,model:selectedDiffSingerModel,session:base.session,confirmed:singingRights,
+        signal:controller.signal,onProgress:setMessage,saveOptions:adlibSave
+       }):await generateAndStoreMvAdlib(current(),{
+        voice:singer,port:Number(singingPort),modelId:sung.modelId,
+        session:base.session,confirmed:singingRights,singingStyle,
+        signal:controller.signal,onProgress:setMessage,saveOptions:adlibSave
+       });
       movieProject=adlib.project;
       setMessage('원곡 한국어 가사와 MIDI 휴지의 실제 신경망 Ad-lib '+adlib.notes+'음표를 신규 보컬 트랙에 저장했습니다.');
      }
@@ -581,7 +584,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      <option value="">현재 Voice의 학습된 모델 선택</option>
      {availableDiffSingerModels.map(m=><option value={m.id} key={m.id}>{m.name}{m.dictionaryAssetId?' · 발음 사전 등록':' · 발음 사전 미등록'}</option>)}
     </select>
-    <Notice>저장된 한국어 발음 사전과 실제 Acoustic 체크포인트를 Windows EXE에서 실행합니다. 기존 Singing 포트는 사용하지 않습니다. 이 경로에서는 원곡 선율·3도 화음을 실제 신경망 가창으로 생성할 수 있지만, 별도 스타일·Ad-lib는 기존 Singing 엔진 전용입니다. 두 가수 듀엣은 각각 등록된 실제 DiffSinger 모델·발음 사전을 선택해야 합니다.</Notice>
+    <Notice>저장된 한국어 발음 사전과 실제 Acoustic 체크포인트를 Windows EXE에서 실행합니다. 기존 Singing 포트는 사용하지 않습니다. 이 경로에서는 원곡 선율·3도 화음을 실제 신경망 가창으로 생성할 수 있지만, 별도 가창 스타일은 기존 Singing 엔진 전용입니다. 원곡 가사의 실제 MIDI 휴지에서 Ad-lib를 생성하며, 두 가수 듀엣에는 각자의 실제 DiffSinger 모델·발음 사전이 필요합니다.</Notice>
    </label>}
    <label>가창에 사용할 등록 목소리<select value={singingVoiceId} disabled={busy} onChange={e=>{setSingingVoiceId(e.target.value);setSingingRights(false);setDiffSingerModelId('');}}>
      <option value="">프로젝트 목소리 / 첫 번째 사용 허가 목소리</option>
@@ -615,7 +618,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    {makeHarmony&&<label>3도 화음 음역<select disabled={busy} value={harmonyDirection} onChange={e=>setHarmonyDirection(e.target.value)}>
     <option value="above">메인 선율 위의 3도</option><option value="below">메인 선율 아래의 3도</option>
    </select></label>}
-   {singingBackend==='external'&&<label><input type="checkbox" checked={makeNeuralAdlib} disabled={busy} onChange={e=>setMakeNeuralAdlib(e.target.checked)}/> 원곡 가사·MIDI 휴지에 실제 신경망 Ad-lib(추임새) WAV 추가 → 독립 편집 보컬 트랙</label>}
+   <label><input type="checkbox" checked={makeNeuralAdlib} disabled={busy} onChange={e=>setMakeNeuralAdlib(e.target.checked)}/> 원곡 가사·MIDI 휴지에 실제 신경망 Ad-lib(추임새) WAV 추가 → 독립 편집 보컬 트랙</label>}
    <label><input type="checkbox" checked={alsoConvertRVC} disabled={busy} onChange={e=>setAlsoConvertRVC(e.target.checked)}/> 등록한 RVC 모델로 본인 음색까지 변환</label>
    {alsoConvertRVC&&<label>실제 RVC 모델 선택<select disabled={busy} value={registeredRVCId} onChange={e=>setRegisteredRVCId(e.target.value)}>
      <option value="">기존 로컬 경로의 모델 사용</option>
