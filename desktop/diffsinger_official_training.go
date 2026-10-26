@@ -12,9 +12,32 @@ import (
  "os"
  "os/exec"
  "path/filepath"
+ "regexp"
  "runtime"
  "strconv"
  "strings"
+)
+
+var regexpDiffSingerJobID=regexp.MustCompile(`^[0-9a-f]{24}package main
+
+// MYVOCAL 원본 #06/#08: 설치된 openvpi DiffSinger의 공식
+// binarize.py → train.py 순서를 실제로 실행한다.
+// 입력은 MYVOCAL의 본인 노래 녹음 복사본이며, 기존 실험 폴더와 가중치는
+// 절대 덮어쓰지 않고 새 UUID 실험을 생성한다. 다운로드/API/가짜 모델 없음.
+import (
+ "context"
+ "errors"
+ "fmt"
+ "io"
+ "os"
+ "os/exec"
+ "path/filepath"
+ "regexp"
+ "runtime"
+ "strconv"
+ "strings"
+)
+
 )
 
 func validateOfficialDiffSinger(root,python,config string) error {
