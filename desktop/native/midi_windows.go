@@ -19,6 +19,7 @@ const (
  idMIDISaveDraft=890
  idMIDIExport=891
  idMIDIClose=892
+ idMIDIImport=893
 )
 var midiWindowRegistered bool
 type midiEditorUI struct{
@@ -74,6 +75,14 @@ func chooseMIDIOutput()(string,bool){
  if !strings.EqualFold(filepath.Ext(path),".mid"){showError(errors.New("출력 확장자는 .mid여야 합니다"));return "",false}
  return path,true
 }
+func chooseMIDIInput()(string,bool){
+ var buf [32768]uint16
+ filter:=syscall.StringToUTF16("표준 MIDI 파일\x00*.mid;*.midi\x00\x00")
+ opts:=openFileName{Size:uint32(unsafe.Sizeof(openFileName{})),Owner:midiUI.hwnd,File:&buf[0],MaxFile:uint32(len(buf)),Filter:&filter[0],Flags:0x00000800|0x00080000|0x00001000}
+ ok,_,_:=openDialog.Call(uintptr(unsafe.Pointer(&opts)))
+ if ok==0{return "",false}
+ return syscall.UTF16ToString(buf[:]),true
+}
 func midiWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
  switch message{
  case wmCreate:
@@ -89,7 +98,8 @@ func midiWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   callCreate("BUTTON","음표·BPM 저장",wsChild|wsVisible,20,552,225,42,hwnd,idMIDISaveDraft)
   callCreate("BUTTON","새 MIDI 파일 생성",wsChild|wsVisible,260,552,225,42,hwnd,idMIDIExport)
   callCreate("BUTTON","닫기",wsChild|wsVisible,500,552,150,42,hwnd,idMIDIClose)
-  midiUI.status=callCreate("STATIC","편집 후 프로젝트 저장 또는 새 MIDI 파일 생성",wsChild|wsVisible,20,608,790,45,hwnd,0)
+  callCreate("BUTTON","기존 MIDI 불러오기",wsChild|wsVisible,20,603,225,42,hwnd,idMIDIImport)
+  midiUI.status=callCreate("STATIC","편집 후 프로젝트 저장 또는 새 MIDI 파일 생성",wsChild|wsVisible,20,659,790,35,hwnd,0)
   loadMIDIDraft()
   return 0
  case wmCommand:
@@ -111,6 +121,16 @@ func midiWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
    if err=importStudioAsset(path);err!=nil{showError(err)}
    setText(midiUI.status,fmt.Sprintf("MIDI 파일 생성 완료: %s",path))
    appendLog("\r\n네이티브 MIDI 파일 생성: "+path+"\r\n")
+   return 0
+  case idMIDIImport:
+   path,ok:=chooseMIDIInput()
+   if !ok{return 0}
+   notes,bpm,program,err:=readExistingMIDI(path)
+   if err!=nil{showError(err);return 0}
+   setText(midiUI.notes,notes)
+   setText(midiUI.bpm,strconv.Itoa(bpm))
+   setText(midiUI.program,strconv.Itoa(program))
+   setText(midiUI.status,"기존 MIDI를 편집 칸에 불러왔습니다. 저장 버튼을 눌러 프로젝트에 반영하세요.")
    return 0
   case idMIDIClose:destroyWindow.Call(hwnd);return 0
   }
