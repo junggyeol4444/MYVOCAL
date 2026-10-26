@@ -147,6 +147,9 @@ func openStudioProjectEditor()error{
 }
 func handleProjectCommand(id int)bool{
  switch id{
+ case idMIDIEditor:
+  if err:=openNativeMIDIEditor();err!=nil{showError(err)}
+  return true
  case idProjectAssets:
   if err:=openStudioAssetLibrary();err!=nil{showError(err)}
   return true
