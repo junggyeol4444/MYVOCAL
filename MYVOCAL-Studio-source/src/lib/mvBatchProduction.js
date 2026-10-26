@@ -11,6 +11,7 @@ import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './im
 import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
 import {chooseSceneReference} from './characterSceneReference.js';
 import {attachIdentityLoRA} from './characterIdentityLoRA.js';
+import {pcmSceneSvdMotion36} from './musicReactiveMvScenes36.js';
 import {validateAutoVirtualSinger,autoSingerReference,autoSingerRequest,recordAutoSingerFirstImage,generateAutoSingerReferenceImage} from './autoVirtualSingerImages.js';
 // A registered character reuses the SAME sampling seed in each scene.
 // img2img still uses the original authorized reference; seed consistency
@@ -176,7 +177,7 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
     stableMvCharacterSeed(initialId,sceneId+'|background')):
    Math.floor(Math.random()*2000000000);
   const clip=await generateVideo({port,checkpoint:videoModel,imageData,
-   frames:sceneFrames,fps:sceneFps,steps:videoSteps,motion,seed},session,signal);
+   frames:sceneFrames,fps:sceneFps,steps:videoSteps,motion:pcmSceneSvdMotion36(scene,motion),seed},session,signal);
   const actualSvd=isFullSongAuto?
    await assertSvdAutoSceneClipDuration(clip,Number(scene.end)-Number(scene.start),{signal}):null;
   checkCancel();live=current();scene=live?.scenes?.find(s=>s.id===sceneId);
@@ -186,6 +187,7 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
   checkCancel();const clipId=idFactory('vid');await saveFile(clipId,new File([clip],`MYVOCAL-MV-${sceneId}-${seed}.${clip.type==='video/mp4'?'mp4':'webp'}`,{type:clip.type}));
   commit(applySceneVideo(live,sceneId,clipId,sourceKey,{checkpoint:videoModel,seed,
    frames:sceneFrames,fps:sceneFps,mime:clip.type,
+   motion:pcmSceneSvdMotion36(scene,motion),
    actualDurationSec:actualSvd?.durationSec,actualFrames:actualSvd?.frames}));generatedVideos++;
   progress?.(`${index+1}/${plan.total}장면 생성·저장 완료`);
  }
