@@ -74,7 +74,7 @@ export function characterOwnedFileIds(data,character){
   if(records(data?.projects).some(project=>projectMediaIds(project).includes(id)))throw Error('공유하고 있는 원본 파일이 있으므로 삭제할 수 없습니다.');
   if(records(data?.characters).some(other=>other.id!==character.id&&characterMediaIds(other).includes(id)))throw Error('공유하고 있는 원본 파일이 있으므로 삭제할 수 없습니다.');
   if(records(data?.voices).some(voice=>voice.assetId===id||records(voice.assets).some(asset=>asset.id===id)))throw Error('공유하고 있는 원본 파일이 있으므로 삭제할 수 없습니다.');
-  if(records(data?.voiceModels).some(model=>model.assetId===id||model.dictionaryAssetId===id||model.sourceSampleId===id))throw Error('공유하고 있는 원본 파일이 있으므로 삭제할 수 없습니다.');
+  if(records(data?.voiceModels).some(model=>model.assetId===id||model.dictionaryAssetId===id||model.checkpointAssetId===id||model.sourceSampleId===id))throw Error('공유하고 있는 원본 파일이 있으므로 삭제할 수 없습니다.');
   if(records(data?.trainingPlans).some(plan=>(Array.isArray(plan.sampleIds)&&plan.sampleIds.includes(id))||records(plan.sampleSnapshot).some(sample=>sample.id===id)))throw Error('공유하고 있는 원본 파일이 있으므로 삭제할 수 없습니다.');
  }
  return owned;
@@ -83,7 +83,7 @@ export function sampleDependents(data,voiceId,id){
  const uses=[];
  for(const p of records(data.trainingPlans))if((p.sampleIds||[]).includes(id)||(records(p.sampleSnapshot)).some(s=>s?.id===id))uses.push('학습 기록 '+(p.voiceName||p.id));
  for(const v of records(data.voices))if(v.id!==voiceId&&(v.assetId===id||(records(v.assets)).some(s=>s.id===id)))uses.push('목소리 '+(v.name||v.id));
- for(const m of records(data.voiceModels))if(m.sourceSampleId===id||m.assetId===id||m.dictionaryAssetId===id)uses.push('모델 '+(m.name||m.id));
+ for(const m of records(data.voiceModels))if(m.sourceSampleId===id||m.assetId===id||m.dictionaryAssetId===id||m.checkpointAssetId===id)uses.push('모델 '+(m.name||m.id));
  for(const p of records(data.projects))if(projectMediaIds(p).includes(id))uses.push('곡 '+(p.title||p.id));
  for(const c of records(data.characters))if(characterMediaIds(c).includes(id))uses.push('캐릭터 '+(c.name||c.id));
  return uses;
@@ -109,12 +109,13 @@ export function modelDependents(data,model){
  return uses;
 }
 export function voiceOwnedFileIds(data,voice){
- const owned=[voice.assetId,...(records(voice.assets)).map(s=>s.id),...(records(data.voiceModels)).filter(m=>m.voiceId===voice.id).flatMap(m=>[m.assetId,m.dictionaryAssetId])].filter(Boolean);
+ const owned=[voice.assetId,...(records(voice.assets)).map(s=>s.id),...(records(data.voiceModels)).filter(m=>m.voiceId===voice.id).flatMap(m=>[m.assetId,m.dictionaryAssetId,m.checkpointAssetId])].filter(Boolean);
  const others=new Set((records(data.voices)).filter(v=>v.id!==voice.id).flatMap(v=>[v.assetId,...(records(v.assets)).map(s=>s.id)]).filter(Boolean));
  for(const m of records(data.voiceModels))if(m.voiceId!==voice.id){
   if(m.assetId)others.add(m.assetId);
   if(m.sourceSampleId)others.add(m.sourceSampleId);
   if(m.dictionaryAssetId)others.add(m.dictionaryAssetId);
+  if(m.checkpointAssetId)others.add(m.checkpointAssetId);
  }
  for(const p of records(data.trainingPlans))if(p.voiceId!==voice.id){
   for(const id of p.sampleIds||[])if(id)others.add(id);
