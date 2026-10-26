@@ -15,11 +15,11 @@ export const rightsOptions = [
 export const initialData = {
   version: 10, projects: [], voices: [], trainingPlans: [], voiceModels: [], voicebanks: [], characters: [], virtualSingers: [], musicStyles: [], videoStyles: [], learning: [], settings: { provider:'MYVOCAL Native', defaultMode:'auto' }
 };
-export function newProject({title='새 프로젝트',prompt='',genre='Rock',genreMix,genreAuto=false,voiceId='',characterId='',virtualSingerId='',singingModelId='',singingStyle='Natural',videoMode='auto',withVideo=true,options={}}={}) {
+export function newProject({title='새 프로젝트',prompt='',genre='Rock',genreMix,genreAuto=false,voiceId='',characterId='',virtualSingerId='',singingModelId='',singingStyle='Natural',ownedMusicGuide8=null,videoMode='auto',withVideo=true,options={}}={}) {
   // Keep legacy projects intact; the new field is opt-in.
   const normalizedMix=genreMix===undefined?singleGenreMix(genre):validateGenreMix(genreMix);
   const date=now();
-  return {id:genId('prj'),title,prompt,status:'초안',createdAt:date,updatedAt:date,bpm:120,key:'C Major',genreMix:normalizedMix,genreAuto:!!genreAuto,voiceId,characterId,virtualSingerId,singingModelId,singingStyle,videoMode,withVideo,options,
+  return {id:genId('prj'),title,prompt,status:'초안',createdAt:date,updatedAt:date,bpm:120,key:'C Major',genreMix:normalizedMix,genreAuto:!!genreAuto,voiceId,characterId,virtualSingerId,singingModelId,singingStyle,...(ownedMusicGuide8?{ownedMusicGuide8}:{}),videoMode,withVideo,options,
     lyrics:'',activeTab:'music',tracks:[
       {id:genId('trk'),name:'Lead Vocal',type:'vocal',mute:false,solo:false,volume:85,clips:[],midiNotes:[],instrument:'synth'},
       {id:genId('trk'),name:'Drums',type:'rhythm',mute:false,solo:false,volume:78,clips:[],midiNotes:[],instrument:'drums'},
