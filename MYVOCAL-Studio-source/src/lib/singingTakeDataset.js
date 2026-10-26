@@ -104,12 +104,12 @@ export async function exportSingingTakeDataset(project,alignment,recording,dicti
   throw Error('하나의 학습 자료는 서로 다른 실제 WAV 녹음 1~12개를 지원합니다.');
  const entries=[],manifest=[],recordingInfo=[],transcriptions=['name,ph_seq,ph_dur'];
  const lexicon=[...dictionary].map(([word,phonemes])=>{
-  if(typeof word!=='string'||!word||/[^\\p{L}\\p{N}_+-]/u.test(word)||
+  if(typeof word!=='string'||!word||/[^\p{L}\p{N}_+-]/u.test(word)||
    !Array.isArray(phonemes)||!phonemes.length||
-   phonemes.some(p=>typeof p!=='string'||!/^[\\p{L}\\p{N}_/+-]+$/u.test(p)))
+   phonemes.some(p=>typeof p!=='string'||!/^[\p{L}\p{N}_/+-]+$/u.test(p)))
    throw Error('실제 한국어 DiffSinger 학습 발음 사전에 유효하지 않은 단어·음소가 있습니다.');
-  return word+'\\t'+phonemes.join(' ');
- }).join('\\n')+'\\n';
+  return word+'\t'+phonemes.join(' ');
+ }).join('\n')+'\n';
  if(encoder.encode(lexicon).length>2*1024*1024)
   throw Error('DiffSinger 학습 발음 사전은 2MB 이하여야 합니다.');
  let totalAudio=0,phraseIndex=0;
@@ -171,10 +171,10 @@ export async function exportSingingTakeDataset(project,alignment,recording,dicti
   recordingStartSec:recordingInfo.length===1?recordingInfo[0].startSec:null,
   recordings:recordingInfo,phrases:manifest,trained:false,
   note:'여러 실제 가창 녹음의 PCM 구간을 원곡 MIDI 위치에 맞춰 추출했습니다. 음소 시간은 MIDI 추정이며 음성 강제 정렬/신경망 학습은 수행하지 않았습니다. 모델별 전처리 전 수동 라벨 검수가 필요합니다.'};
- entries.unshift({name:'transcriptions.csv',data:encoder.encode(transcriptions.join('\\n')+'\\n')},
+ entries.unshift({name:'transcriptions.csv',data:encoder.encode(transcriptions.join('\n')+'\n')},
   {name:'dictionary.txt',data:encoder.encode(lexicon)},
   {name:'manifest.json',data:encoder.encode(JSON.stringify({...meta,pronunciationDictionary:'dictionary.txt'},null,2))},
-  {name:'README.txt',data:encoder.encode('MYVOCAL 한국어 가창 학습 데이터\\nDiffSinger acoustic 원시 데이터: wavs/*.wav + transcriptions.csv + dictionary.txt.\\n원곡 시작 초가 서로 다른 실제 사용자 녹음 여러 개를 한 번에 수집하며 원본은 변경하지 않습니다.\\n음소 시간은 강제 정렬 결과가 아닙니다. 설치된 모델에 맞게 라벨을 검수하세요.\\n')});
+  {name:'README.txt',data:encoder.encode('MYVOCAL 한국어 가창 학습 데이터\nDiffSinger acoustic 원시 데이터: wavs/*.wav + transcriptions.csv + dictionary.txt.\n원곡 시작 초가 서로 다른 실제 사용자 녹음 여러 개를 한 번에 수집하며 원본은 변경하지 않습니다.\n음소 시간은 강제 정렬 결과가 아닙니다. 설치된 모델에 맞게 라벨을 검수하세요.\n')});
  return {bytes:makeZip(entries),manifest:meta,
   fileName:'MYVOCAL-'+String(project.title||'singing').replace(/[^a-zA-Z0-9가-힣_-]/g,'_').slice(0,45)+'-가창학습데이터.zip'};
 }
