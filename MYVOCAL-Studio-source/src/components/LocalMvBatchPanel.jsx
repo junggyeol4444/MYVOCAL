@@ -55,6 +55,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [autoVirtualSinger,setAutoVirtualSinger]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true&&project.videoMode==='auto'&&!project.characterId);
  const [saveFullMovie,setSaveFullMovie]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true),[fullMouth,setFullMouth]=useState(false);
  const [soloPcmLip,setSoloPcmLip]=useState(false);
+ const [soloPcmLipTrackId,setSoloPcmLipTrackId]=useState('');
  const [makeMp4,setMakeMp4]=useState(true),[exportWav,setExportWav]=useState(true);
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.composition===true||project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.arrangement===true),[musicDuration,setMusicDuration]=useState(180);
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.singing===true),[singingPort,setSingingPort]=useState('7867');
@@ -599,6 +600,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }:await runFullLocalMv({...base,project:movieProject,includeAudio:true,includeCaptions:true,lipPlacement,
       duetPcmLip:fullMouth&&(makeDuet||movieProject?.duetSingers?.version===1),
       soloPcmLip:soloPcmLip&&!(makeDuet||movieProject?.duetSingers?.version===1),
+      soloPcmLipTrackId,
       prewarmedAudioContext:warmed,onProgress:setMessage});
     if(result.audioIncluded!==true)
      throw Error('실제 재생 가능한 보컬·반주 믹스가 WebM에 포함되지 않았습니다. 무음 영상은 완성된 음악+MV로 저장하지 않습니다.');
@@ -824,6 +826,14 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={soloPcmLip}
    onChange={e=>{setSoloPcmLip(e.target.checked);if(e.target.checked)setFullMouth(true);}}/>
    2D 한 명의 가수: 실제 저장된 가창 WAV PCM 강약으로 3~6분 한국어 음소 립싱크·휴지 입닫기 (반주/드럼 WAV 제외)</label>}
+  {saveFullMovie&&soloPcmLip&&<label>실제 가창 보컬 WAV 트랙 직접 지정 (자동 연결이 불확실할 때)
+   <select disabled={busy} value={soloPcmLipTrackId} onChange={e=>setSoloPcmLipTrackId(e.target.value)}>
+    <option value="">실제 신경망 주보컬 자동 선택 · 한 명일 때만</option>
+    {(project.tracks||[]).filter(t=>t.type==='vocal'&&!t.mute&&
+      t.clips?.some(c=>c.assetId)&&!/^MusicGen 분리 보컬/.test(t.name||'')).map(t=>
+      <option key={t.id} value={t.id}>{t.name||t.id} · {t.neuralSingingPrimary?'등록 주보컬 WAV':'기존 가창 WAV'}</option>)}
+   </select>
+  </label>}
   {saveFullMovie&&soloPcmLip&&<Notice>
    원곡에 혼자 노래하는 등록 2D 캐릭터와 실제 가창 WAV 트랙 하나,
    한국어 MIDI/가사 음소 시간표 또는 수동 입 모양이 필요합니다.
