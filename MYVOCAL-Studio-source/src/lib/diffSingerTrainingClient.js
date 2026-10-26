@@ -79,3 +79,15 @@ export async function downloadDiffSingerWeights(id,{session,request=fetch}={}){
  const suffix=/\.ckpt\b/i.test(disposition)?'.ckpt':'.pth';
  return new File([blob],'MYVOCAL-DiffSinger-trained'+suffix,{type:'application/octet-stream'});
 }
+
+export async function downloadDiffSingerTrainingDictionary(id,{session,request=fetch,signal}={}){
+ if(!/^[a-f0-9]{24}$/.test(id||''))throw Error('학습 작업 ID 오류');
+ const res=await resultOrError(await request(endpoint+'dictionary?id='+encodeURIComponent(id),{
+  method:'GET',headers:sessionHeader(session),cache:'no-store',signal
+ }),'학습에 사용한 한국어 발음 사전 수신 실패');
+ if(!/^text\/plain(?:;|$)/i.test(res.headers.get('Content-Type')||''))
+  throw Error('학습 발음 사전의 파일 형식이 올바르지 않습니다.');
+ const blob=await res.blob();
+ if(blob.size<10||blob.size>2*1024*1024)throw Error('학습 발음 사전 크기가 올바르지 않습니다.');
+ return new File([blob],'MYVOCAL-DiffSinger-dictionary.txt',{type:'text/plain'});
+}
