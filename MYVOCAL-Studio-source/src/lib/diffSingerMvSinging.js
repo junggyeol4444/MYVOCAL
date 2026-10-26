@@ -11,12 +11,13 @@ import {isPhonemePlanStale} from './phonemePlan.js';
 import {convertLongSingingWithRVC} from './rvcLongConversion.js';
 import {convertRegisteredRVC} from './rvcStoredConversion.js';
 import {persistNeuralVocalTake} from './neuralVocalPersist.js';
+import {makeOriginalLyricAdlibAlignment} from './mvNeuralAdlib.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
 
 export async function generateAndStoreDiffSingerMvSinging(project,{
  voice,model,session,confirmed=false,signal,
  convertRVC=false,rvcOptions=null,registeredRVCModel=null,
- scoreAlignment=null,saveOptions,onProgress=()=>{},
+ scoreAlignment=null,scoreAlignmentKind='harmony',saveOptions,onProgress=()=>{},
  synthesize=synthesizeDiffSingerWav,convert=convertLongSingingWithRVC
 }={}){
  if(!project?.id||!Array.isArray(project.tracks)||!voice||
@@ -45,12 +46,23 @@ export async function generateAndStoreDiffSingerMvSinging(project,{
  guard();
  // Harmony is a new generated score, not a mutation of the user's MIDI.
  // Only accept a copy anchored to the same original alignment and cue timings.
- if(scoreAlignment&&(scoreAlignment.sourceKey!==project.vocalAlignment.sourceKey||
-  !Array.isArray(scoreAlignment.cues)||
-  scoreAlignment.cues.length!==project.vocalAlignment.cues.length||
-  scoreAlignment.cues.some((cue,i)=>cue.startSec!==project.vocalAlignment.cues[i].startSec||
-   cue.endSec!==project.vocalAlignment.cues[i].endSec||cue.lyric!==project.vocalAlignment.cues[i].lyric)))
-  throw Error('가창 화음 악보는 현재 원본의 가사·MIDI 타이밍과 같아야 합니다.');
+ if(scoreAlignment){
+  if(scoreAlignment.sourceKey!==project.vocalAlignment.sourceKey||
+     !Array.isArray(scoreAlignment.cues))
+   throw Error('독립 가창 악보는 현재 원곡 가사·MIDI에서만 생성할 수 있습니다.');
+  if(scoreAlignmentKind==='adlib'){
+   // Ad-lib uses only the singer's actual original Korean lyric syllables,
+   // placed in existing rests; it may not inject new unrelated lyrics.
+   const source=makeOriginalLyricAdlibAlignment(project);
+   if(JSON.stringify(scoreAlignment.cues)!==JSON.stringify(source.cues))
+    throw Error('원본 가사·MIDI에서 자동 생성한 Ad-lib 음표만 허용합니다.');
+  }else if(scoreAlignmentKind==='harmony'){
+   if(scoreAlignment.cues.length!==project.vocalAlignment.cues.length||
+    scoreAlignment.cues.some((cue,i)=>cue.startSec!==project.vocalAlignment.cues[i].startSec||
+     cue.endSec!==project.vocalAlignment.cues[i].endSec||cue.lyric!==project.vocalAlignment.cues[i].lyric))
+    throw Error('가창 화음 악보는 현재 원본의 가사·MIDI 타이밍과 같아야 합니다.');
+  }else throw Error('지원하지 않는 신규 신경망 가창 악보입니다.');
+ }
  const alignment=scoreAlignment||project.vocalAlignment;
  const phonemePlan=scoreAlignment?null:
   (project.phonemePlan&&!isPhonemePlanStale(alignment,project.phonemePlan)?project.phonemePlan:null);
