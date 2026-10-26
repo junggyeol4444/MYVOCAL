@@ -19,8 +19,10 @@ export default function SingingTakeDatasetPanel({project,voice,alignment,notify,
   ['self','owned','licensed'].includes(voice?.rights);
  let planned=0,planError='';
  if(available)try{planned=planSingingTakePhrases(project,alignment,
-  {recordingStartSec:Number(recordingStartSec)}).length;}
+  {recordingStartSec:Number(recordingStartSec),clipToRange:extraRecordings.length>0}).length;}
  catch(e){planError=e.message;}
+ const validFirst=String(recordingStartSec).trim()!==''&&
+  Number.isFinite(Number(recordingStartSec))&&Number(recordingStartSec)>=0&&Number(recordingStartSec)<360;
  const validExtras=extraRecordings.length<=11&&extraRecordings.every(t=>
   t.file instanceof Blob&&String(t.startSec).trim()!==''&&
   Number.isFinite(Number(t.startSec))&&Number(t.startSec)>=0&&Number(t.startSec)<360);
@@ -31,7 +33,7 @@ export default function SingingTakeDatasetPanel({project,voice,alignment,notify,
   try{
    if(!available||!rights)throw Error('현재 프로젝트와 녹음·가사·모델의 사용 권한을 확인하세요.');
    if(!recording||!dictionaryFile)throw Error('실제 노래 녹음 WAV와 모델 한국어 발음 사전을 선택하세요.');
-   if(!validExtras)throw Error('추가 녹음 11개 이하와 각 WAV의 원곡 시작 초를 입력하세요.');
+   if(!validFirst||!validExtras)throw Error('첫 녹음과 추가 녹음 11개 이하의 원곡 시작 초를 정확히 입력하세요.');
    if(dictionaryFile.size>2*1024*1024)throw Error('한국어 발음 사전은 2MB 이하여야 합니다.');
    const dictionary=parseDiffSingerDictionary(await dictionaryFile.text());
    const input=extraRecordings.length?
@@ -78,7 +80,7 @@ export default function SingingTakeDatasetPanel({project,voice,alignment,notify,
   <label className="mv7-hint"><input type="checkbox" checked={rights} disabled={busy}
    onChange={e=>setRights(e.target.checked)}/> 녹음·가사·발음 사전·가창 모델의 학습 및 사용 권한을 확인했습니다.</label>
   <div className="mv7-actions">
-   <Button icon="download" variant="primary" disabled={busy||!available||!rights||!recording||!dictionaryFile||!!planError||!validExtras}
+   <Button icon="download" variant="primary" disabled={busy||!available||!rights||!recording||!dictionaryFile||!!planError||!validFirst||!validExtras}
     onClick={save}>실제 가창 PCM·음소 학습 데이터 ZIP</Button>
    <Button disabled={!busy} onClick={()=>abort.current?.abort()}>제작 취소</Button>
    <Status>{available?(planError?'구간 설정 확인':extraRecordings.length?
