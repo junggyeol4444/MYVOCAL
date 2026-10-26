@@ -9,6 +9,7 @@ import {interpretMvInstruction93,applyMvInstruction93,undoMvInstruction93} from 
 import {regenerateNaturalMvScene,undoNeuralNaturalMvScene} from '../lib/mvNaturalMediaRegeneration.js';
 import {previewSectionNaturalEdit,applySectionNaturalEdit,undoSectionNaturalEdit,regenerateSectionNaturalMvScenes,undoSectionNaturalMvScenes} from '../lib/mvSectionNaturalEdit.js';
 import {prepareCharacterReplace94,applyCharacterReplace94,undoCharacterReplace94} from '../lib/characterReplace94.js';
+import {applyAndRenderCharacterReplace94} from '../lib/characterReplaceRender94.js';
 import {eligibleBandCharacters} from '../lib/virtualBand90.js';
 import {reviewCharacterLook} from '../lib/characterLooks.js';
 import {previewMvStyleReapply91,applyMvStyleReapply91,undoMvStyleReapply91} from '../lib/mvStyleReapply91.js';
@@ -57,6 +58,10 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
  const p=project||data.projects[0];const [selected,setSelected]=useState(focusSceneId||'');const [pendingImport,setPendingImport]=useState(null);const [animaticPosition,setAnimaticPosition]=useState(0);const [animaticPlaying,setAnimaticPlaying]=useState(false);const [animaticSpeed,setAnimaticSpeed]=useState(1);const [shotSheetPage,setShotSheetPage]=useState(1);const animaticLastTick=useRef(null);
  const [imagePort,setImagePort]=useState('8188');const [checkpoints,setCheckpoints]=useState([]);const [checkpoint,setCheckpoint]=useState('');
  const [natural93,setNatural93]=useState(''),[review93,setReview93]=useState(null),[natural93Busy,setNatural93Busy]=useState(false),[natural93Status,setNatural93Status]=useState(''),[replace94Id,setReplace94Id]=useState(''),[review94,setReview94]=useState(null),[replace94All,setReplace94All]=useState(false);
+ const [replace94ReferenceConsent,setReplace94ReferenceConsent]=useState(false),
+  [replace94Busy,setReplace94Busy]=useState(false),[replace94Status,setReplace94Status]=useState('');
+ const replace94Abort=useRef(null);
+ useEffect(()=>()=>replace94Abort.current?.abort(),[]);
  const [style91Id,setStyle91Id]=useState(''),[style91Review,setStyle91Review]=useState(null);
  const [band90Open,setBand90Open]=useState(false),[regen92Busy,setRegen92Busy]=useState(false),[regen92Status,setRegen92Status]=useState('로컬 이미지 모델·기존 장면 이미지 필요'),[regen92Patch,setRegen92Patch]=useState('');
  const [imageBusy,setImageBusy]=useState(false);const [imageStatus,setImageStatus]=useState('로컬 ComfyUI 확인 필요');
@@ -511,6 +516,30 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
  };
  const reviewReplacement94=()=>{try{setReview94(prepareCharacterReplace94(p,replace94All?p.scenes.map(s=>s.id):[current.id],replace94Id,data.characters));}catch(e){setReview94(null);notify('STEP94: '+e.message);}};
  const applyReplacement94=()=>{try{if(!review94)throw Error('교체 내용을 먼저 확인하세요.');onChange(applyCharacterReplace94(p,review94,data.characters));setReview94(null);notify('캐릭터 링크 교체 완료. 이전 미디어는 복원 이력에 보존되고 새 인물의 이미지 생성은 별도로 필요합니다.');}catch(e){setReview94(null);notify('STEP94 적용 실패: '+e.message);}};
+ const replaceAndRender94=async()=>{
+  if(replace94Busy||!review94)return;
+  const original=p,chosenPlan=review94;
+  const controller=new AbortController();replace94Abort.current=controller;
+  setReplace94Busy(true);setReplace94Status('선택한 캐릭터 교체 장면 원본과 실제 SD/SVD 모델을 확인 중');
+  try{
+   if(!replace94ReferenceConsent)throw Error('새 캐릭터의 사용 허가된 사진·원화를 실제 이미지 생성에 사용하도록 승인해 주세요.');
+   const [w,h]=imageSize.split('x').map(Number);
+   const result=await applyAndRenderCharacterReplace94(original,chosenPlan,data.characters,{
+    checkpoint,videoModel,port:Number(imagePort),session:readSession(),
+    imageSteps,videoSteps,width:w,height:h,frames:videoFrames,fps:videoFps,motion:videoMotion,
+    signal:controller.signal,current:()=>latestProject.current,
+    currentCharacters:()=>latestCharacters.current,
+    commit:next=>{latestProject.current=next;return onChange(next)},
+    onProgress:setReplace94Status
+   });
+   setReview94(null);setReplace94ReferenceConsent(false);
+   const message='선택한 '+result.replacedSceneIds.length+'개 장면의 새 캐릭터 이미지 '+
+    result.generatedImages+'개·SVD 영상 '+result.generatedVideos+'개를 실제 로컬 생성해 신규 저장했습니다. 기존 영상은 교체 이력에 보존됩니다.';
+   setReplace94Status(message);notify(message);
+  }catch(error){
+   setReplace94Status('실제 캐릭터 영상 교체 중단 · 원본 사진·영상 보존: '+error.message);
+  }finally{replace94Abort.current=null;setReplace94Busy(false);}
+ };
  const inspectStyle91=()=>{
   try{setStyle91Review(previewMvStyleReapply91(p,chosenMeasuredStyle));}
   catch(e){setStyle91Review(null);notify('MV 측정 스타일 검토: '+e.message);}
@@ -571,8 +600,18 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
  </Panel>
  <Panel title="STEP94 · Character Replace" description="장면·카메라·시간을 유지하면서 출연 캐릭터만 교체합니다. 구 캐릭터 이미지·영상은 이력에 보존되고 새 이미지로 재사용하지 않습니다.">
  <div className="hstack" style={{gap:9,flexWrap:'wrap'}}><Field label="교체할 캐릭터"><select aria-label="Step94 새 캐릭터" value={replace94Id} onChange={e=>{setReplace94Id(e.target.value);setReview94(null);}}><option value="">대상 선택</option>{data.characters.filter(c=>['owned','self','licensed'].includes(c.rights)&&(c.rights!=='licensed'||c.rightsNote?.trim())).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><label className="muted"><input type="checkbox" checked={replace94All} onChange={e=>{setReplace94All(e.target.checked);setReview94(null);}}/> 모든 장면</label><Button disabled={!current||!replace94Id} onClick={reviewReplacement94}>교체 검토</Button><Button disabled={!review94} onClick={applyReplacement94}>검토한 캐릭터 교체</Button><Button disabled={!current?.characterReplace94?.history?.length} onClick={()=>{try{onChange(undoCharacterReplace94(p,current.id));notify('이전 캐릭터·이미지 연결을 복구했습니다.');}catch(e){notify(e.message);}}}>이 장면 캐릭터 복원</Button></div>
+ <label className="muted"><input type="checkbox" disabled={replace94Busy}
+   checked={replace94ReferenceConsent} onChange={e=>setReplace94ReferenceConsent(e.target.checked)}/>
+   새 캐릭터의 등록된 본인·허가 사진/원화로 실제 이미지·영상 생성하는 데 동의합니다. 기존 사진·영상·모델은 삭제하지 않습니다.</label>
+ <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
+  <Button variant="primary" disabled={!review94||!replace94ReferenceConsent||replace94Busy||
+   natural93Busy||sectionBusy||imageBusy||videoBusy||personBusy||pvBusy||regen92Busy||!checkpoint||!videoModel}
+   onClick={replaceAndRender94}>{replace94Busy?'실제 캐릭터 SD/SVD 교체 장면 생성 중':'검토한 캐릭터 교체 + 선택 장면 실제 SD/SVD 새로 생성'}</Button>
+  {replace94Busy&&<Button onClick={()=>replace94Abort.current?.abort()}>교체 영상 생성 취소</Button>}
+ </div>
+ {replace94Status&&<p role="status" className="muted">{replace94Status}</p>}
  {review94&&<p className="muted">{review94.preview}</p>}
- <p className="muted">정체성 잠금이 활성화된 프로젝트에서는 교체할 수 없습니다. 실제 새 캐릭터의 영상·이미지 생성은 별도 로컬 엔진에서 수행해야 합니다.</p>
+ <p className="muted">정체성 잠금이 활성화된 프로젝트에서는 교체할 수 없습니다. 새 캐릭터의 실제 사진·원화 및 로컬 SD/SVD 모델을 사용해 선택한 장면만 다시 생성할 수 있습니다. 중단 시 이전 원본은 교체 이력에서 복원할 수 있습니다.</p>
  </Panel>
  <Pv95Editor project={p} onSave={onChange} notify={notify}/>
  <Panel title="MV Storyboard Preflight · Step71" description="로컬 수동 스토리보드 시간 충돌·공백 점검 및 편집 목록 내보내기 (실제 영상 렌더링 아님)"><div className="hstack" style={{flexWrap:'wrap',gap:12}}><span>장면 <strong>{storyboardAudit.scenes}</strong></span><span>마지막 종료 <strong>{storyboardAudit.durationSec}초</strong></span><span>시간 오류 <strong>{storyboardAudit.errors}</strong></span><span>경고 <strong>{storyboardAudit.warnings}</strong></span><span>공백 <strong>{storyboardAudit.gapSeconds}초</strong></span></div><div className="hstack" style={{flexWrap:'wrap',gap:8,marginTop:12}}><Button icon="download" onClick={()=>exportStoryboard('json')}>장면 계획 JSON</Button><Button icon="download" onClick={()=>exportStoryboard('csv')}>편집 컷 목록 CSV</Button><Button onClick={()=>snapCurrent('beat')} disabled={!current}>현재 씬 박자 맞춤</Button><Button onClick={()=>snapCurrent('bar')} disabled={!current}>현재 씬 4/4 마디 맞춤</Button></div><div style={{marginTop:10}}>{storyboardAudit.issues.slice(0,12).map((item,i)=><p key={`${item.sceneId}-${item.code}-${i}`} className="muted" style={{margin:'4px 0'}}>{item.severity==='error'?'오류':'경고'} · {item.sceneId||'프로젝트'} · {item.message}</p>)}{storyboardAudit.issues.length>12&&<p className="muted">추가 점검 항목 {storyboardAudit.issues.length-12}개</p>}{storyboardAudit.issues.length===0&&<p className="muted">장면 시간 검증 통과 (영상 생성 여부와 무관)</p>}</div></Panel>
