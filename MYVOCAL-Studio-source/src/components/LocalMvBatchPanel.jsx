@@ -39,6 +39,7 @@ import {planScoreMatchedMusicGenSegments} from '../lib/neuralStemScoreTiming.js'
 import {renderAndStoreNeuralMidiStems} from '../lib/autoMvSourceStems.js';
 import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
 import {getInstalledLocalModels} from '../lib/localAiComposer.js';
+import {completeProductionStage55,resumableProductionStage55} from '../lib/productionResume55.js';
 import {applyNeuralFaceLipToMv} from '../lib/autoMvRealPersonLip.js';
 import {convertRecordedWebMToMP4} from '../lib/mvMp4Export.js';
 import {persistProductionDeliverables} from '../lib/productionOutputPersist.js';
@@ -126,6 +127,47 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [musicModelDir,setMusicModelDir]=useState(musicPaths.musicModelDir||musicPaths.modelDir||'');
  const [demucsRoot,setDemucsRoot]=useState(musicPaths.demucsRoot||'');
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
+ // Only an explicit option enables skipping previously committed real
+ // model work. Never decide to use a different local AI model automatically.
+ const [resumeProduction,setResumeProduction]=useState(false);
+ const modelName=path=>String(path||'').split(/[\\/]/).filter(Boolean).at(-1)||'';
+ const settingsFor=(stage,source)=>{
+  const scoreAt=source?.neuralAutoScore?.at||'';
+  switch(stage){
+   case 'neural-score':return {model:scoreModel,prompt:scorePrompt,
+    genre:source.genre,key:source.key,targetSeconds:musicDuration};
+   case 'soundfont-midi-stems':return {scoreAt,sf:modelName(soundfontFile),
+    dll:modelName(soundfontDll),version:'native-midi-sf'};
+   case 'neural-audio-stems':return {scoreAt,model:modelName(musicModelDir),
+    seconds:Number(source.neuralAutoScore?.durationSec)||musicDuration,
+    audible:!makeNeuralMusic};
+   case 'musicgen-demucs-master':return {scoreAt,model:modelName(musicModelDir),
+    seconds:Number(source.neuralAutoScore?.durationSec)||musicDuration,
+    demucs:'htdemucs'};
+   case 'neural-vocal':return {scoreAt,voice:singingVoiceId||source.voiceId,
+    backend:singingBackend,model:singingBackend==='diffsinger'?diffSingerModelId:
+     source.singingEngine?.modelId||'',style:singingStyle,
+    harmony:makeHarmony,duet:makeDuet,adlib:makeNeuralAdlib,
+    duetVoice:duetVoiceId,duetModel:diffSingerDuetModelId,
+    pitch:harmonyDirection,convertRVC:alsoConvertRVC,rvcId:registeredRVCId};
+   default:throw Error('지원되지 않는 자동 제작 단계');
+  }
+ };
+ const completedStep=async(stage,before)=>{
+  const updated=current();
+  if(!updated||before.id!==updated.id)throw Error('자동 제작 완료 기록 중 다른 프로젝트가 선택됐습니다.');
+  const finished=completeProductionStage55(before,updated,stage,settingsFor(stage,before),{
+   voiceId:singingVoiceId||before.voiceId,
+   modelId:singingBackend==='diffsinger'?diffSingerModelId:scoreModel
+  });
+  await Promise.resolve(commit(finished));
+ };
+ const resumeStep=(stage,source)=>{
+  if(!resumeProduction)return false;
+  const status=resumableProductionStage55(source,stage,settingsFor(stage,source));
+  if(status.canResume)setMessage('기존 실제 '+stage+' '+status.outputCount+'트랙 재사용 · 중복 신경망 생성 없이 다음 단계 진행');
+  return status.canResume;
+ };
  let info;try{info=planMvBatch(project,{includeReferences})}catch(e){info={total:0,already:0,linked:0,error:e.message}}
  const exportSelectedStem=async()=>{
   if(busy||stemExportBusy)return;
