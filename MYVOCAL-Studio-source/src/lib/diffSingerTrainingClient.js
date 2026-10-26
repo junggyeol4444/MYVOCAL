@@ -6,9 +6,16 @@ const sessionHeader=session=>{
  return {'X-MYVOCAL-Session':session};
 };
 export function validateDiffSingerTrainer(settings){
- const {python,root,script,args,voiceId,rightsConfirmed}=settings||{};
+ const {python,root,script,args,voiceId,rightsConfirmed,mode='official',config}=settings||{};
  if(rightsConfirmed!==true)throw Error('실제 녹음·학습 모델 사용 권한을 확인하세요.');
  if(!voiceId||typeof voiceId!=='string'||voiceId.length>128)throw Error('학습할 Voice를 선택하세요.');
+ if(mode==='official'){
+  if([python,root,config].some(v=>typeof v!=='string'||!v||v.length>2048)||
+    !/(?:^|[\\/])python\.exe$/i.test(python)||!(/\.ya?ml$/i.test(config)))
+   throw Error('실제 로컬 DiffSinger/Python.exe/모델 학습 설정 YAML을 지정하세요.');
+  return [];
+ }
+ if(mode!==''&&mode!=='custom')throw Error('지원하지 않는 가창 학습 방식입니다.');
  if([python,root,script].some(v=>typeof v!=='string'||!v||v.length>2048)||
    !/(?:^|[/\\])python\.exe$/i.test(python)||!/\.py$/i.test(script))
   throw Error('로컬 Python.exe와 실제 DiffSinger 학습 스크립트(.py)가 필요합니다.');
@@ -30,7 +37,10 @@ export async function startDiffSingerTraining(bundle,settings,{session,signal,re
   throw Error('MYVOCAL에서 만든 128MiB 이하 가창 학습 데이터 ZIP을 선택하세요.');
  const form=new FormData();
  form.set('bundle',bundle,'MYVOCAL-한국어노래학습.zip');
- for(const key of ['python','root','script','voiceId'])form.set(key,settings[key]);
+ for(const key of ['python','root','voiceId'])form.set(key,settings[key]);
+ form.set('mode',settings.mode||'official');
+ if(settings.mode==='official'||!settings.mode)form.set('config',settings.config);
+ else form.set('script',settings.script);
  form.set('args',JSON.stringify(args));
  form.set('rights','confirmed');
  const res=await resultOrError(await request(endpoint+'start',{
