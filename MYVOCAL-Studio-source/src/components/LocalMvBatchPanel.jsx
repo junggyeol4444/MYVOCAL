@@ -28,6 +28,7 @@ import {trainedKoreanVoiceRoute,identityReadyForMv} from '../lib/autoProductionV
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
 import {SINGING_STYLES} from '../lib/singingStyleControl.js';
+import {DIFFSINGER_EXPRESSIVE_STYLES} from '../lib/diffSingerExpressiveF0.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
 import {directAutoMvScenesWithLocalAI} from '../lib/autoMvNeuralSceneDirection.js';
@@ -59,7 +60,11 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [diffSingerModelId,setDiffSingerModelId]=useState(()=>
    project.productionLaunch55?.version===1?trainedRoute?.modelId||'':'');
  const [diffSingerDuetModelId,setDiffSingerDuetModelId]=useState('');
- const [singingStyle,setSingingStyle]=useState(project.singingStyle||'Natural');
+ const [singingStyle,setSingingStyle]=useState(()=>
+  (project.productionLaunch55?.version===1&&
+   trainedKoreanVoiceRoute(project,data)&&
+   !DIFFSINGER_EXPRESSIVE_STYLES.includes(project.singingStyle))
+    ?'Natural':project.singingStyle||'Natural');
  const [makeHarmony,setMakeHarmony]=useState(false),[harmonyDirection,setHarmonyDirection]=useState('above');
  const [makeDuet,setMakeDuet]=useState(false),[duetVoiceId,setDuetVoiceId]=useState('');
  const [duetLeadCharacterId,setDuetLeadCharacterId]=useState(''),[duetHarmonyCharacterId,setDuetHarmonyCharacterId]=useState('');
@@ -341,7 +346,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      const registeredRVCModel=alsoConvertRVC?registeredRVCModels.find(m=>m.id===registeredRVCId)||null:null;
      const commonOptions={
       voice:singer,session:base.session,convertRVC:alsoConvertRVC,rvcOptions,
-      registeredRVCModel,confirmed:singingRights,signal:controller.signal,onProgress:setMessage,
+      registeredRVCModel,confirmed:singingRights,singingStyle,signal:controller.signal,onProgress:setMessage,
       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
        createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
      };
@@ -369,7 +374,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       const harmonic=await generateAndStoreDiffSingerMvHarmony(current(),{
        voice:makeDuet?secondSinger:singer,
        model:makeDuet?selectedDuetDiffSingerModel:selectedDiffSingerModel,
-       session:base.session,confirmed:singingRights,direction:harmonyDirection,
+       session:base.session,confirmed:singingRights,singingStyle,direction:harmonyDirection,
        convertRVC:makeDuet?false:alsoConvertRVC,
        rvcOptions:makeDuet?null:rvcOptions,
        registeredRVCModel:makeDuet?null:registeredRVCModel,
@@ -612,6 +617,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   {saveFullMovie&&makeNeuralSinging&&<div className="mv7-item">
    <label>가창 신경망 엔진<select value={singingBackend} disabled={busy} onChange={e=>{
     setSingingBackend(e.target.value);setSingingRights(false);
+     if(e.target.value==='diffsinger'&&!DIFFSINGER_EXPRESSIVE_STYLES.includes(singingStyle))setSingingStyle('Natural');
     if(e.target.value==='diffsinger'){setMakeHarmony(false);setMakeDuet(false);setMakeNeuralAdlib(false);}
    }}>
     <option value="external">기존 로컬 Singing 엔진 (포트)</option>
@@ -628,8 +634,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      <option value="">프로젝트 목소리 / 첫 번째 사용 허가 목소리</option>
      {voices.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
    </select></label>
-   {singingBackend==='external'&&<label>노래 스타일 (Voice 음색과 별도)<select disabled={busy} value={singingStyle} onChange={e=>setSingingStyle(e.target.value)}>
-    {SINGING_STYLES.map(style=><option key={style} value={style}>{style}</option>)}
+   <label>노래 스타일 (Voice 음색과 별도{singingBackend==='diffsinger'?' · MIDI/F0 발성 표현':''})<select disabled={busy} value={singingStyle} onChange={e=>setSingingStyle(e.target.value)}>
+    {(singingBackend==='diffsinger'?DIFFSINGER_EXPRESSIVE_STYLES:SINGING_STYLES).map(style=><option key={style} value={style}>{style}</option>)}
    </select></label>}
    <label><input type="checkbox" checked={makeHarmony} disabled={busy} onChange={e=>setMakeHarmony(e.target.checked)}/> 원곡 MIDI로 실제 신경망 Singing 3도 화음도 별도 WAV/DAW 트랙 생성</label>}
    {makeHarmony&&<label><input type="checkbox" disabled={busy} checked={makeDuet} onChange={e=>setMakeDuet(e.target.checked)}/> 서로 다른 실제 목소리 2명과 캐릭터 2명으로 듀엣 노래·MV 제작</label>}
