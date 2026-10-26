@@ -177,6 +177,27 @@ export async function importProjectBundle(file){
    ...(t.singerCharacterId?{singerCharacterId:mapping[t.singerCharacterId]||t.singerCharacterId}:{})
   }));
  }
+ // Original #8: own-song energy MIDI edits must remain fully undoable
+ // after portable restore. All original notes stay in metadata; source
+ // audio is not included or converted into hidden training material.
+ if(original.ownedMusicMidiUndo8?.version===1){
+  const undo=original.ownedMusicMidiUndo8;
+  if(!Array.isArray(undo.saved)||undo.saved.length>48||
+   undo.source!=='actual-owned-local-pcm')
+   throw Error('백업의 내 음악 스타일 MIDI 복원 자료가 올바르지 않습니다.');
+  const used=new Set();
+  const saved=undo.saved.map(row=>{
+   const index=oldTrackIds.indexOf(row.trackId);
+   if(index<0||used.has(row.trackId)||!project.tracks[index]?.id||
+      !Array.isArray(row.before)||!Array.isArray(row.after)||
+      row.before.length!==row.after.length||row.before.length>12000)
+    throw Error('백업의 내 음악 스타일 MIDI 원본·변경 음표 연결이 누락됐습니다.');
+   used.add(row.trackId);
+   return {...row,trackId:project.tracks[index].id,
+    before:row.before.map(n=>({...n})),after:row.after.map(n=>({...n}))};
+  });
+  project.ownedMusicMidiUndo8={...undo,saved};
+ }
  // 원본 #11·#62: 구간별 MIDI 쉼표 편집의 원본 음표 복원 자료도
  // 백업에서 새 트랙 ID로 연결한다. 이전 트랙 ID는 복원 프로젝트에 남기지 않는다.
  if(Array.isArray(original.producerSectionRests)){
