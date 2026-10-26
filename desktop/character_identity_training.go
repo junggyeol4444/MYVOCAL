@@ -10,6 +10,7 @@ import (
  "context"
  "bytes"
  "crypto/rand"
+ "crypto/sha256"
  "encoding/hex"
  "errors"
  "fmt"
@@ -192,6 +193,10 @@ func(a *appServer)characterTrainStart(w http.ResponseWriter,r *http.Request){
  output:=filepath.Join(jobRoot,"models")
  for _,p:=range []string{photos,output}{if err=os.MkdirAll(p,0700);err!=nil{jsonError(w,500,"학습용 신규 작업 폴더 준비 실패");return}}
  unique:=map[string]bool{}
+ sourceDigests:=map[[32]byte]bool{}
+ safeRoles:=map[string]string{"portrait":"front portrait","front":"front view",
+  "side":"side view","back":"back view","full-body":"full body view",
+  "expression":"facial expression","outfit":"clothing reference","other":"identity reference"}
  for n,header:=range imgs{
   if header.Size<128||header.Size>characterTrainImageLimit{jsonError(w,400,"12MiB 이하 원본 이미지만 가능합니다");return}
   asset:=strings.TrimSpace(r.FormValue("assetId"+strconv.Itoa(n)))
@@ -200,10 +205,17 @@ func(a *appServer)characterTrainStart(w http.ResponseWriter,r *http.Request){
   file,e:=header.Open();if e!=nil{jsonError(w,400,"캐릭터 원본 이미지 읽기 실패");return}
   payload,ext,e:=checkCharacterTrainImage(file);file.Close()
   if e!=nil{jsonError(w,422,e.Error());return}
+  digest:=sha256.Sum256(payload)
+  if sourceDigests[digest]{jsonError(w,422,"서로 다른 등록 자산이라도 원본 이미지 데이터가 같은 파일은 중복 학습할 수 없습니다");return}
+  sourceDigests[digest]=true
+  role,ok:=safeRoles[r.FormValue("assetRole"+strconv.Itoa(n))]
+  if !ok{jsonError(w,400,"원본 이미지 역할(정면·측면·후면·표정·의상) 정보 오류");return}
   stem:=fmt.Sprintf("%03d",n+1)
   if e=os.WriteFile(filepath.Join(photos,stem+ext),payload,0600);e!=nil{jsonError(w,500,"학습 이미지 사본 저장 실패");return}
   // Captions use a unique per-job token to avoid colliding with existing subjects.
-  tag:=token+", "+kind+", original identity reference"
+  subject:="original character illustration"
+  if kind=="person"{subject="consenting human subject"}
+  tag:=token+", "+subject+", "+role
   if !characterCaptionSafe.MatchString(tag){jsonError(w,400,"학습 설명 오류");return}
   if e=os.WriteFile(filepath.Join(photos,stem+".txt"),[]byte(tag+"\n"),0600);e!=nil{
    jsonError(w,500,"학습 이미지 캡션 저장 실패");return
