@@ -19,6 +19,8 @@ import {importOriginalNeuralMidiWavBundle} from '../lib/neuralStemBundleImport.j
 import {extendMvToFullSong,bindRegisteredDuetToAutoScenes} from '../lib/fullSongMvScenes.js';
 import {analyzeRecordedDuetScenes,recordedDuetCueSheet} from '../lib/duetVocalSceneActivity.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
+import {generateAndStoreDiffSingerMvSinging} from '../lib/diffSingerMvSinging.js';
+import {listedDiffSingerModels} from '../lib/diffSingerVoiceRegistry.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
 import {SINGING_STYLES} from '../lib/singingStyleControl.js';
@@ -45,6 +47,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const [makeNeuralMusic,setMakeNeuralMusic]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.composition===true||project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.arrangement===true),[musicDuration,setMusicDuration]=useState(180);
  const [makeNeuralSinging,setMakeNeuralSinging]=useState(()=>project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.singing===true),[singingPort,setSingingPort]=useState('7867');
  const [singingVoiceId,setSingingVoiceId]=useState(project.voiceId||''),[singingRights,setSingingRights]=useState(false);
+ const [singingBackend,setSingingBackend]=useState('external'),[diffSingerModelId,setDiffSingerModelId]=useState('');
  const [singingStyle,setSingingStyle]=useState(project.singingStyle||'Natural');
  const [makeHarmony,setMakeHarmony]=useState(false),[harmonyDirection,setHarmonyDirection]=useState('above');
  const [makeDuet,setMakeDuet]=useState(false),[duetVoiceId,setDuetVoiceId]=useState('');
@@ -69,6 +72,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
  const selectedRVCSinger=voices.find(v=>v.id===(singingVoiceId||project.voiceId))||voices[0];
  const registeredRVCModels=(data.voiceModels||[]).filter(m=>
   m?.engineId==='rvc'&&m.voiceId===selectedRVCSinger?.id&&m.assetId&&m.sha256);
+ const availableDiffSingerModels=listedDiffSingerModels(selectedRVCSinger,data.voiceModels||[]);
+ const selectedDiffSingerModel=availableDiffSingerModels.find(model=>model.id===diffSingerModelId)||null;
  const [musicPaths]=useState(()=>{try{return readMusicGenPreferences(window.localStorage)}catch{return {}}});
  const [musicPython,setMusicPython]=useState(musicPaths.python||'');
  const [musicModelDir,setMusicModelDir]=useState(musicPaths.modelDir||'');
@@ -172,6 +177,12 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   const controller=new AbortController();cancelRef.current=controller;setBusy(true);setMessage('시작 중…');setError('');
   let warmed=null;
   try{
+   if(makeNeuralSinging&&singingBackend==='diffsinger'){
+    if(!selectedDiffSingerModel||!selectedDiffSingerModel.dictionaryAssetId)
+     throw Error('한 번에 MV 제작에 사용할 학습 완료 DiffSinger 모델과 발음 사전을 선택하세요.');
+    if(makeHarmony||makeNeuralAdlib)
+     throw Error('DiffSinger 메인 가창 모드에서는 외부 엔진 전용 화음·Ad-lib 기능을 동시에 사용할 수 없습니다.');
+   }
    if(makeNeuralSinging&&makeHarmony&&makeDuet){
     if(!includeReferences)
      throw Error('동일한 두 가수의 외형을 유지하려면 등록 사진·캐릭터 참조 이미지 사용을 선택하세요.');
@@ -288,13 +299,21 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      if(!singer)throw Error('등록된 본인 또는 사용 허가 목소리가 필요합니다.');
      const rvcOptions=alsoConvertRVC?readRVCPreferences(window.localStorage):null;
      const registeredRVCModel=alsoConvertRVC?registeredRVCModels.find(m=>m.id===registeredRVCId)||null:null;
-     const sung=await generateAndStoreMvSinging(vocalProject,{
-      voice:singer,port:Number(singingPort),singingStyle,modelId:vocalProject.singingEngine?.modelId||'',
-      session:base.session,convertRVC:alsoConvertRVC,rvcOptions,registeredRVCModel,confirmed:singingRights,
-      signal:controller.signal,onProgress:setMessage,
+     const commonOptions={
+      voice:singer,session:base.session,convertRVC:alsoConvertRVC,rvcOptions,
+      registeredRVCModel,confirmed:singingRights,signal:controller.signal,onProgress:setMessage,
       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
        createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
-     });
+     };
+     // Use the registered, completed Korean acoustic model directly inside
+     // the EXE; do not require an unrelated HTTP Singing server on this path.
+     const sung=singingBackend==='diffsinger'?
+      await generateAndStoreDiffSingerMvSinging(vocalProject,{
+       ...commonOptions,model:selectedDiffSingerModel
+      }):await generateAndStoreMvSinging(vocalProject,{
+       ...commonOptions,port:Number(singingPort),singingStyle,
+       modelId:vocalProject.singingEngine?.modelId||''
+      });
      if(controller.signal.aborted||current()?.id!==vocalProject.id)throw Error('신경망 가창 저장 중 취소 또는 프로젝트 변경');
      movieProject=sung.project;
      if(makeHarmony){
@@ -517,15 +536,28 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeNeuralSinging} onChange={e=>{setMakeNeuralSinging(e.target.checked);setSingingRights(false);}}/> 실제 한국어 신경망 Singing 가창 → 본인 음색 RVC → 음악·MV 전체 연속 제작</label>}
   {saveFullMovie&&makeNeuralSinging&&<div className="mv7-item">
-   <label>설치된 로컬 Singing 엔진 포트<input value={singingPort} disabled={busy} onChange={e=>setSingingPort(e.target.value)} inputMode="numeric" placeholder="7867"/></label>
-   <label>가창에 사용할 등록 목소리<select value={singingVoiceId} disabled={busy} onChange={e=>{setSingingVoiceId(e.target.value);setSingingRights(false);}}>
+   <label>가창 신경망 엔진<select value={singingBackend} disabled={busy} onChange={e=>{
+    setSingingBackend(e.target.value);setSingingRights(false);
+    if(e.target.value==='diffsinger'){setMakeHarmony(false);setMakeDuet(false);setMakeNeuralAdlib(false);}
+   }}>
+    <option value="external">기존 로컬 Singing 엔진 (포트)</option>
+    <option value="diffsinger">Voice Library 학습 완료 DiffSinger (Windows EXE 직접 추론)</option>
+   </select></label>
+   {singingBackend==='external'?<label>설치된 로컬 Singing 엔진 포트<input value={singingPort} disabled={busy} onChange={e=>setSingingPort(e.target.value)} inputMode="numeric" placeholder="7867"/></label>:<label>실제 학습된 로컬 DiffSinger Acoustic 모델
+    <select disabled={busy||!availableDiffSingerModels.length} value={diffSingerModelId} onChange={e=>{setDiffSingerModelId(e.target.value);setSingingRights(false);}}>
+     <option value="">현재 Voice의 학습된 모델 선택</option>
+     {availableDiffSingerModels.map(m=><option value={m.id} key={m.id}>{m.name}{m.dictionaryAssetId?' · 발음 사전 등록':' · 발음 사전 미등록'}</option>)}
+    </select>
+    <Notice>저장된 한국어 발음 사전과 실제 Acoustic 체크포인트를 Windows EXE에서 실행합니다. 기존 Singing 포트는 사용하지 않습니다. 이 경로에서는 별도 가창 스타일·외부 엔진 화음·Ad-lib가 아닌 원곡 선율의 실제 가창을 생성합니다.</Notice>
+   </label>}
+   <label>가창에 사용할 등록 목소리<select value={singingVoiceId} disabled={busy} onChange={e=>{setSingingVoiceId(e.target.value);setSingingRights(false);setDiffSingerModelId('');}}>
      <option value="">프로젝트 목소리 / 첫 번째 사용 허가 목소리</option>
      {voices.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
    </select></label>
-   <label>노래 스타일 (Voice 음색과 별도)<select disabled={busy} value={singingStyle} onChange={e=>setSingingStyle(e.target.value)}>
+   {singingBackend==='external'&&<label>노래 스타일 (Voice 음색과 별도)<select disabled={busy} value={singingStyle} onChange={e=>setSingingStyle(e.target.value)}>
     {SINGING_STYLES.map(style=><option key={style} value={style}>{style}</option>)}
-   </select></label>
-   <label><input type="checkbox" checked={makeHarmony} disabled={busy} onChange={e=>setMakeHarmony(e.target.checked)}/> 원곡 MIDI로 실제 신경망 Singing 3도 화음도 별도 WAV/DAW 트랙 생성</label>
+   </select></label>}
+   {singingBackend==='external'&&<label><input type="checkbox" checked={makeHarmony} disabled={busy} onChange={e=>setMakeHarmony(e.target.checked)}/> 원곡 MIDI로 실제 신경망 Singing 3도 화음도 별도 WAV/DAW 트랙 생성</label>}
    {makeHarmony&&<label><input type="checkbox" disabled={busy} checked={makeDuet} onChange={e=>setMakeDuet(e.target.checked)}/> 서로 다른 실제 목소리 2명과 캐릭터 2명으로 듀엣 노래·MV 제작</label>}
    {makeHarmony&&makeDuet&&<div className="mv7-item">
     <label>두 번째 Singing Voice<select disabled={busy} value={duetVoiceId} onChange={e=>setDuetVoiceId(e.target.value)}>
@@ -544,7 +576,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    {makeHarmony&&<label>3도 화음 음역<select disabled={busy} value={harmonyDirection} onChange={e=>setHarmonyDirection(e.target.value)}>
     <option value="above">메인 선율 위의 3도</option><option value="below">메인 선율 아래의 3도</option>
    </select></label>}
-   <label><input type="checkbox" checked={makeNeuralAdlib} disabled={busy} onChange={e=>setMakeNeuralAdlib(e.target.checked)}/> 원곡 가사·MIDI 휴지에 실제 신경망 Ad-lib(추임새) WAV 추가 → 독립 편집 보컬 트랙</label>
+   {singingBackend==='external'&&<label><input type="checkbox" checked={makeNeuralAdlib} disabled={busy} onChange={e=>setMakeNeuralAdlib(e.target.checked)}/> 원곡 가사·MIDI 휴지에 실제 신경망 Ad-lib(추임새) WAV 추가 → 독립 편집 보컬 트랙</label>}
    <label><input type="checkbox" checked={alsoConvertRVC} disabled={busy} onChange={e=>setAlsoConvertRVC(e.target.checked)}/> 등록한 RVC 모델로 본인 음색까지 변환</label>
    {alsoConvertRVC&&<label>실제 RVC 모델 선택<select disabled={busy} value={registeredRVCId} onChange={e=>setRegisteredRVCId(e.target.value)}>
      <option value="">기존 로컬 경로의 모델 사용</option>
@@ -566,7 +598,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    <Notice>동일한 본인·허가받은 실제 사람으로 연결된 장면에만 적용합니다. 원본 MV WebM도 별도 보존하며, 실제 Wav2Lip 모델이 MP4를 생성하지 못하면 성공이라고 보고하지 않습니다.</Notice>
   </div>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={fullMouth} onChange={e=>setFullMouth(e.target.checked)}/> 저장된 2D 립싱크 입 모양 포함 (듀엣은 두 가수 실제 WAV PCM 사용)</label>}
-  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeSourceStems&&(!musicPython||!soundfontDll||!soundfontFile))||(makeNeuralAudioStems&&(!musicPython||!musicModelDir))||(makeNeuralSinging&&(!singingRights||!voices.length||(makeHarmony&&makeDuet&&(!duetVoiceId||!duetLeadCharacterId||!duetHarmonyCharacterId||duetLeadCharacterId===duetHarmonyCharacterId))))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))||(faceNeuralSync&&(!personId||!facePython||!faceRoot||!faceCheckpoint||!faceRights||!faceModelRights))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
+  <Button variant="primary" disabled={busy||(!info.total&&!saveFullMovie)||(info.total>0&&(!checkpoint||!videoModel))||(makeNeuralMusic&&(!musicPython||!musicModelDir||!demucsRoot))||(makeSourceStems&&(!musicPython||!soundfontDll||!soundfontFile))||(makeNeuralAudioStems&&(!musicPython||!musicModelDir))||(makeNeuralSinging&&(!singingRights||!voices.length||(singingBackend==='diffsinger'&&(!selectedDiffSingerModel?.dictionaryAssetId||!selectedDiffSingerModel?.dictionarySha256))||(makeHarmony&&makeDuet&&(!duetVoiceId||!duetLeadCharacterId||!duetHarmonyCharacterId||duetLeadCharacterId===duetHarmonyCharacterId))))||(makeAutoScore&&(!scoreModel||scorePrompt.trim().length<3))||(faceNeuralSync&&(!personId||!facePython||!faceRoot||!faceCheckpoint||!faceRights||!faceModelRights))} onClick={create}>{busy?'실제 모델 + 영상 렌더 처리 중':saveFullMovie?'이미지·영상 생성부터 전체 MV 저장까지':'빈 장면 이미지·SVD 클립 일괄 생성'}</Button>
   {busy&&<Button onClick={()=>cancelRef.current?.abort()}>이후 장면 생성 취소</Button>}
   {message&&<p role="status" className="muted">{message}</p>}
   {(error||info.error)&&<p role="alert" className="mv4-error">{error||info.error}</p>}
