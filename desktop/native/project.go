@@ -184,3 +184,33 @@ func recordStudioOutput(task int,path string)error{
  studioCurrent=p
  return nil
 }
+
+func importStudioAsset(path string)error{
+ abs,err:=filepath.Abs(path)
+ if err!=nil{return err}
+ if err=requireExistingFile(abs);err!=nil{return err}
+ ext:=strings.ToLower(filepath.Ext(abs))
+ kind:=""
+ switch ext {
+ case ".wav",".flac",".mp3",".ogg":kind="audio"
+ case ".pth",".ckpt",".safetensors",".index":kind="voice_model"
+ case ".png",".jpg",".jpeg",".webp",".bmp":kind="image"
+ case ".vrm",".glb",".gltf",".fbx":kind="character"
+ case ".mp4",".mov",".webm",".mkv":kind="video"
+ case ".mid",".midi",".json",".ds":kind="score"
+ default:return fmt.Errorf("프로젝트에 지원되지 않는 자산 확장자입니다: %s",ext)
+ }
+ studioMu.Lock()
+ defer studioMu.Unlock()
+ if studioPath==""{return errors.New("자산을 추가할 프로젝트를 먼저 만들어야 합니다")}
+ p:=studioCurrent
+ for _,a:=range p.Assets {if strings.EqualFold(a.Path,abs){return nil}}
+ if len(p.Assets)>=10000{return errors.New("프로젝트 등록 자산이 10000개를 넘었습니다")}
+ p.Assets=append(p.Assets,studioAsset{
+  Kind:kind,Task:"사용자 등록",Path:abs,AddedAt:time.Now().Format(time.RFC3339),
+ })
+ p.UpdatedAt=time.Now().Format(time.RFC3339)
+ if err=writeProjectFile(studioPath,p,false);err!=nil{return err}
+ studioCurrent=p
+ return nil
+}
