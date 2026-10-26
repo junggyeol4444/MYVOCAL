@@ -21,6 +21,7 @@ import {currentAutoSingerImageRequest} from '../lib/autoVirtualSingerImages.js';
 import {videoSourceKey,applySceneVideo,isSceneVideoStale,checkLocalVideoEngine,generateLocalVideoClip,readSourceFrame} from '../lib/mvSceneVideos.js';
 import {personPhotoAssets,validatePersonSource,linkPersonToMvScene,personSceneImageRequest,generatePersonMvImage,personMvSceneStatus} from '../lib/imageToMv.js';
 import {chooseSceneReference} from '../lib/characterSceneReference.js';
+import {attachIdentityLoRA} from '../lib/characterIdentityLoRA.js';
 import {characterArtworkAssets,validateCharacterArtwork,linkCharacterToMvScene,characterSceneImageRequest,generateCharacterMvImage,characterMvSceneStatus} from '../lib/characterToMv.js';
 import {auditMvStoryboard,exportMvStoryboard,exportMvCutCsv,snapMvSceneToBeat} from '../lib/mvStoryboard.js';
 import {inspectMvStoryboardImport,restoreMvStoryboard,MV_STORYBOARD_IMPORT_MAX_BYTES} from '../lib/mvStoryboardImport.js';
@@ -160,7 +161,11 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
    const seed=Math.floor(Math.random()*2000000000);
    setRegen92Status('사용 허가 원본을 이용해 로컬 img2img 실행 중…');
    const inputs={port:Number(imagePort),checkpoint,prompt:plan.prompt,negative:plan.negative,imageData,width,height,steps:Number(imageSteps),seed,denoise:plan.denoise};
-   const generated=plan.kind==='person'?await generatePersonMvImage(inputs,readSession()):await generateCharacterMvImage(inputs,readSession());
+   const sourceIdentity=latestCharacters.current.find(c=>c.id===
+    (plan.kind==='person'?current.personMv?.personId:current.characterMv?.characterId));
+   if(!sourceIdentity)throw Error('재생성 대상의 실제 등록 인물·캐릭터가 변경됐습니다.');
+   const identityInputs=attachIdentityLoRA(inputs,sourceIdentity);
+   const generated=plan.kind==='person'?await generatePersonMvImage(identityInputs,readSession()):await generateCharacterMvImage(identityInputs,readSession());
    const latest=latestProject.current;if(!latest||latest.id!==plan.projectId)throw Error('작업 중 프로젝트가 교체되었습니다.');
    verifyRegeneration92(latest,latestCharacters.current,plan);
    const assetId=genId('img'),ext=generated.type==='image/jpeg'?'jpg':'png';
@@ -255,7 +260,7 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
     latestProject.current=linked;onChange(linked);
     const seed=baseSeed+i;
     setPersonStatus(`장면 ${i+1}/${chosen.length} · ${linkedScene.title} · 실제 사진 기반 이미지 생성 중`);
-    const still=await generatePersonMvImage({port:Number(imagePort),checkpoint,prompt:request.prompt,negative:request.negative,imageData,width,height,steps:Number(imageSteps),seed,denoise:Number(personDenoise)},session,controller.signal);
+    const still=await generatePersonMvImage(attachIdentityLoRA({port:Number(imagePort),checkpoint,prompt:request.prompt,negative:request.negative,imageData,width,height,steps:Number(imageSteps),seed,denoise:Number(personDenoise)},person),session,controller.signal);
     const latest=latestProject.current;
     if(!latest||latest.id!==projectId)throw Error('프로젝트가 변경되어 결과를 저장하지 않았습니다.');
     const latestScene=latest.scenes.find(x=>x.id===targetId);
@@ -389,7 +394,7 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
     latestProject.current=linked;onChange(linked); // Persist link before compute, supports recovery.
     const seed=baseSeed+i;
     setPvStatus(`장면 ${i+1}/${eligible.length} · ${linkedScene.title} · 2D 캐릭터 원본 그림 기반 이미지 생성 중`);
-    const still=await generateCharacterMvImage({port:Number(imagePort),checkpoint,prompt:request.prompt,negative:request.negative,imageData,width,height,steps:Number(imageSteps),seed,denoise:Number(pvDenoise)},session,controller.signal);
+    const still=await generateCharacterMvImage(attachIdentityLoRA({port:Number(imagePort),checkpoint,prompt:request.prompt,negative:request.negative,imageData,width,height,steps:Number(imageSteps),seed,denoise:Number(pvDenoise)},character),session,controller.signal);
     const latest=latestProject.current;
     if(!latest||latest.id!==projectId)throw Error('이미지 생성 도중 프로젝트가 바뀌었습니다. 기존 파일은 보존됩니다.');
     const scene=latest.scenes.find(s=>s.id===targetId),nowCharacter=latestCharacters.current.find(c=>c.id===characterId);
