@@ -25,8 +25,11 @@ const (
  taskLongMusicGen
  taskMixWAV
  taskMicRecord
+ taskWavTrim
+ taskWavNormalize
+ taskWavFade
 )
-var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)","장편 AI 작곡 (MusicGen 3~6분·중단 재개)","반주·보컬 PCM 믹싱 (네이티브)","내 목소리 녹음 (Windows 기본 마이크)"}
+var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)","장편 AI 작곡 (MusicGen 3~6분·중단 재개)","반주·보컬 PCM 믹싱 (네이티브)","내 목소리 녹음 (Windows 기본 마이크)","WAV 구간 자르기 (보컬 편집)","WAV 음량 정규화 (피크)","WAV 페이드 인·아웃"}
 
 type request struct {
  Task int
@@ -71,10 +74,13 @@ func prepareRequest(r request)(jobSpec,error){
  for _,v:=range []string{r.Python,r.Engine,r.Input,r.Auxiliary,r.Output,r.Prompt,r.Option}{
   if strings.ContainsRune(v,0)||strings.ContainsAny(v,"\r\n"){return jobSpec{},errors.New("입력값에 제어 문자가 포함돼 있습니다")}
  }
- if r.Task!=taskMixWAV&&r.Task!=taskMicRecord{if err:=requireExistingFile(r.Python);err!=nil{return jobSpec{},fmt.Errorf("로컬 Python: %w",err)}}
+ if r.Task!=taskMixWAV&&r.Task!=taskMicRecord&&r.Task!=taskWavTrim&&r.Task!=taskWavNormalize&&r.Task!=taskWavFade{if err:=requireExistingFile(r.Python);err!=nil{return jobSpec{},fmt.Errorf("로컬 Python: %w",err)}}
  if r.Task!=taskDemucs{if err:=preventOverwrite(r.Output);err!=nil{return jobSpec{},err}}
  var script string;var args []string
  switch r.Task{
+ case taskWavTrim,taskWavNormalize,taskWavFade:
+  if err:=audioEditCheck(r);err!=nil{return jobSpec{},err}
+  return jobSpec{output:r.Output},nil
  case taskMicRecord:
   seconds,err:=strconv.Atoi(strings.TrimSpace(r.Option))
   if err!=nil||seconds<3||seconds>180{return jobSpec{},errors.New("마이크 녹음 시간은 3~180초입니다")}
@@ -168,6 +174,7 @@ func executeJob(ctx context.Context,r request,logLine func(string))error{
  job,err:=prepareRequest(r);if err!=nil{return err}
  if r.Task==taskLongMusicGen{return runLongMusicGen(ctx,r,job,logLine)}
  if r.Task==taskMicRecord{return recordNativeMic(ctx,r,logLine)}
+ if r.Task==taskWavTrim||r.Task==taskWavNormalize||r.Task==taskWavFade{return editNativeWAV(ctx,r,logLine)}
  if r.Task==taskMixWAV{return mixNativePCM(ctx,r,logLine)}
  // Existing MusicGen worker uses wb; generate in scratch and publish new WAV exclusively.
  if r.Task==taskMusicGen||r.Task==taskRVCConvert||r.Task==taskDiffSinger{
