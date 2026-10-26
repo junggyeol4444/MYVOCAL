@@ -53,7 +53,7 @@ func refreshAssetList(){
 }
 func chooseLocalMedia() (string,bool) {
  var buf [32768]uint16
- filter:=syscall.StringToUTF16("지원하는 음악·음성·캐릭터·영상\x00*.wav;*.flac;*.mp3;*.ogg;*.pth;*.ckpt;*.safetensors;*.index;*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.vrm;*.glb;*.gltf;*.fbx;*.mp4;*.mov;*.webm;*.mkv;*.mid;*.midi;*.json;*.ds\x00모든 파일\x00*.*\x00\x00")
+ filter:=syscall.StringToUTF16("지원하는 음악·음성·캐릭터·영상\x00*.wav;*.flac;*.mp3;*.ogg;*.pth;*.ckpt;*.safetensors;*.index;*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.vrm;*.glb;*.gltf;*.fbx;*.mp4;*.mov;*.webm;*.mkv;*.mid;*.midi;*.sf2;*.sf3;*.json;*.ds\x00모든 파일\x00*.*\x00\x00")
  opts:=openFileName{Size:uint32(unsafe.Sizeof(openFileName{})),Owner:assetUI.hwnd,File:&buf[0],MaxFile:uint32(len(buf)),Filter:&filter[0],Flags:0x00000800|0x00080000|0x00001000}
  if found,_,_:=openDialog.Call(uintptr(unsafe.Pointer(&opts)));found==0{return "",false}
  return syscall.UTF16ToString(buf[:]),true
@@ -63,6 +63,8 @@ func assignSelectedAssetToTask(a studioAsset)error{
  task:=getTask()
  index:= -1
  switch {
+ case task==taskSoundFont&&(ext==".mid"||ext==".midi"):index=2
+ case task==taskSoundFont&&(ext==".sf2"||ext==".sf3"):index=3
  case task==taskRVCConvert&&ext==".pth":index=3
  case task==taskRVCConvert&&ext==".index":index=5
  case task==taskLipSync&&(ext==".png"||ext==".jpg"||ext==".jpeg"||ext==".webp"):index=1
