@@ -20,6 +20,7 @@ import {extendMvToFullSong,bindRegisteredDuetToAutoScenes} from '../lib/fullSong
 import {analyzeRecordedDuetScenes,recordedDuetCueSheet} from '../lib/duetVocalSceneActivity.js';
 import {generateAndStoreMvSinging} from '../lib/autoMvSinging.js';
 import {generateAndStoreDiffSingerMvSinging} from '../lib/diffSingerMvSinging.js';
+import {generateAndStoreDiffSingerMvHarmony} from '../lib/diffSingerMvHarmony.js';
 import {listedDiffSingerModels} from '../lib/diffSingerVoiceRegistry.js';
 import {generateAndStoreMvHarmony} from '../lib/mvHarmonySinging.js';
 import {generateAndStoreMvAdlib} from '../lib/mvNeuralAdlib.js';
@@ -180,8 +181,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    if(makeNeuralSinging&&singingBackend==='diffsinger'){
     if(!selectedDiffSingerModel||!selectedDiffSingerModel.dictionaryAssetId)
      throw Error('한 번에 MV 제작에 사용할 학습 완료 DiffSinger 모델과 발음 사전을 선택하세요.');
-    if(makeHarmony||makeNeuralAdlib)
-     throw Error('DiffSinger 메인 가창 모드에서는 외부 엔진 전용 화음·Ad-lib 기능을 동시에 사용할 수 없습니다.');
+    if(makeNeuralAdlib||makeHarmony&&makeDuet)
+     throw Error('DiffSinger는 독립 3도 화음을 생성하지만 서로 다른 두 가수의 듀엣과 외부 엔진 전용 Ad-lib는 별도 엔진을 선택하세요.');
    }
    if(makeNeuralSinging&&makeHarmony&&makeDuet){
     if(!includeReferences)
@@ -316,7 +317,18 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       });
      if(controller.signal.aborted||current()?.id!==vocalProject.id)throw Error('신경망 가창 저장 중 취소 또는 프로젝트 변경');
      movieProject=sung.project;
-     if(makeHarmony){
+     if(makeHarmony&&singingBackend==='diffsinger'){
+      const harmonic=await generateAndStoreDiffSingerMvHarmony(current(),{
+       voice:singer,model:selectedDiffSingerModel,session:base.session,
+       confirmed:singingRights,direction:harmonyDirection,
+       convertRVC:alsoConvertRVC,rvcOptions,registeredRVCModel,
+       signal:controller.signal,onProgress:setMessage,
+       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
+        createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
+      });
+      movieProject=harmonic.project;
+      setMessage('등록 DiffSinger 본인 모델로 메인 가창과 독립된 실제 '+(harmonyDirection==='above'?'상성':'하성')+' 3도 화음 WAV 신규 편집 트랙 저장');
+     }else if(makeHarmony){
       // 두 번째 Voice를 요청한 경우 신규 가창은 두 번째 목소리로만 생성한다.
       const secondSinger=makeDuet?voices.find(v=>v.id===duetVoiceId):null;
       const leadCharacter=makeDuet?duetCharacters.find(c=>c.id===duetLeadCharacterId):null;
@@ -548,7 +560,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      <option value="">현재 Voice의 학습된 모델 선택</option>
      {availableDiffSingerModels.map(m=><option value={m.id} key={m.id}>{m.name}{m.dictionaryAssetId?' · 발음 사전 등록':' · 발음 사전 미등록'}</option>)}
     </select>
-    <Notice>저장된 한국어 발음 사전과 실제 Acoustic 체크포인트를 Windows EXE에서 실행합니다. 기존 Singing 포트는 사용하지 않습니다. 이 경로에서는 별도 가창 스타일·외부 엔진 화음·Ad-lib가 아닌 원곡 선율의 실제 가창을 생성합니다.</Notice>
+    <Notice>저장된 한국어 발음 사전과 실제 Acoustic 체크포인트를 Windows EXE에서 실행합니다. 기존 Singing 포트는 사용하지 않습니다. 이 경로에서는 원곡 선율·3도 화음을 실제 신경망 가창으로 생성할 수 있지만, 별도 스타일·서로 다른 두 가수의 듀엣·Ad-lib는 기존 Singing 엔진을 선택해야 합니다.</Notice>
    </label>}
    <label>가창에 사용할 등록 목소리<select value={singingVoiceId} disabled={busy} onChange={e=>{setSingingVoiceId(e.target.value);setSingingRights(false);setDiffSingerModelId('');}}>
      <option value="">프로젝트 목소리 / 첫 번째 사용 허가 목소리</option>
@@ -557,9 +569,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    {singingBackend==='external'&&<label>노래 스타일 (Voice 음색과 별도)<select disabled={busy} value={singingStyle} onChange={e=>setSingingStyle(e.target.value)}>
     {SINGING_STYLES.map(style=><option key={style} value={style}>{style}</option>)}
    </select></label>}
-   {singingBackend==='external'&&<label><input type="checkbox" checked={makeHarmony} disabled={busy} onChange={e=>setMakeHarmony(e.target.checked)}/> 원곡 MIDI로 실제 신경망 Singing 3도 화음도 별도 WAV/DAW 트랙 생성</label>}
-   {makeHarmony&&<label><input type="checkbox" disabled={busy} checked={makeDuet} onChange={e=>setMakeDuet(e.target.checked)}/> 서로 다른 실제 목소리 2명과 캐릭터 2명으로 듀엣 노래·MV 제작</label>}
-   {makeHarmony&&makeDuet&&<div className="mv7-item">
+   <label><input type="checkbox" checked={makeHarmony} disabled={busy} onChange={e=>setMakeHarmony(e.target.checked)}/> 원곡 MIDI로 실제 신경망 Singing 3도 화음도 별도 WAV/DAW 트랙 생성</label>}
+   {makeHarmony&&singingBackend==='external'&&<label><input type="checkbox" disabled={busy} checked={makeDuet} onChange={e=>setMakeDuet(e.target.checked)}/> 서로 다른 실제 목소리 2명과 캐릭터 2명으로 듀엣 노래·MV 제작</label>}
+   {makeHarmony&&makeDuet&&singingBackend==='external'&&<div className="mv7-item">
     <label>두 번째 Singing Voice<select disabled={busy} value={duetVoiceId} onChange={e=>setDuetVoiceId(e.target.value)}>
      <option value="">첫 번째 목소리와 다른 허가 Voice 선택</option>
      {voices.filter(v=>v.id!==selectedRVCSinger?.id&&(v.rights!=='licensed'||String(v.rightsNote||'').trim())).map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
