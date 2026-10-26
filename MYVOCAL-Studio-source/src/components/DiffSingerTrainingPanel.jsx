@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Field,Notice,Panel,Status} from './UI';
 import {startDiffSingerTraining,readDiffSingerTrainingStatus,stopDiffSingerTraining,downloadDiffSingerWeights} from '../lib/diffSingerTrainingClient.js';
+import {officialDiffSingerModelFromJob} from '../lib/diffSingerVoiceRegistry.js';
 
 // #06·#08·#33: 권리 있는 실제 노래 WAV·한국어 가사/MIDI 데이터→로컬 신경망 학습.
 // 모델 설치/호환 스크립트가 없으면 학습했다고 표시하지 않는다.
@@ -12,7 +13,7 @@ function restore(){try{const v=JSON.parse(window.localStorage.getItem(KEY)||'{}'
 const session=()=>window.__MYVOCAL_SESSION_KEY;
 const dl=file=>{const url=URL.createObjectURL(file),anchor=document.createElement('a');
  anchor.href=url;anchor.download=file.name;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),5000);};
-export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle,onModelReady}){
+export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle,onModelReady,add,registeredModels=[]}){
  const [config,setConfig]=useState(restore),[bundle,setBundle]=useState(null),[rights,setRights]=useState(false);
  const [busy,setBusy]=useState(false),[state,setState]=useState(null),[error,setError]=useState('');
  const previousVoice=useRef(voice?.id),alive=useRef(true);
@@ -49,6 +50,21 @@ export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle,on
    if(previousVoice.current!==voice.id)throw Error('Voice가 변경되어 다른 목소리의 가중치를 저장하지 않습니다.');
    dl(file);notify('실제로 생성된 가중치 파일을 다운로드했습니다. DiffSinger 추론 모델 호환·품질은 별도 확인이 필요합니다.');
   }catch(e){setError(e.message||String(e));}finally{setBusy(false);}
+ }
+ const registered=registeredModels.some(m=>m?.id==='ds-'+state?.id&&m?.engineId==='diffsinger'&&m?.voiceId===voice?.id);
+ async function registerModel(){
+  if(busy)return;setBusy(true);setError('');
+  try{
+   if(typeof add!=='function')throw Error('Voice Library 저장 기능을 사용할 수 없습니다.');
+   if(previousVoice.current!==voice?.id)throw Error('학습 시작 후 Voice가 바뀌었습니다.');
+   const record=officialDiffSingerModelFromJob(state,voice);
+   if(registeredModels.some(m=>m?.id===record.id))
+    throw Error('이 학습 모델은 이미 보존되어 있습니다. 기존 모델을 덮어쓰지 않습니다.');
+   await Promise.resolve(add('voiceModels',record));
+   if(previousVoice.current!==voice.id)throw Error('Voice가 변경됐습니다. 원본 학습 작업을 다시 확인하세요.');
+   onModelReady?.(record);
+   notify('실제로 생성된 공식 DiffSinger 가창 체크포인트의 로컬 경로를 Voice Library에 별도 등록했습니다.');
+  }catch(e){setError(e.message||String(e));}finally{if(alive.current)setBusy(false);}
  }
  const working=state?.state==='running'||state?.state==='preparing';
  return <Panel title="본인 한국어 Singing · 실제 로컬 DiffSinger 학습" description="기존 EXE 안에서 내 노래 녹음·가사·MIDI의 학습 ZIP을 설치된 DiffSinger 신경망 학습 스크립트에 전달합니다. 실제 GPU 학습은 로컬 환경과 설치 모델에 달려 있습니다.">
@@ -92,6 +108,7 @@ export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle,on
      onModelReady?.({voiceId:state.voiceId,python:state.python,root:state.root,experiment:state.experiment});
      notify('실제로 생성된 공식 DiffSinger 새 acoustic 실험을 Singing 추론 화면에서 선택할 수 있습니다. 보코더 설치와 추론 품질은 아직 확인되지 않았습니다.');
    }}>이번 학습 모델을 Singing 가창 엔진에 연결</Button>
+   <Button disabled={busy||!add||registered||state?.state!=='completed'||!state?.checkpointAvailable||state?.mode!=='official'||state.voiceId!==voice?.id} onClick={registerModel}>{registered?'Voice Library 등록됨':'학습한 Acoustic 모델을 Voice Library에 추가'}</Button>
    <Button disabled={busy||working} onClick={()=>{try{window.localStorage.setItem(KEY,JSON.stringify(config));notify('설치 경로와 CLI 설정만 이 PC에 저장했습니다. 개인 녹음은 저장하지 않았습니다.');}catch(e){setError(e.message);}}}>현재 PC의 학습 경로 기억</Button>
   </div>
   <Status>{state?.state||'실행 전'} · {state?.message||'실제 학습은 실행하지 않았습니다.'}</Status>
