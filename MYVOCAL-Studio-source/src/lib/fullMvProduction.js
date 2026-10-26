@@ -11,11 +11,12 @@ import {mvExportRevision,verifyMvExportRevision} from './mvExportRevision.js';
 import {getFile} from './assetDb.js';
 import {automaticSingingVisemes,reviewedCharacterMouthPlacement} from './autoMvPhonemeLip.js';
 import {planRecordedDuetPcmLipOverlay} from './duetMvPcmLipOverlay.js';
+import {planRecordedSoloVocalPcmLip33} from './soloVocalPcmLipOverlay33.js';
 
 export async function runFullLocalMv({
  project,data,current,currentData,commit,session,checkpoint,videoModel,port,
  imageSteps,width,height,frames,fps,videoSteps,motion,includeReferences=false,autoVirtualSinger=false,
- includeAudio=true,includeCaptions=true,lipPlacement=null,prewarmedAudioContext=null,duetPcmLip=false,
+ includeAudio=true,includeCaptions=true,lipPlacement=null,prewarmedAudioContext=null,duetPcmLip=false,soloPcmLip=false,
  signal,onProgress=()=>{}
 },{
  batch=runMvBatch,plan=planMvVideoRender,load=loadMvVideoAssets,record=recordMvWebm,
@@ -31,6 +32,7 @@ export async function runFullLocalMv({
  preflight();
  if(before.durationSec>360)throw Error('현재 자동 MV는 최대 6분입니다.');
  // 등록된 한 명의 캐릭터·최신 한국어 음소 시간표·검토된 입 영역이 있을 때만 자동 적용.
+ if(soloPcmLip&&duetPcmLip)throw Error('한 명 또는 두 명의 실제 보컬 WAV 립싱크 중 하나만 선택하세요.');
  const initialLip=duetPcmLip?null:lipPlacement||(automaticSingingVisemes(project,characterList())
   ?reviewedCharacterMouthPlacement(project,characterList()):null);
  const safeLip=initialLip?overlay(project,characterList(),initialLip):null;
@@ -59,6 +61,10 @@ export async function runFullLocalMv({
   const mouth=duetPcmLip?await planRecordedDuetPcmLipOverlay(latest,chars,{
    loadFile:getAsset,current,signal,audioContext:prewarmedAudioContext,
    onProgress:message=>onProgress('두 가수 실제 WAV 입모양: '+message)
+  }):soloPcmLip?await planRecordedSoloVocalPcmLip33(latest,chars,{
+   loadFile:getAsset,current,signal,audioContext:prewarmedAudioContext,
+   placement:finalLip,
+   onProgress:message=>onProgress('한 가수 실제 보컬 WAV 입모양: '+message)
   }):finalLip?overlay(latest,chars,finalLip):null;
   const captionsState=includeCaptions?captions(latest):null;
   const useCaptions=!!includeCaptions&&captionsState?.status==='ready';
