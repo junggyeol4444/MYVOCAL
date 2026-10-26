@@ -57,7 +57,7 @@ export default function Workspace({data,project,onChange,navigate,notify,studio,
  {tab==='midi'&&<><MidiEditor project={p} onChange={change} notify={notify}/><MidiSoundFontPanel project={p} onChange={onChange} notify={notify}/></>}
  {tab==='sync'&&<LyricSync project={p} data={data} onChange={onChange} notify={notify}/>}
  {tab==='phonemes'&&<PhonemeEditor project={p} onChange={onChange} notify={notify}/>}
- {tab==='singing'&&<><SingingWorkbench project={p} data={data} onChange={onChange} notify={notify}/><ScoreVocalPanel project={p} onChange={onChange} notify={notify}/><Viseme2DPanel project={p} onChange={onChange} notify={notify}/></>}
+ {tab==='singing'&&<><SingingWorkbench project={p} data={data} onChange={onChange} notify={notify} add={add}/><ScoreVocalPanel project={p} onChange={onChange} notify={notify}/><Viseme2DPanel project={p} onChange={onChange} notify={notify}/></>}
  {tab==='openutau'&&<OpenUtauExchange project={p} onChange={onChange} data={data} add={add} remove={remove} notify={notify}/>}
  {tab==='lyrics'&&<Panel title="Lyrics Editor" description="가사를 직접 쓰고 수정하세요."><textarea className="lyrics-input" value={p.lyrics} onChange={e=>change({lyrics:e.target.value})} placeholder={'[Verse 1]\n가사를 작성해 보세요...\n\n[Chorus]\n후렴 가사를 작성해 보세요...'} rows={17}/><div className="editor-foot">{p.lyrics.length}자 · 자동 저장됨</div></Panel>}
  {tab==='structure'&&<><Panel title="Song Structure" description="곡의 이름·마디 수·구간별 장르를 설정하세요. 구간 설정은 기본 장르를 덮어쓰지 않습니다."><div className="structure-list">{p.sections.map((s,i)=><div className="structure-item" key={s.id}>
