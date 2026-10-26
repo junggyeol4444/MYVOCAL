@@ -36,8 +36,13 @@ $guide = Join-Path $root 'NATIVE-EXE-README.txt'
 @'
 MYVOCAL Studio Native (Windows 10/11 x64)
 EXE 실행 시 Windows 네이티브 GUI가 열립니다. 브라우저/HTML/HTTP/WebView2 없음.
-작곡, RVC 음색 학습, Demucs 악기 분리, MIDI 보컬 음정 보정, 2D 립싱크 MV는
-기존 Python 엔진을 직접 실행합니다. 각각 설치된 로컬 Python/모델이 필요합니다.
+MusicGen 작곡, RVC 음색 학습·변환, Demucs 악기 분리, DiffSinger 가창, 2D 립싱크 MV,
+Windows 마이크 녹음, WAV 컷·정규화·페이드, 다중 악기 MIDI 작곡·불러오기·저장,
+SoundFont MIDI→WAV 렌더링을 네이티브 화면에서 선택합니다.
+MIDI 작곡 창에서 @ Piano 0 다음에 60 0 1 100 처럼 음표를 적을 수 있습니다.
+프로젝트 생성/불러오기 후 프로젝트 파일에 편집 상태를 저장합니다.
+SoundFont 실제 오디오 렌더링은 사용자 PC에 설치된 로컬 Python·pretty_midi·FluidSynth DLL과
+사용자 소유 SF2/SF3 음원을 직접 사용합니다. 모델과 엔진을 강제 설치하지 않습니다.
 EXE 파일과 MYVOCAL-Studio-workers 폴더를 같은 위치에 보관하십시오.
 기존 브라우저/WebView2 프로젝트의 데이터는 자동으로 가져오거나 지우지 않습니다.
 현재 네이티브 UI는 원본 66항목 중 일부 기능만 연결한 개발본입니다.
