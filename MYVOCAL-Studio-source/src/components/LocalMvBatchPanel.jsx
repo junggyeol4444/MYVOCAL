@@ -433,7 +433,9 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
       voice:singer,session:base.session,convertRVC:alsoConvertRVC,rvcOptions,
       registeredRVCModel,confirmed:singingRights,singingStyle,signal:controller.signal,onProgress:setMessage,
       saveOptions:{current,onChange:commit,newId:genId,readInfo:readAudioInfo,
-       createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic}
+       createTrack:makeImportedVocalTrack,store:putFilesAtomic,rollback:deleteFilesAtomic,
+       singerBinding:{voiceId:singer.id,
+        characterId:makeDuet?duetLeadCharacterId:vocalProject.characterId||''}}
      };
      // Use the registered, completed Korean acoustic model directly inside
      // the EXE; do not require an unrelated HTTP Singing server on this path.
