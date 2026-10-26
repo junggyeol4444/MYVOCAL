@@ -90,6 +90,7 @@ export async function runFullLocalMv({
   if(!(recording?.blob instanceof Blob)||recording.blob.size<100)throw Error('실제 WebM 출력 데이터가 없습니다.');
   return {file:new File([recording.blob],'MYVOCAL-완성뮤직비디오.webm',{type:'video/webm'}),scenes:movie.scenes.length,
     seconds:movie.durationSec,audioIncluded:useAudio,captionsIncluded:useCaptions,lipIncluded:!!mouth,
+    lipMode:!mouth?'none':duetPcmLip?'duet-vocal-pcm':soloPcmLip?'solo-vocal-pcm':'manual-phoneme',
     generatedImages:generated?.generatedImages||0,generatedVideos:generated?.generatedVideos||0};
  }finally{resources?.dispose?.();}
 }
