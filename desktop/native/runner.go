@@ -28,8 +28,9 @@ const (
  taskWavTrim
  taskWavNormalize
  taskWavFade
+ taskSoundFont
 )
-var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)","장편 AI 작곡 (MusicGen 3~6분·중단 재개)","반주·보컬 PCM 믹싱 (네이티브)","내 목소리 녹음 (Windows 기본 마이크)","WAV 구간 자르기 (보컬 편집)","WAV 음량 정규화 (피크)","WAV 페이드 인·아웃"}
+var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)","장편 AI 작곡 (MusicGen 3~6분·중단 재개)","반주·보컬 PCM 믹싱 (네이티브)","내 목소리 녹음 (Windows 기본 마이크)","WAV 구간 자르기 (보컬 편집)","WAV 음량 정규화 (피크)","WAV 페이드 인·아웃","MIDI 악기 소리 렌더링 (SoundFont WAV)"}
 
 type request struct {
  Task int
@@ -85,6 +86,18 @@ func prepareRequest(r request)(jobSpec,error){
   seconds,err:=strconv.Atoi(strings.TrimSpace(r.Option))
   if err!=nil||seconds<3||seconds>180{return jobSpec{},errors.New("마이크 녹음 시간은 3~180초입니다")}
   return jobSpec{output:r.Output},nil
+ case taskSoundFont:
+  if err:=requireExistingFile(r.Engine);err!=nil{return jobSpec{},fmt.Errorf("로컬 FluidSynth DLL: %w",err)}
+  if strings.ToLower(filepath.Ext(r.Engine))!=".dll"{return jobSpec{},errors.New("Windows FluidSynth 라이브러리 DLL 파일을 선택하세요")}
+  if err:=requireExistingFile(r.Input);err!=nil{return jobSpec{},fmt.Errorf("MIDI 입력: %w",err)}
+  if ext:=strings.ToLower(filepath.Ext(r.Input));ext!=".mid"&&ext!=".midi"{return jobSpec{},errors.New("MIDI 파일(.mid/.midi)을 선택하세요")}
+  if err:=requireExistingFile(r.Auxiliary);err!=nil{return jobSpec{},fmt.Errorf("SoundFont 파일: %w",err)}
+  if ext:=strings.ToLower(filepath.Ext(r.Auxiliary));ext!=".sf2"&&ext!=".sf3"{return jobSpec{},errors.New("SoundFont SF2 또는 SF3 파일을 선택하세요")}
+  if strings.ToLower(filepath.Ext(r.Output))!=".wav"{return jobSpec{},errors.New("출력은 WAV 파일이어야 합니다")}
+  rate,err:=strconv.Atoi(strings.TrimSpace(r.Option));if err!=nil||(rate!=44100&&rate!=48000){return jobSpec{},errors.New("WAV 샘플레이트: 44100 또는 48000")}
+  gain,err:=strconv.ParseFloat(strings.TrimSpace(r.Prompt),64);if err!=nil||gain<0.01||gain>1{return jobSpec{},errors.New("소리 크기 0.01~1.0 범위")}
+  script="midi_soundfont_worker.py"
+  args=[]string{"--input",r.Input,"--output",r.Output,"--soundfont",r.Auxiliary,"--library",r.Engine,"--rate",strconv.Itoa(rate),"--gain",strconv.FormatFloat(gain,'f',2,64)}
  case taskMusicGen:
   if err:=requireDirectory(r.Engine);err!=nil{return jobSpec{},err}
   if err:=requireExistingFile(filepath.Join(r.Engine,"config.json"));err!=nil{return jobSpec{},errors.New("MusicGen 모델 폴더에 config.json이 없습니다")}
