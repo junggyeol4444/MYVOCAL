@@ -1,5 +1,16 @@
 # MYVOCAL Studio — 예약 자동 개발 전체 인수인계 복구 인덱스
 
+## 2026-10-26 20시 예약 개발 — 기존 전체 기록 보존
+- **시작 main HEAD**: `323e1c5326dd569ac0a4b82dd12c7906ce7a0487`.
+- **개발 내용**: 기존 DiffSinger 실제 학습 완료 후 Voice Library에 경로와 사전만 기록하던 흐름을 확장하여, 공식 학습 작업의 실제 Acoustic `.ckpt/.pth` 가중치와 한국어 발음 사전을 다운로드한 뒤 SHA-256을 기록하고 IndexedDB에 **두 신규 자산을 한 트랜잭션으로 추가**한 다음 모델 레코드를 등록. 원본 설치 폴더·기존 사용자 녹음·기존 가중치는 변경하지 않음. 새 자산 저장/등록 실패 시 신규 자산 ID만 롤백. 이전 경로만 등록된 모델 기록과 호환.
+- **실제 UI**: 기존 Singing Workbench DiffSinger 학습 패널의 Voice Library 등록 버튼이 위의 실물 보존 경로를 사용. Voice Studio에 보존된 가중치를 SHA-256 확인 후 개별 다운로드하는 버튼 추가.
+- **백업/삭제 참조 연결**: 프로젝트별 백업과 복원 자산 ID 재매핑에 `checkpointAssetId` 추가. 사용자 확인을 거친 기존 Voice 삭제에서 체크포인트가 누락되거나 다른 프로필의 공유 자산이 삭제되지 않도록 참조 안전성 확장. 프로젝트별 백업 150MiB, 전체 ZIP 256MiB 용량 한계는 기존대로 유지하며 초과하는 가중치는 개별 파일 다운로드 필요.
+- **기능 커밋**: `2dc9d4ed678ce53a6ecb529d2762179b37560aaa`, `2ad20bc34e70634bc094e1916c5186dd3e161a07`, `419516b2fbff3685a76cc81b79c7f356a770a377`, `bbf527240750f30cabf4ce14df9910adfb1e9251`, `e86c1d7fc7b4161d64027e5b776729c5ad6c80a1`.
+- **수정/추가 파일**: `MYVOCAL-Studio-source/src/lib/diffSingerCheckpointArchive.js` (신규), `MYVOCAL-Studio-source/src/components/DiffSingerTrainingPanel.jsx`, `MYVOCAL-Studio-source/src/lib/projectBundle.js`, `MYVOCAL-Studio-source/src/pages/Voices.jsx`, `MYVOCAL-Studio-source/src/lib/voiceDeletionSafety.js`.
+- **아직 하지 않은 것**: 전체 개발 미완료로 JS/Go 테스트, CI, Windows 10/11 x64 EXE GUI, 실제 GPU DiffSinger 학습/추론 검증 미실행. 신규 기능을 실사용 성공이나 음질 검증 완료라고 주장하지 않음.
+- **다음 개발 우선순위**: 기존 원본 66개 요구와 최신 main을 재확인하고, 실제 한국어 가창 모델의 장편 추론 연결, MusicGen 6개 독립 원천 WAV의 신뢰 가능한 장편 생성, 캐릭터/실사 MV·립싱크와 Music+MV 원클릭 완전 통합의 미완성 기능을 이어 개발. 개발 완료 후에만 전체 검증→수정→재검증. 다른 저장소·예약·원본 파일을 임의 수정하지 않음.
+
+
 ## 2026-10-26 19시 예약 개발 — 원본 인수인계 원문 보존
 - **기능 반영 직후 main HEAD**: `7b5f48a0cf6ff81d8c990b0e818434b63687b044`. 시작 `dd84dbd3bcfbdd71a6df499763a5f3194f8b8e2c`.
 - **실제 개발**: 기존 12개 가창 WAV→DiffSinger 학습 ZIP에 한국어 음소 시간 검수 JSON 생성·재입력·실제 WAV 길이/음소 순서 대조 기능을 추가. 기존 Windows EXE Singing Workbench GUI에 템플릿 내려받기·검수 JSON 선택·권한 확인 연결. Go 공식 DiffSinger 학습 경로에 검수된 ZIP의 WAV/CSV/DS/라벨 정합성 검사를 추가.
