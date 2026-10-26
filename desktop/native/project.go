@@ -30,6 +30,8 @@ type studioProject struct {
  Name string
  Concept string
  Lyrics string
+ MIDINotes string
+ MIDIProgram int
  Genres string
  BPM int
  Key string
@@ -94,6 +96,7 @@ func validateStudioProject(p studioProject)error{
   return errors.New("프로젝트 ID 또는 이름이 잘못되었습니다")
  }
  if p.BPM<20||p.BPM>320{return errors.New("BPM은 20~320이어야 합니다")}
+ if p.MIDIProgram<0||p.MIDIProgram>127||len(p.MIDINotes)>500000{return errors.New("프로젝트 MIDI 입력 범위 오류")}
  if len(p.Concept)>10000||len(p.Lyrics)>300000||len(p.Genres)>5000||len(p.Key)>100||
  len(p.VoiceModel)>32767||len(p.Character)>1000||len(p.VideoStyle)>1000||
  len(p.Assets)>10000{return errors.New("프로젝트 입력 또는 자산 목록이 허용 범위를 초과합니다")}
@@ -211,6 +214,18 @@ func importStudioAsset(path string)error{
  })
  p.UpdatedAt=time.Now().Format(time.RFC3339)
  if err=writeProjectFile(studioPath,p,false);err!=nil{return err}
+ studioCurrent=p
+ return nil
+}
+
+func updateStudioMIDI(notes string,program,bpm int)error{
+ studioMu.Lock()
+ defer studioMu.Unlock()
+ if studioPath==""{return errors.New("MIDI 정보를 저장할 프로젝트가 없습니다")}
+ p:=studioCurrent
+ p.MIDINotes=notes;p.MIDIProgram=program;p.BPM=bpm
+ p.UpdatedAt=time.Now().Format(time.RFC3339)
+ if err:=writeProjectFile(studioPath,p,false);err!=nil{return err}
  studioCurrent=p
  return nil
 }
