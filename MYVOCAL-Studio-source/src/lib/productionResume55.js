@@ -110,8 +110,16 @@ export function resumableProductionStage55(project,stage,settings){
   if(stage==='neural-vocal'&&track.mute!==original.mute)
    return {canResume:false,reason:'가창의 가청·음소거 상태가 바뀌었습니다.'};
  }
+ if(entry.scoreVersion&&(project.neuralAutoScore?.at||'')!==entry.scoreVersion)
+  return {canResume:false,reason:'새로 작곡한 다른 MIDI 회차가 감지됐습니다.'};
  if(stage==='neural-score'&&project.neuralAutoScore?.provider!=='local-ollama')
   return {canResume:false,reason:'AI 작곡 점수가 제거됐습니다.'};
+ if(stage==='neural-score'&&entry.output.some(o=>{
+   const midi=entries.get(o.id)?.midiNotes;
+   return !Array.isArray(midi)||!midi.length;
+ }))
+  return {canResume:false,reason:'기존 AI MIDI 음표가 없어 처음부터 다시 작곡해야 합니다.'};
  return {canResume:true,outputCount:entry.output.length,
+  assetIds:[...new Set(entry.output.flatMap(o=>o.assets))],
   note:'기존 자산 ID 참조 재사용 · 실제 원본 파일 존재와 품질은 별도 제작 단계에서 확인'};
 }
