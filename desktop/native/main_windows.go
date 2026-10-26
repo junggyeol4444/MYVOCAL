@@ -286,7 +286,8 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   callCreate("BUTTON","가사·설정 편집",wsChild|wsVisible,374,660,170,35,hwnd,idProjectEdit)
   callCreate("BUTTON","프로젝트 저장",wsChild|wsVisible,556,660,160,35,hwnd,idProjectSave)
   callCreate("BUTTON","자산 라이브러리",wsChild|wsVisible,728,660,170,35,hwnd,idProjectAssets)
-  ui.projectStatus=callCreate("STATIC",projectStatusText(),wsChild|wsVisible,20,705,960,46,hwnd,0)
+  callCreate("BUTTON","MIDI 작곡·편집",wsChild|wsVisible,20,704,205,34,hwnd,idMIDIEditor)
+  ui.projectStatus=callCreate("STATIC",projectStatusText(),wsChild|wsVisible,20,747,960,46,hwnd,0)
   enableWindow.Call(ui.cancelButton,0)
   if pythonPath,err:=exec.LookPath("python.exe");err==nil&&filepath.IsAbs(pythonPath){setText(ui.edits[0],pythonPath)}
   updateFields()
@@ -322,7 +323,7 @@ func main(){
  wc:=wndClassEx{Size:uint32(unsafe.Sizeof(wndClassEx{})),WndProc:syscall.NewCallback(handleWindow),Instance:instance,Background:uintptr(6),ClassName:clsName}
  ret,_,e:=registerClass.Call(uintptr(unsafe.Pointer(&wc)))
  if ret==0{fmt.Fprintln(os.Stderr,"Window class:",e);return}
- hwnd:=callCreate("MYVOCALPureNativeWindows","MYVOCAL Studio - Native EXE",wsOverlappedWindow|wsVisible,100,50,1020,800,0,0)
+ hwnd:=callCreate("MYVOCALPureNativeWindows","MYVOCAL Studio - Native EXE",wsOverlappedWindow|wsVisible,100,50,1020,855,0,0)
  if hwnd==0{fmt.Fprintln(os.Stderr,"Windows GUI 생성 실패");return}
  showWindow.Call(hwnd,1);updateWindow.Call(hwnd)
  var m msg
