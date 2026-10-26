@@ -12,7 +12,7 @@ function restore(){try{const v=JSON.parse(window.localStorage.getItem(KEY)||'{}'
 const session=()=>window.__MYVOCAL_SESSION_KEY;
 const dl=file=>{const url=URL.createObjectURL(file),anchor=document.createElement('a');
  anchor.href=url;anchor.download=file.name;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),5000);};
-export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle}){
+export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle,onModelReady}){
  const [config,setConfig]=useState(restore),[bundle,setBundle]=useState(null),[rights,setRights]=useState(false);
  const [busy,setBusy]=useState(false),[state,setState]=useState(null),[error,setError]=useState('');
  const previousVoice=useRef(voice?.id),alive=useRef(true);
@@ -87,6 +87,11 @@ export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle}){
    <Button disabled={!working} onClick={cancel}>학습 중지</Button>
    <Button disabled={busy} onClick={async()=>{try{setState(await readDiffSingerTrainingStatus({session:session()}));}catch(e){setError(e.message);}}}>학습 상태 새로고침</Button>
    <Button disabled={busy||state?.state!=='completed'||state.voiceId!==voice?.id} onClick={saveWeights}>생성된 실제 신경망 가중치 저장</Button>
+   <Button disabled={busy||state?.state!=='completed'||state?.checkpointAvailable!==true||state?.mode!=='official'||state.voiceId!==voice?.id||!state.experiment} onClick={()=>{
+     if(previousVoice.current!==state.voiceId){setError('가창 Voice가 변경되어 다른 사람의 모델을 연결할 수 없습니다.');return;}
+     onModelReady?.({voiceId:state.voiceId,python:state.python,root:state.root,experiment:state.experiment});
+     notify('실제로 생성된 공식 DiffSinger 새 acoustic 실험을 Singing 추론 화면에서 선택할 수 있습니다. 보코더 설치와 추론 품질은 아직 확인되지 않았습니다.');
+   }}>이번 학습 모델을 Singing 가창 엔진에 연결</Button>
    <Button disabled={busy||working} onClick={()=>{try{window.localStorage.setItem(KEY,JSON.stringify(config));notify('설치 경로와 CLI 설정만 이 PC에 저장했습니다. 개인 녹음은 저장하지 않았습니다.');}catch(e){setError(e.message);}}}>현재 PC의 학습 경로 기억</Button>
   </div>
   <Status>{state?.state||'실행 전'} · {state?.message||'실제 학습은 실행하지 않았습니다.'}</Status>
