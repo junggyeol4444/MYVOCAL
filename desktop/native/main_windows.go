@@ -7,6 +7,8 @@ import (
  "context"
  "fmt"
  "os"
+ "os/exec"
+ "path/filepath"
  "runtime"
  "strings"
  "sync"
@@ -209,6 +211,7 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   ui.cancelButton=callCreate("BUTTON","작업 취소",wsChild|wsVisible,437,412,140,35,hwnd,idCancel)
   ui.logEdit=callCreate("EDIT","준비 완료. 선택한 기존 모델·Python 환경만 사용합니다.\r\n",wsChild|wsVisible|wsBorder|wsVScroll|esMultiline|esAutoVScroll|esReadOnly,20,464,960,178,hwnd,0)
   enableWindow.Call(ui.cancelButton,0)
+  if pythonPath,err:=exec.LookPath("python.exe");err==nil&&filepath.IsAbs(pythonPath){setText(ui.edits[0],pythonPath)}
   updateFields()
   return 0
  case wmCommand:
