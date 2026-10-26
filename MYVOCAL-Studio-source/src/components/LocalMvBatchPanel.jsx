@@ -113,8 +113,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    const saved=readNativeProductionPaths(window.localStorage);
    return {...prior,...saved};
   }catch{return {}}});
- const [musicPython,setMusicPython]=useState(musicPaths.python||'');
- const [musicModelDir,setMusicModelDir]=useState(musicPaths.modelDir||'');
+ const [musicPython,setMusicPython]=useState(musicPaths.musicPython||musicPaths.python||'');
+ const [musicModelDir,setMusicModelDir]=useState(musicPaths.musicModelDir||musicPaths.modelDir||'');
  const [demucsRoot,setDemucsRoot]=useState(musicPaths.demucsRoot||'');
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
  let info;try{info=planMvBatch(project,{includeReferences})}catch(e){info={total:0,already:0,linked:0,error:e.message}}
