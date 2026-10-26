@@ -160,7 +160,7 @@ func runLongMusicGen(ctx context.Context,r request,job jobSpec,logLine func(stri
  fingerprint,err:=longMusicFingerprint(r,segments);if err!=nil{return err}
  folder:=r.Output+".myvocal-parts"
  if err=loadOrCreateLongManifest(folder,longMusicManifest{Version:1,Fingerprint:fingerprint,Segments:segments});err!=nil{return err}
- work,err:=os.MkdirTemp("","myvocal-native-longmusic-");if err!=nil{return err}
+ work,err:=os.MkdirTemp(folder,".myvocal-active-");if err!=nil{return err}
  defer os.RemoveAll(work)
  var rate,channels int
  var totalPCM int64

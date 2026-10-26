@@ -1,5 +1,14 @@
 # MYVOCAL Studio — 예약 자동 개발 전체 인수인계 복구 인덱스
 
+## 2026-10-26 21시 추가 개발 — 순수 네이티브 PCM 반주·보컬 믹서
+- **개발 시작 HEAD**: `c5a4f71c70c238836ea45cf4f0ef2f4b53a67cd2` (이전 장편 MusicGen 네이티브 개발 커밋).
+- **추가 파일**: `desktop/native/mix_pcm.go`; **기존 통합 변경**: `desktop/native/main_windows.go`, `desktop/native/runner.go`.
+- **실제 구현**: Windows 네이티브 GUI에 '반주·보컬 PCM 믹싱' 작업과 반주 WAV·보컬 WAV·출력 WAV·보컬 음량 0~200% 입력 연결. Python·모델·HTML·HTTP 없이 Go에서 16비트 PCM WAV 두 소스를 프레임 단위로 합성하며 원본 샘플레이트/채널 일치를 요구. 8192프레임씩 스트리밍 처리, 출력은 원본과 다른 신규 WAV에만 독점 저장하고 취소/오류 시 사용자 원본은 변경하지 않음. 별도 설치/다운로드 없음.
+- **동일 회차 개발 보강**: `desktop/native/musicgen_long.go`의 생성 중간 파일을 출력 WAV와 같은 볼륨의 자체 임시 폴더에 작성하여, Windows 다른 드라이브에서 하드링크로 새 구간을 독점 저장할 수 있도록 경로 연결.
+- **완료 아님**: 음질/음악적 결과 및 실제 EXE 클릭·GPU 통합 검증은 미수행. 66항 전체 개발 미완료. 원본 66항 남은 가창·6스템·3D/VRM·MV 통합 기능 계속 개발 후 전체 검증.
+- **원본/금지**: 사용자 기존 모델·음원·프로젝트·브라우저/IndexedDB 원본 보존. main 비강제 커밋, 다른 브랜치/저장소/예약 수정 금지. HTML/HTTP/WebView2 신규 구현 금지.
+
+
 ## 2026-10-26 21시 예약 개발 — Win32 네이티브 장편 MusicGen 3~6분 이어서 만들기
 - **개발 시작 main HEAD**: `fdbfb667fa9900b6b52f934d771e76a5ae0c44fe`.
 - **구현 파일**: `desktop/native/main_windows.go` (한국어 네이티브 작업 목록·입력 180~360초), `desktop/native/runner.go` (기존 오프라인 MusicGen worker에 네이티브 장편 작업 연결), `desktop/native/musicgen_long.go` (신규).

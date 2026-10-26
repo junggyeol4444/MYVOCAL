@@ -23,8 +23,9 @@ const (
  taskRVCConvert
  taskDiffSinger
  taskLongMusicGen
+ taskMixWAV
 )
-var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)","장편 AI 작곡 (MusicGen 3~6분·중단 재개)"}
+var taskNames=[]string{"AI 작곡 (MusicGen)","내 음색 학습 (RVC)","음악 악기 분리 (Demucs)","녹음 음정 보정 (MIDI)","2D 캐릭터 립싱크 MV","학습된 내 음색으로 보컬 변환 (RVC)","한국어 신경망 가창 (DiffSinger)","장편 AI 작곡 (MusicGen 3~6분·중단 재개)","반주·보컬 PCM 믹싱 (네이티브)"}
 
 type request struct {
  Task int
@@ -69,7 +70,7 @@ func prepareRequest(r request)(jobSpec,error){
  for _,v:=range []string{r.Python,r.Engine,r.Input,r.Auxiliary,r.Output,r.Prompt,r.Option}{
   if strings.ContainsRune(v,0)||strings.ContainsAny(v,"\r\n"){return jobSpec{},errors.New("입력값에 제어 문자가 포함돼 있습니다")}
  }
- if err:=requireExistingFile(r.Python);err!=nil{return jobSpec{},fmt.Errorf("로컬 Python: %w",err)}
+ if r.Task!=taskMixWAV{if err:=requireExistingFile(r.Python);err!=nil{return jobSpec{},fmt.Errorf("로컬 Python: %w",err)}}
  if r.Task!=taskDemucs{if err:=preventOverwrite(r.Output);err!=nil{return jobSpec{},err}}
  var script string;var args []string
  switch r.Task{
@@ -81,6 +82,12 @@ func prepareRequest(r request)(jobSpec,error){
   if len([]rune(strings.TrimSpace(r.Prompt)))<2||len([]rune(r.Prompt))>600{return jobSpec{},errors.New("작곡 설명은 2~600자입니다")}
   script="musicgen_worker.py"
   args=[]string{"--model-dir",r.Engine,"--output",r.Output,"--prompt",r.Prompt,"--seconds",strconv.Itoa(seconds),"--seed","0"}
+ case taskMixWAV:
+  if err:=requireExistingFile(r.Input);err!=nil{return jobSpec{},fmt.Errorf("반주 WAV: %w",err)}
+  if err:=requireExistingFile(r.Auxiliary);err!=nil{return jobSpec{},fmt.Errorf("보컬 WAV: %w",err)}
+  gain,err:=strconv.Atoi(strings.TrimSpace(r.Option))
+  if err!=nil||gain<0||gain>200{return jobSpec{},errors.New("보컬 음량은 0~200%입니다")}
+  return jobSpec{output:r.Output},nil
  case taskLongMusicGen:
   if err:=requireDirectory(r.Engine);err!=nil{return jobSpec{},err}
   if err:=requireExistingFile(filepath.Join(r.Engine,"config.json"));err!=nil{return jobSpec{},errors.New("MusicGen 모델 폴더에 config.json이 없습니다")}
@@ -155,6 +162,7 @@ func prepareRequest(r request)(jobSpec,error){
 func executeJob(ctx context.Context,r request,logLine func(string))error{
  job,err:=prepareRequest(r);if err!=nil{return err}
  if r.Task==taskLongMusicGen{return runLongMusicGen(ctx,r,job,logLine)}
+ if r.Task==taskMixWAV{return mixNativePCM(ctx,r,logLine)}
  // Existing MusicGen worker uses wb; generate in scratch and publish new WAV exclusively.
  if r.Task==taskMusicGen||r.Task==taskRVCConvert||r.Task==taskDiffSinger{
   dir,e:=os.MkdirTemp("","myvocal-native-musicgen-");if e!=nil{return e}
