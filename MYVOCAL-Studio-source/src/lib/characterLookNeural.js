@@ -5,6 +5,7 @@ import {validateCharacterArtwork,generateCharacterMvImage,characterArtworkAssets
 import {readSourceFrame} from './mvSceneVideos.js';
 import {validatePersonSource,generatePersonMvImage,personPhotoAssets} from './imageToMv.js';
 import {checkComfy,validateGeneratedImage} from './mvSceneImages.js';
+import {attachIdentityLoRA} from './characterIdentityLoRA.js';
 import {getFile,putFileNew,removeFile} from './assetDb.js';
 import {genId} from './schema.js';
 import {updateCharacterLook,reviewCharacterLook} from './characterLooks.js';
@@ -79,17 +80,17 @@ export async function generateNeuralLookCandidates(character,lookId,options,{
   guard();
   onProgress(i,4,'로컬 SD에서 실제 '+CATEGORY[options.category]+' 이미지 '+(i+1)+'/4 생성 중');
   const seed=options.seed+i;
-  const image=await visualGenerate({
+  const image=await visualGenerate(attachIdentityLoRA({
    port:options.port,checkpoint:options.checkpoint,prompt,negative,
    imageData,width:768,height:768,steps:20,seed,denoise:options.denoise
-  },session,signal);
+  },character),session,signal);
   guard();validateGeneratedImage(image);
   candidates.push({seed,image,sourceAssetId:options.sourceAssetId,
    category:options.category,description:options.description,checkpoint:options.checkpoint});
   onProgress(i+1,4,'실제 생성 이미지 '+(i+1)+'개');
  }
  return {lookId,candidates,characterId:character.id,
-  sourceAssetId:options.sourceAssetId,characterSnapshot:JSON.stringify({assets:character.assets,looks:character.looks,appearance:character.appearance,rights:character.rights})};
+  sourceAssetId:options.sourceAssetId,characterSnapshot:JSON.stringify({assets:character.assets,looks:character.looks,appearance:character.appearance,rights:character.rights,identityTraining:character.identityTraining})};
 }
 export async function saveSelectedNeuralLook(character,generated,selectedIndex,{
  current,saveFile=putFileNew,deleteFile=removeFile,newId=genId,onSave
@@ -100,7 +101,7 @@ export async function saveSelectedNeuralLook(character,generated,selectedIndex,{
  if(typeof current!=='function'||typeof onSave!=='function'||typeof newId!=='function')
   throw Error('현재 캐릭터와 저장 연결이 필요합니다.');
  const same=()=>current()===character&&generated.characterId===character.id&&
-  generated.characterSnapshot===JSON.stringify({assets:character.assets,looks:character.looks,appearance:character.appearance,rights:character.rights});
+  generated.characterSnapshot===JSON.stringify({assets:character.assets,looks:character.looks,appearance:character.appearance,rights:character.rights,identityTraining:character.identityTraining});
  if(!same())throw Error('후보 생성 후 캐릭터가 변경됐습니다. 다시 생성하세요.');
  const selected=generated.candidates[selectedIndex];
  validateGeneratedImage(selected.image);
