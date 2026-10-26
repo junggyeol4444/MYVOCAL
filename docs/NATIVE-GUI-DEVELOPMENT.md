@@ -1,5 +1,9 @@
 # MYVOCAL Studio — Windows EXE 개발 상태
 
+## 최신 변경된 남은 개발 계획
+
+원본 66개 항목을 번호 그대로 유지하면서 HTTP/HTML/React/WebView2 없는 Windows 네이티브 EXE 개발 과제로 변경한 전체 항목별 계획: `docs/MYVOCAL-네이티브EXE-남은66개개발목록.md`.
+
 ## 사용자 지정 출력
 
 - 실행 파일: Windows 10/11 x64 네이티브 Win32 GUI `MYVOCAL-Studio.exe`
