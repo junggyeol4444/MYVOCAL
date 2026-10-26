@@ -30,8 +30,9 @@ func parseImportedMIDI(raw []byte)(string,int,int,error){
  format:=binary.BigEndian.Uint16(raw[8:10])
  trackCount:=binary.BigEndian.Uint16(raw[10:12])
  ppq:=binary.BigEndian.Uint16(raw[12:14])
- if format!=0||trackCount!=1{return "",0,0,errors.New("현재 편집기는 단일 트랙 MIDI 형식 0만 불러올 수 있습니다. 다중 트랙은 원본 그대로 유지됩니다")}
  if ppq==0||ppq&0x8000!=0{return "",0,0,errors.New("SMPTE MIDI 시간 단위는 지원하지 않습니다")}
+ if format==1{return parseImportedMultiMIDI(raw,headerSize,int(trackCount),ppq)}
+ if format!=0||trackCount!=1{return "",0,0,errors.New("이 MIDI 형식/트랙 구성을 지원하지 않습니다")}
  index:=8+headerSize
  if index+8>len(raw)||string(raw[index:index+4])!="MTrk"{return "",0,0,errors.New("MIDI 트랙을 찾을 수 없습니다")}
  size:=int(binary.BigEndian.Uint32(raw[index+4:index+8]))
