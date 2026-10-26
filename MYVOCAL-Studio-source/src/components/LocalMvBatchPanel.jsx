@@ -162,11 +162,25 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
   });
   await Promise.resolve(commit(finished));
  };
- const resumeStep=(stage,source)=>{
+ const resumeStep=async(stage,source,signal)=>{
   if(!resumeProduction)return false;
   const status=resumableProductionStage55(source,stage,settingsFor(stage,source));
-  if(status.canResume)setMessage('기존 실제 '+stage+' '+status.outputCount+'트랙 재사용 · 중복 신경망 생성 없이 다음 단계 진행');
-  return status.canResume;
+  if(!status.canResume)return false;
+  // Referenced clips MUST actually be present in the current PC's IndexedDB,
+  // not just listed in JSON/old handoff. No SHA or GPU quality is invented.
+  for(const assetId of status.assetIds){
+   if(signal?.aborted||current()!==source)
+    throw Error('기존 WAV 자산 연결 확인 도중 사용자가 취소했거나 원곡이 변경됐습니다.');
+   const file=await getFile(assetId);
+   if(!(file instanceof Blob)||file.size<44)
+    throw Error('이어하기에 필요한 기존 WAV가 PC에서 사라졌습니다: '+assetId+
+     ' · 원곡 보호를 위해 중단합니다. 먼저 백업을 복원하세요.');
+  }
+  if(signal?.aborted||current()!==source)
+   throw Error('기존 음악 단계 확인 중 프로젝트 변경 · 원본 보존');
+  setMessage('실제 저장된 기존 '+stage+' · '+status.outputCount+
+   '개 편집 트랙, 원본 WAV '+status.assetIds.length+'개 파일 재사용 · 중복 AI 모델 추론 생략');
+  return true;
  };
  let info;try{info=planMvBatch(project,{includeReferences})}catch(e){info={total:0,already:0,linked:0,error:e.message}}
  const exportSelectedStem=async()=>{
@@ -306,7 +320,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     let movieProject=base.project;
     if(makeAutoScore){
      const source=current();
-     const reused=resumeStep('neural-score',source);
+     const reused=await resumeStep('neural-score',source,controller.signal);
      if(!reused){
      if(!source||source.id!==project.id)throw Error('신경망 작사·작곡 중 프로젝트 변경');
      const scored=await generateNeuralScoreForMv(source,{
@@ -322,7 +336,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }
     if(makeSourceStems){
      const source=current();
-     const reused=resumeStep('soundfont-midi-stems',source);
+     const reused=await resumeStep('soundfont-midi-stems',source,controller.signal);
      if(!reused){
      if(!source||source.id!==project.id)throw Error('원천 악기 제작 중 프로젝트가 변경됐습니다.');
      const rendered=await renderAndStoreNeuralMidiStems(source,{
@@ -339,7 +353,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }
     if(makeNeuralAudioStems){
      const source=current();
-     const reused=resumeStep('neural-audio-stems',source);
+     const reused=await resumeStep('neural-audio-stems',source,controller.signal);
      if(!reused){
      if(!source||source.id!==project.id)throw Error('독립 신경망 악기 생성 중 프로젝트가 변경됐습니다.');
      const result=await renderAndStoreNeuralAudioStems(source,{
@@ -360,7 +374,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }
     if(makeNeuralMusic){
      const resumeMusicSource=current();
-     const reused=resumeStep('musicgen-demucs-master',resumeMusicSource);
+     const reused=await resumeStep('musicgen-demucs-master',resumeMusicSource,controller.signal);
      if(!reused){
      if(!musicPython||!musicModelDir||!demucsRoot)throw Error('실제 MusicGen·Demucs Python, 모델 및 폴더 경로를 입력하세요.');
      const source=current();
@@ -405,7 +419,7 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     }
     if(makeNeuralSinging){
      let vocalProject=current();
-     const reused=resumeStep('neural-vocal',vocalProject);
+     const reused=await resumeStep('neural-vocal',vocalProject,controller.signal);
      if(!reused){
      if(!vocalProject||vocalProject.id!==project.id)throw Error('가창 생성 중 프로젝트가 변경됐습니다.');
      const singer=(dataRef.current?.voices||[]).find(v=>v.id===(singingVoiceId||vocalProject.voiceId))
