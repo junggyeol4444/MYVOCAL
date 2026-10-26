@@ -65,13 +65,20 @@ export function authorizedAutoSceneReference(scene,character,{includeReferences=
  }
  return null;
 }
-export function planMvBatch(project,{maxScenes=120,includeReferences=false}={}){
+export function planMvBatch(project,{maxScenes=120,includeReferences=false,onlySceneIds=null}={}){
  if(!project?.id||!Array.isArray(project.scenes)||!project.scenes.length)throw Error('MV 장면이 있는 프로젝트를 선택해 주세요.');
  if(project.scenes.length>maxScenes)throw Error(`한 번에 최대 ${maxScenes}개 장면만 처리합니다. 구간을 나누어 실행하세요.`);
+ if(onlySceneIds!==null&&(!Array.isArray(onlySceneIds)||!onlySceneIds.length||
+    onlySceneIds.length>maxScenes||onlySceneIds.some(id=>typeof id!=='string'||!id)||
+    new Set(onlySceneIds).size!==onlySceneIds.length||
+    onlySceneIds.some(id=>!project.scenes.some(s=>s.id===id))))
+  throw Error('선택한 교체 대상 MV 장면 ID가 누락·중복되거나 허용 개수를 초과했습니다.');
+ const requested=onlySceneIds===null?null:new Set(onlySceneIds);
  const sceneIds=[];let already=0,linked=0;const knownIds=new Set();
  for(const scene of project.scenes){
   if(!scene||typeof scene.id!=='string'||!scene.id||knownIds.has(scene.id))throw Error('누락되거나 중복된 장면 ID가 있습니다.');
   knownIds.add(scene.id);
+  if(requested&&!requested.has(scene.id))continue;
   if(scene.videoClipAssetId){already++;continue}
   // Personal photos and 2D artwork require their separate, consent-aware img2img pipeline.
   if(scene.personMv||scene.characterMv){linked++;if(!includeReferences)continue}
@@ -79,9 +86,9 @@ export function planMvBatch(project,{maxScenes=120,includeReferences=false}={}){
  }
  return {sceneIds,already,linked,total:sceneIds.length};
 }
-export async function runMvBatch({project,data,checkpoint,videoModel,port,session,imageSteps=20,width=768,height=448,frames=14,fps=6,videoSteps=20,motion=127,includeReferences=false,autoVirtualSinger=false,current,currentData=()=>data,commit,progress,signal,
+export async function runMvBatch({project,data,checkpoint,videoModel,port,session,imageSteps=20,width=768,height=448,frames=14,fps=6,videoSteps=20,motion=127,includeReferences=false,onlySceneIds=null,autoVirtualSinger=false,current,currentData=()=>data,commit,progress,signal,
  generateImage=generateComfyImage,generateReferencePerson=generatePersonMvImage,generateReferenceCharacter=generateCharacterMvImage,generateAutoSingerReference=generateAutoSingerReferenceImage,generateVideo=generateLocalVideoClip,loadFile=getFile,saveFile=putFileNew,sourceFrame=readSourceFrame,idFactory=genId}={}){
- const plan=planMvBatch(project,{includeReferences});
+ const plan=planMvBatch(project,{includeReferences,onlySceneIds});
  validateAutoVirtualSinger(project,{enabled:autoVirtualSinger});
  if(!session||typeof session!=='string')throw Error('Windows EXE의 로컬 세션이 없습니다.');
  if(!checkpoint||!videoModel||!Number.isSafeInteger(port)||port<1024||port>65535||port===58319)throw Error('ComfyUI 이미지·SVD 모델 및 포트를 확인하세요.');
