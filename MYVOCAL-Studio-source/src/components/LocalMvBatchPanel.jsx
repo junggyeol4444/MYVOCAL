@@ -32,6 +32,8 @@ import {DIFFSINGER_EXPRESSIVE_STYLES} from '../lib/diffSingerExpressiveF0.js';
 import {readRVCPreferences} from '../lib/rvcPreferences.js';
 import {generateNeuralScoreForMv} from '../lib/autoMvNeuralScore.js';
 import {directAutoMvScenesWithLocalAI} from '../lib/autoMvNeuralSceneDirection.js';
+import {applyPcmDirectedMv36} from '../lib/musicReactiveMvScenes36.js';
+import {savedRhythmSources} from '../lib/musicReactiveDance30.js';
 import {buildNeuralMusicPrompts} from '../lib/neuralMusicPromptTimeline.js';
 import {planScoreMatchedMusicGenSegments} from '../lib/neuralStemScoreTiming.js';
 import {renderAndStoreNeuralMidiStems} from '../lib/autoMvSourceStems.js';
@@ -76,6 +78,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    project.productionLaunch55?.requested?.composition===true));
  const [scoreModel,setScoreModel]=useState('');
  const [makeNeuralSceneDirection,setMakeNeuralSceneDirection]=useState(false);
+ const [makePcmSceneDirection,setMakePcmSceneDirection]=useState(()=>
+  project.productionLaunch55?.version===1&&project.productionLaunch55?.requested?.musicVideo===true);
  const [makeSourceStems,setMakeSourceStems]=useState(false),[soundfontDll,setSoundfontDll]=useState(()=>readNativeProductionPaths(window.localStorage).soundfontDll||''),
   [soundfontFile,setSoundfontFile]=useState(()=>readNativeProductionPaths(window.localStorage).soundfontFile||'');
  const [makeNeuralAudioStems,setMakeNeuralAudioStems]=useState(false);
@@ -469,6 +473,16 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
      });
      if(directed.updated)setMessage('실제 Ollama AI로 '+directed.updated+'개 신규 SD/SVD 장면의 원곡 가사·스토리 연출 완료');
     }
+    if(makePcmSceneDirection){
+     const source=current();
+     if(!source||source.id!==project.id)throw Error('실제 드럼 PCM MV 연출 도중 프로젝트가 변경됐습니다.');
+     if(savedRhythmSources(source).length){
+      const directed=await applyPcmDirectedMv36(source,{
+       loadFile:getFile,current,onChange:commit,signal:controller.signal,onProgress:setMessage
+      });
+      if(directed.updated)setMessage('실제 드럼 PCM 에너지를 '+directed.updated+'개 미생성 MV 이미지·SVD 움직임 강도에 반영했습니다.');
+     }else setMessage('독립 드럼 WAV 원본이 없어 기존 BPM/가사 기반 MV 연출을 그대로 유지했습니다.');
+    }
     movieProject=current();
     if(!lipPlacement){
      const chars=dataRef.current?.characters||[];
@@ -590,6 +604,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
    {scoreModelError&&<p role="alert">{scoreModelError}</p>}
    <Notice>작사와 악기별 MIDI는 사용자가 설치한 로컬 신경망 모델이 생성합니다. 프로젝트에 이미 작성된 가사는 덮어쓰지 않습니다. 생성된 선율의 한국어 음소 타임라인으로 실제 Singing 엔진과 연결합니다.</Notice>
   </div>}
+  {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makePcmSceneDirection}
+   onChange={e=>setMakePcmSceneDirection(e.target.checked)}/> 저장된 실제 드럼 WAV 강약으로 새 MV 장면 이미지 구도·조명·SVD 동작 강도 자동 연출 (수동 장면 보존)</label>}
   {saveFullMovie&&makeAutoScore&&<label><input type="checkbox" disabled={busy} checked={makeNeuralSceneDirection} onChange={e=>setMakeNeuralSceneDirection(e.target.checked)}/> 선택한 실제 로컬 Ollama 모델로 원곡 가사·구간에 맞춘 신규 3초 SD/SVD 장면 AI 연출</label>}
   {saveFullMovie&&<label><input type="checkbox" disabled={busy} checked={makeSourceStems} onChange={e=>setMakeSourceStems(e.target.checked)}/> 신경망 MIDI 6악기를 SoundFont PCM WAV 편집 트랙으로 추가</label>}
   {saveFullMovie&&makeSourceStems&&<div className="mv7-item">
