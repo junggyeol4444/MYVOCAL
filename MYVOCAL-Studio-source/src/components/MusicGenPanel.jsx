@@ -4,6 +4,7 @@ import {generateMusicGenAudio} from '../lib/musicGenClient.js';
 import {splitMusicGenStems} from '../lib/musicStemsClient.js';
 import {generateMusicGenSequence} from '../lib/musicGenSequence.js';
 import {renderAndStoreNeuralAudioStems} from '../lib/neuralInstrumentAudioStems.js';
+import {renderRemainingNeuralAudioStems} from '../lib/neuralStemIncrementalResume.js';
 import {reanalyzeStoredNeuralMidiWaves} from '../lib/neuralStoredMidiReaudit.js';
 import {exportOriginalNeuralWav,NEURAL_STEM_EXPORT_LABELS} from '../lib/neuralStemWavExport.js';
 import {latestCompleteNeuralScore} from '../lib/neuralScoreBatch.js';
@@ -66,12 +67,13 @@ export default function MusicGenPanel({project,onChange,notify}){
    setWav({file,projectId:initial.id});setUrl(URL.createObjectURL(file));notify(sequence?'실제 MusicGen 오디오 구간을 크로스페이드해 WAV를 만들었습니다. 구간별 음악적 연속성은 보장하지 않습니다.':'실제 로컬 MusicGen WAV를 수신했습니다. 미리 듣고 저장할 수 있습니다.');
   }catch(e){setError(e.message)}finally{active.current=null;setBusy(false)}
  };
- const generateSelectedNeuralStems=async()=>{
+ const generateSelectedNeuralStems=async(resume=false)=>{
   if(busy||!python||!modelDir||!neuralScoreReady||!neuralScoreLengthOK)return;
   const initial=latest.current,controller=new AbortController();active.current=controller;
   setBusy(true);setError('');setProgress(neuralStemRole==='all'?'MIDI 원곡 길이에 맞춘 독립 6악기 MusicGen 생성 중':'선택한 독립 신경망 악기 WAV 생성 중');
   try{
-   const result=await renderAndStoreNeuralAudioStems(initial,{
+   const execute=resume?renderRemainingNeuralAudioStems:renderAndStoreNeuralAudioStems;
+   const result=await execute(initial,{
     python,modelDir,seconds:18,segments:neuralScoreSeconds<=210?11:20,
     roles:neuralStemRole==='all'?undefined:[neuralStemRole],
     crossfadeSec:.5,audible:true,session:window.__MYVOCAL_SESSION_KEY,
@@ -79,8 +81,9 @@ export default function MusicGenPanel({project,onChange,notify}){
     newId:genId,readInfo:readAudioInfo,createTrack:makeImportedVocalTrack,
     save:putFilesAtomic,remove:deleteFilesAtomic,onProgress:setProgress
    });
-   notify('기존 프로젝트에 MusicGen 원천 독립 악기 '+result.roles.join('·')+' '+result.tracks+'개 WAV 트랙을 새로 추가했습니다. MIDI 원곡 '+result.durationSec.toFixed(2)+'초에 동기화했습니다. 기존 트랙은 유지됩니다.');
-   notify('실제 MIDI/WAV 표본 진단 '+result.midiWavAlignment.map(x=>x.role+': '+x.notesInspected+'음표').join(' · ')+
+   if(resume)notify('중단 재개: SHA-256 확인 후 보존한 독립 WAV '+result.reused.length+'개 재사용, 새 MusicGen 악기 '+result.tracks+'개를 추가했습니다. 원본 MIDI와 녹음은 변경하지 않았습니다.');
+   else notify('기존 프로젝트에 MusicGen 원천 독립 악기 '+result.roles.join('·')+' '+result.tracks+'개 WAV 트랙을 새로 추가했습니다. MIDI 원곡 '+result.durationSec.toFixed(2)+'초에 동기화했습니다. 기존 트랙은 유지됩니다.');
+   if(result.midiWavAlignment.length)notify('실제 MIDI/WAV 표본 진단 '+result.midiWavAlignment.map(x=>x.role+': '+x.notesInspected+'음표').join(' · ')+
     '을 새 트랙에 기록했습니다. 음정 품질 인증은 아닙니다.');
   }catch(e){setError(e.message)}
   finally{active.current=null;setBusy(false);setProgress('')}
@@ -269,7 +272,9 @@ export default function MusicGenPanel({project,onChange,notify}){
       <option value="guitar">기타만 새 WAV 생성</option><option value="pad">패드만 새 WAV 생성</option>
      </select></Field>
     <p className="muted">특정 악기 MIDI를 편집한 뒤 해당 악기만 새로 생성할 수 있습니다. 기존 6악기 WAV·MIDI는 덮어쓰지 않습니다.</p>
-    <div className="mv7-actions"><Button disabled={busy||!python||!modelDir||!neuralScoreLengthOK} onClick={generateSelectedNeuralStems}>{neuralStemRole==='all'?'MIDI 동기화 6악기 MusicGen WAV 생성·트랙 저장':'선택한 악기 MusicGen WAV 신규 트랙 생성'}</Button></div>
+    <div className="mv7-actions"><Button disabled={busy||!python||!modelDir||!neuralScoreLengthOK} onClick={()=>generateSelectedNeuralStems(false)}>{neuralStemRole==='all'?'MIDI 동기화 6악기 MusicGen WAV 생성·트랙 저장':'선택한 악기 MusicGen WAV 신규 트랙 생성'}</Button>
+     {neuralStemRole==='all'&&<Button disabled={busy||!python||!modelDir||!neuralScoreLengthOK} onClick={()=>generateSelectedNeuralStems(true)}>중단된 6악기 MusicGen 제작 이어서 실행</Button>}</div>
+    {neuralStemRole==='all'&&<p className="muted">이어 제작은 악기마다 새 WAV 트랙을 저장합니다. 같은 원곡 MIDI·모델 설정과 원본 WAV SHA-256이 일치하는 악기만 재사용하며, 남은 악기부터 실제 모델을 실행합니다. 사용자가 수정한 기존 오디오는 덮어쓰지 않습니다.</p>}
     <Field label="저장된 독립 신경망 악기 WAV 개별 내보내기"><select value={neuralExportRole} disabled={busy} onChange={e=>setNeuralExportRole(e.target.value)}>
      {Object.entries(NEURAL_STEM_EXPORT_LABELS).map(([role,label])=><option key={role} value={role}>{label} · 최신 생성 WAV</option>)}
     </select></Field>

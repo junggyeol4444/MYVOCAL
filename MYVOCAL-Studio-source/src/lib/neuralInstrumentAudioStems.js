@@ -2,6 +2,7 @@
 // 기존 DAW의 신규 편집 WAV 트랙에 저장한다. Demucs 사후 분리·SoundFont 샘플과 구분.
 // MusicGen 텍스트 조건은 완벽한 악기 격리를 보장하지 않으며 모델 WAV를 검사한다.
 import {generateMusicGenSequence} from './musicGenSequence.js';
+import {sha256File} from './voiceTraining.js';
 import {buildNeuralMusicPrompts} from './neuralMusicPromptTimeline.js';
 import {latestCompleteNeuralScore,NEURAL_SCORE_ROLES} from './neuralScoreBatch.js';
 import {assertUsableSingingWav} from './singingOutputValidation.js';
@@ -127,6 +128,13 @@ export async function renderAndStoreNeuralAudioStems(project,{
   baseline||=duration;
   const assetId=allocate('neural-audio-asset'),trackId=allocate('neural-audio-track');
   const file=new File([rendered],'MYVOCAL-독립신경망-'+role+'.wav',{type:'audio/wav'});
+  // Bind every generated WAV to the exact source notes and actual model bytes.
+  // These digests allow conservative restart without rerendering saved originals.
+  const [sourceMidiSha256,sourceWavSha256]=await Promise.all([
+   sha256File(new Blob([JSON.stringify(latestCompleteNeuralScore(project).get(role).midiNotes)])),
+   sha256File(file)
+  ]);
+  alive(project,current,signal);
   const track=createTrack(project,file,assetId,duration);
   if(!track||!Array.isArray(track.clips)||track.clips.length!==1||
      track.clips[0]?.assetId!==assetId)
@@ -143,6 +151,10 @@ export async function renderAndStoreNeuralAudioStems(project,{
    type:'instrument',mute:!audible,solo:false,volume:audible?35:70,generatedBy:'musicgen-independent-audio',
    sourceRole:role,sourceMidiTrackId:latestCompleteNeuralScore(project).get(role).id,
    sourceRoleSeed:roleSeed,sourceBpm:Number(project.bpm),
+   sourceScoreVersion:String(project.neuralAutoScore?.at||''),
+   sourceMusicGenModelDir:modelDir,sourceMusicGenSegments:segments,
+   sourceMusicGenCrossfadeSec:crossfadeSec,
+   sourceMidiSha256,sourceWavSha256,
    sourceScoreDurationSec:timing.targetSec,
    sourcePcmAnalysis:{...profile.quality},sourceScorePcmAlignment:midiAlignment});
  }
