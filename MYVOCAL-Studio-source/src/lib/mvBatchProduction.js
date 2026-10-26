@@ -10,6 +10,7 @@ import {assertSvdAutoSceneClipDuration} from './mvSvdClipTiming.js';
 import {validatePersonSource,personPhotoAssets,generatePersonMvImage} from './imageToMv.js';
 import {validateCharacterArtwork,characterArtworkAssets,generateCharacterMvImage} from './characterToMv.js';
 import {chooseSceneReference} from './characterSceneReference.js';
+import {attachIdentityLoRA} from './characterIdentityLoRA.js';
 import {validateAutoVirtualSinger,autoSingerReference,autoSingerRequest,recordAutoSingerFirstImage,generateAutoSingerReferenceImage} from './autoVirtualSingerImages.js';
 // A registered character reuses the SAME sampling seed in each scene.
 // img2img still uses the original authorized reference; seed consistency
@@ -127,9 +128,9 @@ export async function runMvBatch({project,data,checkpoint,videoModel,port,sessio
     blob=await generateAutoSingerReference({...imageSettings,sourceProjectId:initialId,
      sourceSceneId:anchor.sourceSceneId,sourceAssetId:anchor.sourceAssetId,sourceKey:anchor.sourceKey},session,signal);
    }else if(reference?.kind==='person'){
-    blob=await generateReferencePerson(imageSettings,session,signal);
+    blob=await generateReferencePerson(attachIdentityLoRA(imageSettings,character),session,signal);
    }else if(reference?.kind==='character'){
-    blob=await generateReferenceCharacter(imageSettings,session,signal);
+    blob=await generateReferenceCharacter(attachIdentityLoRA(imageSettings,character),session,signal);
    }else if(reference){
     throw Error('지원하지 않는 장면 원본 이미지 형식입니다. 생성하지 않고 원본을 보존합니다.');
    }else{
