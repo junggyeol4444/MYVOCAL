@@ -151,7 +151,22 @@ export async function importProjectBundle(file){
   });
  }
  if(project.videoEdits93?.history){const sceneIdMap=Object.fromEntries(original.scenes.map((scene,i)=>[scene.id,project.scenes[i]?.id]));project.videoEdits93={...project.videoEdits93,history:project.videoEdits93.history.map(entry=>({...entry,sceneId:sceneIdMap[entry.sceneId]||entry.sceneId}))};}
- if(project.band90)project.band90={...project.band90,members:(project.band90.members||[]).map(m=>({...m,characterId:mapping[m.characterId]||m.characterId}))};
+ if(project.band90){
+   const pcmDances={};
+   for(const [oldCharId,dance] of Object.entries(project.band90.pcmDances||{})){
+    const newCharacterId=mapping[oldCharId],oldSourceId=dance?.audioReactive30?.sourceTrackId;
+    const oldAssetId=dance?.audioReactive30?.sourceAssetId;
+    const index=oldTrackIds.indexOf(oldSourceId);
+    if(!newCharacterId||index<0||!project.tracks[index]?.id||!assetMap[oldAssetId])
+     throw Error('가상 밴드의 원본 PCM 춤·캐릭터·드럼 WAV 자산이 백업에 누락됐습니다.');
+    pcmDances[newCharacterId]={...dance,projectId:project.id,
+     audioReactive30:{...dance.audioReactive30,
+      sourceTrackId:project.tracks[index].id,sourceAssetId:assetMap[oldAssetId]}};
+   }
+   project.band90={...project.band90,
+    members:(project.band90.members||[]).map(m=>({...m,characterId:mapping[m.characterId]||m.characterId})),
+    ...(project.band90.pcmDances?{pcmDances}:{})};
+  }
  if(wasAligned){
   const index=oldTrackIds.indexOf(original.vocalAlignment.trackId);
   if(index>=0){const migrated={...original.vocalAlignment,projectId:project.id,trackId:project.tracks[index].id};
@@ -159,7 +174,15 @@ export async function importProjectBundle(file){
    if(hadValidPhonemes)project.phonemePlan={...original.phonemePlan,projectId:project.id,trackId:migrated.trackId,sourceKey:phonemeSourceKey(migrated)};}
  }
  // STEP88: keep the source project reference portable when restoring its linked character.
- for(const c of characters){if(c.dance88?.projectId===original.id)c.dance88={...c.dance88,projectId:project.id};if(c.performance89?.projectId===original.id){const idMap=Object.fromEntries(oldTrackIds.map((id,i)=>[id,project.tracks[i]?.id]));c.performance89={...c.performance89,projectId:project.id,instruments:(c.performance89.instruments||[]).map(e=>({...e,trackId:idMap[e.trackId]||e.trackId}))};}}
+ for(const c of characters){if(c.dance88?.projectId===original.id){
+   const oldTrackId=c.dance88.audioReactive30?.sourceTrackId;
+   const index=oldTrackIds.indexOf(oldTrackId);
+   if(oldTrackId&&(index<0||!project.tracks[index]?.id))
+    throw Error('실제 PCM 기반 춤의 드럼 WAV 트랙이 복원된 프로젝트에 없습니다.');
+   c.dance88={...c.dance88,projectId:project.id,
+    ...(oldTrackId?{audioReactive30:{...c.dance88.audioReactive30,
+      sourceTrackId:project.tracks[index].id}}:{})};
+  }if(c.performance89?.projectId===original.id){const idMap=Object.fromEntries(oldTrackIds.map((id,i)=>[id,project.tracks[i]?.id]));c.performance89={...c.performance89,projectId:project.id,instruments:(c.performance89.instruments||[]).map(e=>({...e,trackId:idMap[e.trackId]||e.trackId}))};}}
  await putFilesAtomic(pendingAssets);
  return {project,voices,characters,voiceModels,trainingPlans,virtualSingers,hasAudio:Object.keys(assets).length>0,portable:!!input.format};
 }
