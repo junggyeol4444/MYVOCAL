@@ -201,6 +201,7 @@ func importStudioAsset(path string)error{
  case ".vrm",".glb",".gltf",".fbx":kind="character"
  case ".mp4",".mov",".webm",".mkv":kind="video"
  case ".mid",".midi",".json",".ds":kind="score"
+ case ".sf2",".sf3":kind="soundfont"
  default:return fmt.Errorf("프로젝트에 지원되지 않는 자산 확장자입니다: %s",ext)
  }
  studioMu.Lock()
