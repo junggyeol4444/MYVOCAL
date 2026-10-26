@@ -31,6 +31,7 @@ const diffSingerCheckpointLimit = 500 << 20
 type diffSingerTrainingJob struct {
  mu sync.Mutex
  id, state, voiceID, message, log, checkpoint, directory string
+ mode, root, python, experiment string
  started time.Time
  cancel context.CancelFunc
 }
@@ -40,6 +41,7 @@ func (j *diffSingerTrainingJob) snapshot() map[string]any {
  defer j.mu.Unlock()
  return map[string]any{"id":j.id,"state":j.state,"voiceId":j.voiceID,
   "message":j.message,"log":j.log,"checkpointAvailable":j.state=="completed"&&j.checkpoint!="",
+  "mode":j.mode,"root":j.root,"python":j.python,"experiment":j.experiment,
   "startedAt":j.started.Format(time.RFC3339)}
 }
 func (j *diffSingerTrainingJob) stop() {
@@ -188,6 +190,8 @@ func (a *appServer) diffSingerTrainingStart(w http.ResponseWriter,r *http.Reques
  ctx,cancel:=context.WithTimeout(context.Background(),12*time.Hour)
  j.mu.Lock()
  j.id=id;j.voiceID=settings.VoiceID;j.state="running";j.directory=dir
+ j.mode=settings.Mode;j.root=settings.Root;j.python=settings.Python;j.experiment=""
+ if settings.Mode=="official"{j.experiment="myvocal-"+id}
  j.message=fmt.Sprintf("실제 한국어 가창 WAV %d개로 DiffSinger %s 신경망 학습 실행 중",count,settings.Mode)
  j.started=time.Now();j.log="";j.checkpoint="";j.cancel=cancel
  j.mu.Unlock()
