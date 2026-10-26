@@ -3,11 +3,16 @@
 // Source vocals are retained as muted references; trained output is audible.
 export async function persistNeuralVocalTake(project,files,{
  current,onChange,newId,readInfo,createTrack,store,rollback,signal,
- engineInfo=null,job=null
+ engineInfo=null,job=null,singerBinding=null
 }={}){
  if(!project?.id||!Array.isArray(project.tracks)||!Array.isArray(files)||files.length<1||files.length>2||
  [current,onChange,newId,readInfo,createTrack,store,rollback].some(x=>typeof x!=='function'))
   throw Error('기존 프로젝트 및 실제 보컬 파일 저장 연결이 필요합니다.');
+ if(singerBinding!==null&&(
+   !singerBinding||typeof singerBinding.voiceId!=='string'||
+   !singerBinding.voiceId||
+   (singerBinding.characterId!==undefined&&typeof singerBinding.characterId!=='string')))
+  throw Error('새 실제 가창 WAV의 Voice·캐릭터 주인 연결이 올바르지 않습니다.');
  const guard=()=>{if(signal?.aborted||current()!==project)throw Error('가창 제작 중 취소·프로젝트 전환: 기존 파일을 보존했습니다.');};
  guard();
  const ids=new Set(project.tracks.map(t=>t.id)),entries=[],tracks=[];
@@ -24,7 +29,12 @@ export async function persistNeuralVocalTake(project,files,{
   const track=createTrack(project,file,assetId,duration);
   if(!track?.clips?.some(c=>c.assetId===assetId))throw Error('실제 보컬 파일을 편집 트랙으로 연결하지 못했습니다.');
   entries.push([assetId,file]);
-  tracks.push({...track,id:trackId,name:names[i],type:'vocal',mute:files.length===2&&i===0,solo:false});
+  const audible=!(files.length===2&&i===0);
+  tracks.push({...track,id:trackId,name:names[i],type:'vocal',mute:!audible,solo:false,
+   ...(singerBinding?{singerVoiceId:singerBinding.voiceId,
+     ...(singerBinding.characterId?{singerCharacterId:singerBinding.characterId}:{}),
+     neuralSingingPrimary:audible,neuralSingingRealWav:true}:{}),
+  });
  }
  guard();
  let saved=false;
