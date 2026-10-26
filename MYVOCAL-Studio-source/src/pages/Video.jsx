@@ -658,6 +658,24 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
   <Field label="구간 자연어 지시"><input aria-label="구간 장면 자연어 지시" maxLength={500} value={sectionCommand}
    onChange={e=>{setSectionCommand(e.target.value);setSectionPlan(null);setSectionAiSource('');}}
    placeholder="후렴에서 캐릭터를 더 많이 보여줘"/></Field>
+  <div className="mv7-item">
+   <strong>원본 51·52항 · 자유로운 한국어로 후렴·절·브리지 장면 일괄 편집</strong>
+   <Field label="실제 설치한 로컬 Ollama 모델 직접 선택">
+    <select disabled={mvAiBusy} value={mvAiModel}
+     onChange={e=>{setMvAiModel(e.target.value);setSectionPlan(null);}}>
+     <option value="">사용할 Ollama 모델 선택 · 자동 모델 교체 금지</option>
+     {mvAiModels.map(m=><option key={m} value={m}>{m}</option>)}
+    </select>
+   </Field>
+   <div className="hstack">
+    <Button disabled={mvAiBusy} onClick={discoverMvAiModels}>설치 Ollama 모델 확인</Button>
+    <Button disabled={mvAiBusy||sectionBusy||natural93Busy||!mvAiModel||!sectionCommand.trim()}
+     onClick={reviewSectionWithAi}>{mvAiBusy?'로컬 언어모델 구간 분석 중':'후렴/절 자연어를 로컬 Ollama로 해석·검토'}</Button>
+    {mvAiBusy&&<Button onClick={()=>mvAiAbort.current?.abort()}>AI 구간 분석 취소</Button>}
+   </div>
+   {sectionAiSource&&<p className="muted">{sectionAiSource}</p>}
+   <Notice>실제 BPM·마디를 기준으로 이미 존재하는 장면에만 적용합니다. 모델은 최대 2개 속성을 제안하며 사람/캐릭터 ID·영상 길이·원본 사진·보컬을 바꾸지 않습니다. 아래 검토·실제 SD/SVD 생성 버튼을 눌러야 비로소 작업이 실행됩니다.</Notice>
+  </div>
   <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
    <Button disabled={sectionBusy} onClick={reviewSection93}>구간 변경 검토</Button>
    <Button disabled={!sectionPlan||sectionBusy} onClick={applySection93}>검토한 구간 설명 일괄 적용</Button>
