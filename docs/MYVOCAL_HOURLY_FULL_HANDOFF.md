@@ -3,8 +3,8 @@
 ## 2026-10-26 18시 예약 개발 최신 회차 — 기존 인수인계 원문 유지
 - **main HEAD (기능 소스 완료 시점):** `62468addb31cc2cb5f113bca1c834c05762c3bd0`. 시작 시 `8fcdafba29fb959b00777be61ea00bfe2a457649`.
 - **이번 구현**: 실제 사용 권한 있는 한국어 Singing WAV 최대 12개를 서로 다른 원곡 MIDI 시작 초에 매핑하여 DiffSinger 학습용 한 ZIP으로 내보내는 다중 녹음 학습 데이터 기능. 녹음별 PCM 구간·음소 라벨·MIDI 타이밍·manifest 기록과 Windows EXE Singing Workbench의 추가 WAV 다중 선택/시각 입력 UI를 기존 프로젝트에 연결. 단일 WAV 호환 유지.
-- **변경 소스**: `MYVOCAL-Studio-source/src/lib/singingTakeDataset.js`, `MYVOCAL-Studio-source/src/components/SingingTakeDatasetPanel.jsx`. 기능 커밋 `f4e8ab8dfc2666b06a6c7c1e96dd61ecc78876f0`, UI 커밋 `3081a49c8997b41c1ff4a91583bec06e165cd899`, TSV/CSV escape 정리 `62468addb31cc2cb5f113bca1c834c05762c3bd0`.
-- **누적 원문 Library**: `/MYVOCAL_20261026_매시간개발_전체누적인수인계.md` (1,263,683바이트, 기존 1,260,056바이트 접두사 그대로 보존). 이번 회차의 상세 기록을 끝에 추가했다.
+- **변경 소스**: `MYVOCAL-Studio-source/src/lib/singingTakeDataset.js`, `MYVOCAL-Studio-source/src/components/SingingTakeDatasetPanel.jsx`. 기능 커밋 `f4e8ab8dfc2666b06a6c7c1e96dd61ecc78876f0`, UI 커밋 `3081a49c8997b41c1ff4a91583bec06e165cd899`, TSV/CSV escape 정리 `62468addb31cc2cb5f113bca1c834c05762c3bd0`, 중간 구간 다중 테이크 GUI 시작초 연결 `462f76f99118adea3d4b55786d70634b47c8093b`.
+- **누적 원문 Library**: `/MYVOCAL_20261026_매시간개발_전체누적인수인계.md` (1,264,489바이트, 기존 1,260,056바이트 접두사 그대로 보존). 이번 회차의 상세 기록을 끝에 추가했다.
 - **검증 보류**: 사용자의 개발 전부 완료→검증→수정→재검증 순서에 따라 이번 회차는 단위테스트/CI/Windows 10·11 GUI/GPU DiffSinger 실추론을 실행하지 않았다. 기능 코딩과 main 반영만 완료했고 실제 가창 학습·음질·EXE 실사용 성공을 주장하지 않는다.
 - **다음 회차**: 최신 main·원본 66항·이 인수인계 원문을 다시 확인하고 실제 본인 음색 학습→한국어 신경망 Singing→장편 MusicGen/6 stems→SD/SVD/립싱크 Music+MV의 남은 핵심 통합 기능을 기존 소스에서 계속 개발한다. 다른 프로젝트·예약/기존 원본/사용자 자산 변경 금지.
 
