@@ -13,7 +13,7 @@ export function validateBundleEnvelope(input) {
   if(input.integrityVersion!==undefined && input.integrityVersion!==1)throw new Error('지원하지 않는 백업 무결성 형식입니다.');
   if (input.profiles != null && (typeof input.profiles !== 'object' || Array.isArray(input.profiles) || !Array.isArray(input.profiles.voices) || !Array.isArray(input.profiles.characters))) throw new Error('백업 프로필 목록이 잘못되었습니다.');
   if (input.profiles) {
-   for (const group of ['voices','characters','voiceModels','trainingPlans']) {
+   for (const group of ['voices','characters','voiceModels','trainingPlans','virtualSingers']) {
     if (input.profiles[group]!==undefined && !Array.isArray(input.profiles[group]))
      throw new Error('백업 프로필 목록이 잘못되었습니다.');
     if ((input.profiles[group]||[]).length > 500)
@@ -27,12 +27,12 @@ export function validateBundleEnvelope(input) {
    // The importer uses one ID map for both libraries, so a cross-library
    // collision could silently connect a voice to the wrong profile.
    const seen = new Set();
-   for (const group of ['voices', 'characters', 'voiceModels', 'trainingPlans']) {
+   for (const group of ['voices', 'characters', 'voiceModels', 'trainingPlans', 'virtualSingers']) {
     for (const profile of input.profiles[group]||[]) {
      if (!profile || typeof profile !== 'object' || Array.isArray(profile) ||
          typeof profile.id !== 'string' || !profile.id || reservedIds.has(profile.id) ||
          (group==='trainingPlans' ? typeof profile.voiceName !== 'string' || !profile.voiceName : typeof profile.name !== 'string' || !profile.name) || seen.has(profile.id) ||
-         (group==='voiceModels'||group==='trainingPlans') && (typeof profile.voiceId !== 'string' || !profile.voiceId)) {
+         ((group==='voiceModels'||group==='trainingPlans'||group==='virtualSingers') && (typeof profile.voiceId !== 'string' || !profile.voiceId) || group==='virtualSingers' && (typeof profile.characterId !== 'string' || !profile.characterId || profile.modelId!==undefined && (typeof profile.modelId !== 'string' || profile.modelId.length>150)))) {
       throw new Error('백업 프로필 ID 또는 이름이 잘못되었습니다.');
      }
      seen.add(profile.id);
