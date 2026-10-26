@@ -172,8 +172,8 @@ export async function exportSingingTakeDataset(project,alignment,recording,dicti
     if(!reviewed||typeof reviewed.ph_seq!=='string'||reviewed.ph_seq!==score.ph_seq||
        typeof reviewed.ph_dur!=='string'||reviewed.ph_dur.length>16000)
      throw Error(key+'의 검수 음소 순서가 원본 MIDI·발음 사전과 다릅니다.');
-    const phones=score.ph_seq.trim().split(/\\s+/);
-    const parts=reviewed.ph_dur.trim().split(/\\s+/);
+    const phones=score.ph_seq.trim().split(/\s+/);
+    const parts=reviewed.ph_dur.trim().split(/\s+/);
     const values=parts.map(Number);
     if(parts.length!==phones.length||
        values.some(v=>!Number.isFinite(v)||v<.005||v>20)||
