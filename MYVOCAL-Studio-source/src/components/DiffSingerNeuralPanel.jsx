@@ -16,13 +16,22 @@ const KEY='MYVOCAL_NATIVE_DIFFSINGER_V1';
 const readPaths=()=>{try{const v=JSON.parse(window.localStorage.getItem(KEY)||'{}');
  return {python:String(v.python||''),root:String(v.root||''),experiment:String(v.experiment||'')};
  }catch{return {python:'',root:'',experiment:''}}};
-export default function DiffSingerNeuralPanel({project,onChange,notify,voice,registeredModels=[]}){
+export default function DiffSingerNeuralPanel({project,onChange,notify,voice,registeredModels=[],trainedSuggestion=null}){
  const [initial]=useState(readPaths);
  const [python,setPython]=useState(initial.python),[root,setRoot]=useState(initial.root),
   [experiment,setExperiment]=useState(initial.experiment),[dictionaryFile,setDictionaryFile]=useState(null),
   [rights,setRights]=useState(false),[alsoRvc,setAlsoRvc]=useState(false),[registeredRvcId,setRegisteredRvcId]=useState(''),
   [busy,setBusy]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState('');
  const latest=useRef(project),abort=useRef(null);latest.current=project;
+ const useNewTrainedModel=()=>{
+  if(busy||trainedSuggestion?.voiceId!==voice?.id)return;
+  if(!trainedSuggestion.python||!trainedSuggestion.root||!trainedSuggestion.experiment){
+   setError('실제 학습 모델 설치 정보를 확인할 수 없습니다.');return;
+  }
+  setPython(trainedSuggestion.python);setRoot(trainedSuggestion.root);
+  setExperiment(trainedSuggestion.experiment);setRights(false);setError('');
+  setStatus('신규 DiffSinger 학습 Acoustic 모델 경로를 불러왔습니다. 같은 설치 환경의 보코더·발음 사전을 선택한 뒤 가창을 실행하세요.');
+ };
  useEffect(()=>()=>abort.current?.abort(),[]);
  useEffect(()=>{abort.current?.abort();setStatus('');setError('');setRights(false);},[project.id]);
  const aligned=project.vocalAlignment;
@@ -114,7 +123,8 @@ export default function DiffSingerNeuralPanel({project,onChange,notify,voice,reg
    <Field label="학습 완료 Acoustic 실험 이름"><input value={experiment} disabled={busy} onChange={e=>setExperiment(e.target.value)} placeholder="my_korean_voice"/></Field>
    <Field label="학습 모델의 한국어 발음 사전"><input type="file" accept=".txt,text/plain" disabled={busy} onChange={e=>setDictionaryFile(e.target.files?.[0]||null)}/></Field>
   </div>
-  <div className="mv7-actions"><Button disabled={busy} onClick={()=>{try{window.localStorage.setItem(KEY,JSON.stringify({python,root,experiment}));notify('DiffSinger 실행 경로만 현재 PC에 저장했습니다. 원본 모델·녹음은 저장하지 않았습니다.')}catch(e){setError(e.message)}}}>로컬 가창 모델 경로 기억</Button></div>
+  <div className="mv7-actions">{trainedSuggestion?.voiceId===voice?.id&&<Button disabled={busy} onClick={useNewTrainedModel}>이번 실제 학습 체크포인트로 가창 모델 선택</Button>}
+  <Button disabled={busy} onClick={()=>{try{window.localStorage.setItem(KEY,JSON.stringify({python,root,experiment}));notify('DiffSinger 실행 경로만 현재 PC에 저장했습니다. 원본 모델·녹음은 저장하지 않았습니다.')}catch(e){setError(e.message)}}}>로컬 가창 모델 경로 기억</Button></div>
   <label className="check-item"><input type="checkbox" checked={alsoRvc} disabled={busy} onChange={e=>setAlsoRvc(e.target.checked)}/>합성한 신경망 가창을 실제 본인 RVC 음색 모델로 추가 변환</label>
   {alsoRvc&&eligibleModels.length>0&&<Field label="프로젝트에 저장한 본인 RVC 체크포인트"><select disabled={busy} value={registeredRvcId} onChange={e=>setRegisteredRvcId(e.target.value)}>
    <option value="">기존 RVC 설정의 로컬 .pth 모델 파일 사용</option>
