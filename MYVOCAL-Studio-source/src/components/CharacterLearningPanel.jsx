@@ -3,7 +3,7 @@ import {Button,Field,Notice,Panel} from './UI';
 import {getFile} from '../lib/assetDb.js';
 import {
  startCharacterIdentityTraining,getCharacterIdentityTrainingStatus,
- cancelCharacterIdentityTraining,downloadCharacterIdentityLoRA
+ cancelCharacterIdentityTraining,downloadCharacterIdentityLoRA,installCharacterIdentityLoRA
 } from '../lib/characterIdentityTrainingClient.js';
 
 // Original #48/#49: real installed sd-scripts training, not a metadata-only
@@ -20,9 +20,12 @@ export default function CharacterLearningPanel({profile,onSave,notify}){
   [consent,setConsent]=useState(false),[busy,setBusy]=useState(false),
   [job,setJob]=useState(null),[error,setError]=useState(''),
   [message,setMessage]=useState('');
+ const [comfyRoot,setComfyRoot]=useState('');
+ const [installConsent,setInstallConsent]=useState(false),[installed,setInstalled]=useState(null);
  const latest=useRef(profile),abort=useRef(null);
  latest.current=profile;
  useEffect(()=>{setSelected([]);setConsent(false);setJob(null);setError('');setMessage('');
+  setInstalled(null);setInstallConsent(false);
   abort.current?.abort();abort.current=null;},[profile?.id]);
  useEffect(()=>()=>abort.current?.abort(),[]);
  useEffect(()=>{
@@ -83,17 +86,32 @@ export default function CharacterLearningPanel({profile,onSave,notify}){
   }catch(e){setError(e.message||String(e));}
   finally{setBusy(false);}
  }
+ async function installIntoComfy(){
+  if(busy||!myJob||job.state!=='completed'||!installConsent||!comfyRoot.trim())return;
+  const current=latest.current;
+  setBusy(true);setError('');setMessage('새 LoRA만 사용자 선택 ComfyUI models/loras에 추가 중');
+  try{
+   const result=await installCharacterIdentityLoRA(job.id,comfyRoot,{session:activeSession()});
+   if(latest.current!==current)throw Error('캐릭터가 변경됐습니다. 설치 작업 결과를 다른 인물에게 적용하지 않습니다.');
+   setInstalled(result);setInstallConsent(false);
+   setMessage('ComfyUI에 새 LoRA가 추가됐습니다. 이제 현재 캐릭터 프로필에 등록하세요.');
+  }catch(e){setError(e.message||String(e));}
+  finally{setBusy(false);}
+ }
  function register(){
   try{
    if(!myJob||job.state!=='completed'||job.modelAvailable!==true||!valid)
     throw Error('실제 학습 완료 및 사용 권한이 확인된 캐릭터만 등록할 수 있습니다.');
-   if(profile.identityTraining?.jobId===job.id)
-    throw Error('현재 완료한 학습 가중치는 이미 프로필에 연결되어 있습니다.');
+   if(profile.identityTraining?.jobId===job.id&&
+      profile.identityTraining?.comfyLoraName===(installed?.loraName||null))
+    throw Error('현재 LoRA가 이미 캐릭터 프로필에 등록돼 있습니다.');
    const record={version:1,engine:'sd-scripts-local-lora',
     jobId:job.id,kind:profile.kind,
     trainedImageCount:selected.length||null,steps:config.steps,rank:config.rank,
     modelFileName:'mv'+job.id+'.safetensors',
     status:'trained-checkpoint-produced-in-unverified-environment',
+    comfyLoraName:installed?.jobId===job.id?installed.loraName:
+     profile.identityTraining?.jobId===job.id?profile.identityTraining.comfyLoraName||null:null,
     createdAt:new Date().toISOString(),
     notes:'실제 설치된 sd-scripts가 신규 safetensors 가중치를 생성했다는 로컬 학습 기록. GPU·모델 호환성·정체성 재현 품질은 별도로 확인. 원본 자료 보존.'};
    onSave({...profile,identityTraining:record});
@@ -131,19 +149,32 @@ export default function CharacterLearningPanel({profile,onSave,notify}){
   <label className="check-item"><input type="checkbox" checked={consent} disabled={busy||running}
    onChange={e=>setConsent(e.target.checked)}/>
    본인 또는 명시적으로 허가된 실제 사진·캐릭터 원화이며 신경망 학습·결과 사용 권한이 있습니다.</label>
+  <Field label="설치한 로컬 ComfyUI 원본 폴더 (선택 작업)">
+   <input disabled={busy||running} value={comfyRoot} onChange={e=>{setComfyRoot(e.target.value);setInstallConsent(false);}}
+    placeholder="D:/AI/ComfyUI"/>
+  </Field>
+  <label className="check-item"><input type="checkbox" disabled={busy||running}
+   checked={installConsent} onChange={e=>setInstallConsent(e.target.checked)}/>
+   학습 결과 가중치를 이 PC의 ComfyUI/models/loras에 새 파일로 추가하는 데 동의합니다. 기존 LoRA는 수정·교체하지 않습니다.
+  </label>
   <div className="mv7-actions">
    <Button variant="primary" disabled={busy||running||!valid||!consent||selected.length<4||selected.length>20}
     onClick={start}>실제 로컬 LoRA 학습 실행</Button>
    <Button disabled={!running} onClick={stop}>학습 중지</Button>
    <Button disabled={busy} onClick={async()=>{try{setJob(await getCharacterIdentityTrainingStatus({session:activeSession()}))}catch(e){setError(e.message)}}}>학습 진행 상태</Button>
    <Button disabled={busy||!myJob||job.state!=='completed'||!job.modelAvailable} onClick={download}>신규 .safetensors 가중치 저장</Button>
-   <Button disabled={busy||!myJob||job.state!=='completed'||!job.modelAvailable||profile.identityTraining?.jobId===job.id}
+   <Button disabled={busy||!myJob||job.state!=='completed'||!job.modelAvailable||!installConsent||!comfyRoot.trim()}
+    onClick={installIntoComfy}>새 LoRA를 지정한 ComfyUI에 추가</Button>
+   <Button disabled={busy||!myJob||job.state!=='completed'||!job.modelAvailable||
+    (profile.identityTraining?.jobId===job.id&&
+     profile.identityTraining?.comfyLoraName===(installed?.loraName||null))}
     onClick={register}>실제 학습 모델을 캐릭터 프로필에 등록</Button>
    <Button disabled={busy||running} onClick={()=>{try{
      window.localStorage.setItem('MYVOCAL_CHARACTER_LORA_PATHS',JSON.stringify(config));
      notify?.('이 Windows 프로필에 설치 경로와 학습 설정만 저장했습니다.');
     }catch(e){setError(e.message)}}}>현재 PC 설치 경로 기억</Button>
   </div>
+  {installed?.jobId===job?.id&&<Notice>로컬 ComfyUI에 새 가중치 추가됨: {installed.loraName} · 모델 실제 추론 결과는 미검증. 프로필 등록 버튼으로 MV에서 사용할 수 있습니다.</Notice>}
   {profile.identityTraining?.engine==='sd-scripts-local-lora'&&
    <Notice>이전에 등록한 LoRA: {profile.identityTraining.modelFileName} · 학습 파일 생성 기록. MV에서 재현되는 외형 품질은 미검증입니다.</Notice>}
   <p role="status" className="muted">학습 상태: {myJob?(stateLabel[job.state]||job.state)+' · '+(job.message||''):'현재 인물의 학습 실행 내역 없음'} · {message}</p>
