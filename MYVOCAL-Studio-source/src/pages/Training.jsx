@@ -1,6 +1,7 @@
 import React,{useState} from 'react';
 import VocalPreview from '../components/VocalPreview';
 import RvcTrainingPanel from '../components/RvcTrainingPanel.jsx';
+import DiffSingerTrainingPanel from '../components/DiffSingerTrainingPanel.jsx';
 import {Button,Empty,Field,Icon,Notice,Panel,SectionHead,Status} from '../components/UI';
 import {genId} from '../lib/schema';
 import {getFile,putFile,removeFile,deleteFilesAtomic} from '../lib/assetDb';
@@ -87,8 +88,9 @@ export default function Training({data,add,remove,notify,navigate}){
     {models.length?<div className="mv7-list">{models.map(model=><div className="mv7-item" key={model.id}><div className="mv7-item-title"><div><strong>{model.name}</strong><small>{byteText(model.bytes)} · {formatDate(model.createdAt)} · {TRAINING_ENGINES.find(e=>e.id===model.engineId)?.name||model.engineId}</small></div><Status>미검증 · 합성 미연결</Status></div><p className="mv7-hash">SHA-256: {model.sha256||'미계산'}</p><div className="mv7-actions"><Button icon="download" disabled={busy} onClick={()=>downloadCheckpoint(model)}>원본 내보내기</Button>{model.indexAssetId&&<Button icon="download" disabled={busy} onClick={()=>downloadIndex(model)}>FAISS 인덱스 내보내기</Button>}<Button icon="trash" disabled={busy} onClick={()=>deleteCheckpoint(model)}>삭제</Button></div></div>)}</div>:<div className="mv7-empty">등록된 외부 체크포인트가 없습니다.</div>}
    </Panel>
    <RvcTrainingPanel voice={voice} plans={plans} add={add} notify={notify}/>
+   <DiffSingerTrainingPanel voice={voice} notify={notify} add={add} registeredModels={data.voiceModels||[]}/>
    <VocalPreview data={data} voice={voice} add={add} remove={remove} notify={notify}/>
   </>}
-  <Notice>외부 RVC 학습 스크립트 실행과 외부 변환 엔진 연결은 지원하지만, 실제 모델 설치·추론 호환성과 음질은 검증 대상입니다. 자연스러운 한국어 신경망 가창·음소 학습 및 모델 자동 설치는 아직 지원하지 않습니다. 로컬 샘플러는 단순 음높이 변경 미리보기입니다. 등록·학습 권한이 있는 본인 또는 허가된 음성만 사용하세요. 파일 원본은 별도로 백업하세요.</Notice>
+  <Notice>학습 관리자에서 실제 RVC와 DiffSinger 학습 실행·상태·모델 등록을 관리합니다. DiffSinger에는 사용자가 소유한 가창 녹음과 가사·MIDI로 만든 학습 ZIP, 호환 Acoustic YAML, 설치된 Python·GPU 모델이 필요합니다. 체크포인트 생성은 모델의 한국어 발음·음질·Windows 실기기 작동 완료를 증명하지 않습니다. 원본 녹음과 이미 보관한 모델은 보존합니다.</Notice>
  </>;
 }
