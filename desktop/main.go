@@ -144,6 +144,7 @@ func (a *appServer) routes() *http.ServeMux {
  mux.HandleFunc("/api/training/character/status", a.characterTrainStatus)
  mux.HandleFunc("/api/training/character/cancel", a.characterTrainCancel)
  mux.HandleFunc("/api/training/character/model", a.characterTrainModel)
+ mux.HandleFunc("/api/training/character/install", a.characterTrainInstall)
 	mux.HandleFunc("/api/mv/lipsync2d", a.viseme2DRender)
  mux.HandleFunc("/api/training/rvc/start", a.rvcTrainingStart)
  mux.HandleFunc("/api/training/rvc/status", a.rvcTrainingStatus)
