@@ -1,5 +1,13 @@
 # MYVOCAL Studio — 예약 자동 개발 전체 인수인계 복구 인덱스
 
+## 2026-10-26 17시 예약 개발 최신 회차 (기존 인수인계 원문 보존)
+- 최신 원문 보존 Library: `/MYVOCAL_20261026_매시간개발_전체누적인수인계.md` (이전 1,256,437바이트를 바이트 단위로 접두사 보존하고 신규 개발 기록 추가, 총 1,260,056바이트).
+- 최신 개발 시작 main: `a438f96b96474fad296b4558779e0be089195c95`; 실제 기능 소스 4개 비강제 반영 커밋: `e2afab078fa3dd2fd0fee5f185ca91edb66d7bbf`.
+- 이번 구현: Windows EXE 기존 로컬 Ollama 신경망 MIDI 작곡에서 **선택형 9악기** (기존 6악기 + harmony/piano/synth) 생성·검증, 독립 MIDI 트랙 및 선택적 FluidSynth/SoundFont 9개 WAV 추가 저장, 한국어 GUI 선택 연결. 기존 6악기 모드는 유지.
+- 아직 실제 Ollama 9역할 추론/Windows EXE GUI/FluidSynth WAV·GPU Music+MV를 검증하지 않았다. 전체 66항 개발 완료 후 통합검증→오류 수정→재검증 순서 유지. 기존 사용자 녹음·모델·자산 삭제 없음.
+- 다음 회차: 최신 main·원본 66항·정본 인수인계를 읽고 본인 목소리 실제 학습/한국어 Singing/3~6분 음악+MV 핵심 누락 개발을 계속한다.
+
+
 ## 최신 누적 인수인계 — 2026-10-19 19:17 KST (3회차)
 - **우선 읽을 최신 전체 원문:** ChatGPT Library `/MYVOCAL_20261019_자동개발03_전체누적인수인계.md` (6,021줄, 451,395 bytes, SHA-256 `e3215df0fb8bf1a0aff6ac234c5a3c56cb8a20af294a6220f4da6ac29416acd1`, Library ID `libfile_df9e159e03948191a76e8d71f647deee`). 이전 5,982줄/443,367 bytes를 바이트 그대로 접두사로 보존함.
 - 최신 개발 main SHA `6b751484d24e1058248e59db68c08af759e5150a`. 모델 `sourceSampleId`의 프로젝트 백업 원본 포함·복원 ID 재매핑, 회귀 테스트 추가. 소스 CI `39236262604`, Windows CI `39236262598`는 작성 당시 진행 중이었으므로 완료 여부를 다시 확인할 것. **삭제 보호 GUI 버튼 직접 클릭 검증은 아직 미완료**.
