@@ -7,6 +7,7 @@ import AutoSingerRegisterPanel from '../components/AutoSingerRegisterPanel.jsx';
 import Pv95Editor from '../components/Pv95Editor.jsx';
 import {interpretMvInstruction93,applyMvInstruction93,undoMvInstruction93} from '../lib/mvNaturalEdit93.js';
 import {previewLocalAIMvEdit51} from '../lib/localAIMvNaturalEdit51.js';
+import {previewLocalAISectionMvEdit51} from '../lib/localAIMvSectionEdit51.js';
 import {getInstalledLocalModels} from '../lib/localAiComposer.js';
 import {regenerateNaturalMvScene,undoNeuralNaturalMvScene} from '../lib/mvNaturalMediaRegeneration.js';
 import {previewSectionNaturalEdit,applySectionNaturalEdit,undoSectionNaturalEdit,regenerateSectionNaturalMvScenes,undoSectionNaturalMvScenes} from '../lib/mvSectionNaturalEdit.js';
@@ -85,6 +86,7 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
  const sectionAbort=useRef(null);
  const [sectionCommand,setSectionCommand]=useState(''),[sectionPlan,setSectionPlan]=useState(null);
  const [sectionBusy,setSectionBusy]=useState(false),[sectionStatus,setSectionStatus]=useState('');
+ const [sectionAiSource,setSectionAiSource]=useState('');
  const latestProject=useRef(null);latestProject.current=p;
  const latestCharacters=useRef([]);latestCharacters.current=data.characters;
  const readSession=()=>typeof window==='undefined'?'':window.__MYVOCAL_SESSION_KEY||'';
@@ -514,6 +516,26 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
   try{const plan=previewSectionNaturalEdit(p,sectionCommand);setSectionPlan(plan);setSectionStatus(plan.summary);}
   catch(e){setSectionPlan(null);notify('구간 편집 검토: '+e.message);}
  };
+ const reviewSectionWithAi=async()=>{
+  if(mvAiBusy||sectionBusy||natural93Busy)return;
+  const snapshot=p,command=sectionCommand;
+  const controller=new AbortController();mvAiAbort.current=controller;
+  setMvAiBusy(true);setSectionPlan(null);setSectionAiSource('');
+  setSectionStatus('선택한 설치 Ollama '+mvAiModel+' 모델로 음악 구간 자연어를 해석 중');
+  try{
+   if(!mvAiModels.includes(mvAiModel))throw Error('설치된 로컬 언어모델을 먼저 선택하세요.');
+   const result=await previewLocalAISectionMvEdit51(snapshot,command,{
+    model:mvAiModel,session:readSession(),signal:controller.signal,
+    current:()=>latestProject.current
+   });
+   if(controller.signal.aborted)throw Error('모델 해석을 취소했습니다.');
+   setSectionPlan(result.plan);
+   setSectionAiSource('선택 Ollama '+result.model+'의 해석: '+result.generatedInterpretation);
+   setSectionStatus('원곡 구간 '+result.plan.sceneIds.length+
+    '개 장면을 모델 제안으로 검토했습니다. 적용·SD/SVD 제작 전까지 기존 원본 보존');
+  }catch(error){setSectionStatus('로컬 구간 분석 중단 · 원본 보존: '+error.message);}
+  finally{mvAiAbort.current=null;setMvAiBusy(false);}
+ };
  const applySection93=()=>{
   try{
    if(!sectionPlan)throw Error('먼저 구간 편집 내용을 검토하세요.');
@@ -634,7 +656,7 @@ export default function Video({data,project,onChange,navigate,notify,add,mode='v
  </Panel>
  <Panel title="STEP93 · 곡 구간 자연어 편집·실제 SD/SVD" description="기존 곡 BPM·마디 구간을 기준으로 후렴·절·브리지·전체 장면의 배경·의상·카메라·표정·동작·조명을 함께 수정합니다. “후렴에서 캐릭터를 더 많이 보여줘”는 이미 캐릭터가 배정된 후렴의 카메라·동작을 인물 중심으로 수정합니다. 실제 출연 화면 비중은 생성 결과 확인이 필요합니다.">
   <Field label="구간 자연어 지시"><input aria-label="구간 장면 자연어 지시" maxLength={500} value={sectionCommand}
-   onChange={e=>{setSectionCommand(e.target.value);setSectionPlan(null);}}
+   onChange={e=>{setSectionCommand(e.target.value);setSectionPlan(null);setSectionAiSource('');}}
    placeholder="후렴에서 캐릭터를 더 많이 보여줘"/></Field>
   <div className="hstack" style={{gap:8,flexWrap:'wrap'}}>
    <Button disabled={sectionBusy} onClick={reviewSection93}>구간 변경 검토</Button>
