@@ -17,17 +17,18 @@ function blobFromDataUrl(data){
 }
 
 export function linkedProfiles(project,data){
- const linkedVoiceIds=new Set([project.voiceId,
+ const selectedVirtualSinger=(data.virtualSingers||[]).find(v=>v.id===project.virtualSingerId);
+ const linkedVoiceIds=new Set([project.voiceId,selectedVirtualSinger?.voiceId,
   project.duetSingers?.lead?.voiceId,project.duetSingers?.harmony?.voiceId,
   ...(project.tracks||[]).map(t=>t.singerVoiceId)].filter(Boolean));
  const voice=(data.voices||[]).filter(v=>linkedVoiceIds.has(v.id));
- const charIds=new Set([project.characterId,project.duetSingers?.lead?.characterId,project.duetSingers?.harmony?.characterId,...(project.tracks||[]).map(t=>t.singerCharacterId),...(project.scenes||[]).flatMap(s=>[s.characterId,s.personMv?.personId,s.characterMv?.characterId]),...(project.band90?.members||[]).map(m=>m.characterId),...(project.scenes||[]).flatMap(s=>(s.characterReplace94?.history||[]).flatMap(h=>[h.scene?.characterId,h.scene?.personMv?.personId,h.scene?.characterMv?.characterId]))].filter(Boolean));
+ const charIds=new Set([project.characterId,selectedVirtualSinger?.characterId,project.duetSingers?.lead?.characterId,project.duetSingers?.harmony?.characterId,...(project.tracks||[]).map(t=>t.singerCharacterId),...(project.scenes||[]).flatMap(s=>[s.characterId,s.personMv?.personId,s.characterMv?.characterId]),...(project.band90?.members||[]).map(m=>m.characterId),...(project.scenes||[]).flatMap(s=>(s.characterReplace94?.history||[]).flatMap(h=>[h.scene?.characterId,h.scene?.personMv?.personId,h.scene?.characterMv?.characterId]))].filter(Boolean));
  const characters=(data.characters||[]).filter(c=>charIds.has(c.id));
  const voiceIds=new Set(voice.map(v=>v.id));
  // Preserve training history and imported checkpoint files for this project's voice.
  const voiceModels=(data.voiceModels||[]).filter(m=>voiceIds.has(m.voiceId));
  const trainingPlans=(data.trainingPlans||[]).filter(p=>voiceIds.has(p.voiceId));
- return {voices:voice,characters,voiceModels,trainingPlans};
+ return {voices:voice,characters,voiceModels,trainingPlans,virtualSingers:selectedVirtualSinger?[selectedVirtualSinger]:[]};
 }
 export function assetsOf(project,profiles){
  const ids=new Set();for(const t of project.tracks||[])for(const clip of t.clips||[])if(clip.assetId)ids.add(clip.assetId);
@@ -82,6 +83,16 @@ export async function importProjectBundle(file){
   const id=genId('model');modelIdMap[p.id]=id;
   return {...patchAssets(p),id,voiceId:mapping[p.voiceId]||p.voiceId,createdAt:now()};
  });
+ const virtualSingerIdMap=Object.create(null);
+ const virtualSingers=(profiles.virtualSingers||[]).map(p=>{
+  if(!mapping[p.voiceId]||!mapping[p.characterId]||
+     p.modelId&&!modelIdMap[p.modelId])
+   throw Error('가상 가수 백업의 Voice·Character·모델 연결이 누락되어 복원을 중단합니다.');
+  const id=genId('profile');virtualSingerIdMap[p.id]=id;
+  return {...p,id,voiceId:mapping[p.voiceId],characterId:mapping[p.characterId],
+   modelId:p.modelId?modelIdMap[p.modelId]:'',
+   name:p.name+' (복원)',createdAt:now(),updatedAt:now()};
+ });
  const trainingPlans=(profiles.trainingPlans||[]).map(p=>({
   ...p,id:genId('train'),voiceId:mapping[p.voiceId]||p.voiceId,
   sampleIds:(p.sampleIds||[]).map(id=>assetMap[id]||id),
@@ -101,7 +112,8 @@ export async function importProjectBundle(file){
  const wasAligned=!!original.vocalAlignment&&!isAlignmentStale(original,original.vocalAlignment);
  const hadValidPhonemes=wasAligned&&!!original.phonemePlan&&!isPhonemePlanStale(original.vocalAlignment,original.phonemePlan);
  project={...project,id:genId('prj'),title:project.title+' (복원)',createdAt:now(),updatedAt:now(),voiceId:mapping[project.voiceId]||project.voiceId||'',characterId:mapping[project.characterId]||project.characterId||'',...(project.singingEngine?.modelId&&modelIdMap[project.singingEngine.modelId]?{singingEngine:{...project.singingEngine,modelId:modelIdMap[project.singingEngine.modelId]}}:{}),
- ...(project.singingModelId?{singingModelId:modelIdMap[project.singingModelId]||project.singingModelId}:{}),tracks:project.tracks.map(t=>({...t,id:genId('trk'),clips:(t.clips||[]).map(c=>({...c,id:genId('clip'),assetId:assetMap[c.assetId]||c.assetId}))})),scenes:(project.scenes||[]).map(s=>({...s,id:genId('scn'),characterId:mapping[s.characterId]||s.characterId||'',...(s.personMv?{personMv:{...s.personMv,personId:mapping[s.personMv.personId]||s.personMv.personId,referenceAssetId:assetMap[s.personMv.referenceAssetId]||s.personMv.referenceAssetId}}:{}),...(s.characterMv?{characterMv:{...s.characterMv,characterId:mapping[s.characterMv.characterId]||s.characterMv.characterId,referenceAssetId:assetMap[s.characterMv.referenceAssetId]||s.characterMv.referenceAssetId}}:{}),...(s.imageAssetId?{imageAssetId:assetMap[s.imageAssetId]||s.imageAssetId}:{}),...(s.videoClipAssetId?{videoClipAssetId:assetMap[s.videoClipAssetId]||s.videoClipAssetId}:{}),...(s.videoGeneration?{videoGeneration:{...s.videoGeneration,sourceKey:""}}:{}),...(s.characterReplace94?{characterReplace94:{...s.characterReplace94,history:(s.characterReplace94.history||[]).map(h=>({...h,scene:patchHistoricalScene(h.scene||{})}))}}:{}),...(s.regeneration92?{regeneration92:{...s.regeneration92,sourceAssetId:assetMap[s.regeneration92.sourceAssetId]||s.regeneration92.sourceAssetId,history:(s.regeneration92.history||[]).map(h=>({...h,imageAssetId:assetMap[h.imageAssetId]||h.imageAssetId,videoClipAssetId:assetMap[h.videoClipAssetId]||h.videoClipAssetId}))}}:{}),...(s.imageGeneration?{imageGeneration:{...s.imageGeneration,key:''}}:{})}))};
+ ...(project.singingModelId?{singingModelId:modelIdMap[project.singingModelId]||project.singingModelId}:{}),
+ ...(project.virtualSingerId?{virtualSingerId:virtualSingerIdMap[project.virtualSingerId]||project.virtualSingerId}:{}),tracks:project.tracks.map(t=>({...t,id:genId('trk'),clips:(t.clips||[]).map(c=>({...c,id:genId('clip'),assetId:assetMap[c.assetId]||c.assetId}))})),scenes:(project.scenes||[]).map(s=>({...s,id:genId('scn'),characterId:mapping[s.characterId]||s.characterId||'',...(s.personMv?{personMv:{...s.personMv,personId:mapping[s.personMv.personId]||s.personMv.personId,referenceAssetId:assetMap[s.personMv.referenceAssetId]||s.personMv.referenceAssetId}}:{}),...(s.characterMv?{characterMv:{...s.characterMv,characterId:mapping[s.characterMv.characterId]||s.characterMv.characterId,referenceAssetId:assetMap[s.characterMv.referenceAssetId]||s.characterMv.referenceAssetId}}:{}),...(s.imageAssetId?{imageAssetId:assetMap[s.imageAssetId]||s.imageAssetId}:{}),...(s.videoClipAssetId?{videoClipAssetId:assetMap[s.videoClipAssetId]||s.videoClipAssetId}:{}),...(s.videoGeneration?{videoGeneration:{...s.videoGeneration,sourceKey:""}}:{}),...(s.characterReplace94?{characterReplace94:{...s.characterReplace94,history:(s.characterReplace94.history||[]).map(h=>({...h,scene:patchHistoricalScene(h.scene||{})}))}}:{}),...(s.regeneration92?{regeneration92:{...s.regeneration92,sourceAssetId:assetMap[s.regeneration92.sourceAssetId]||s.regeneration92.sourceAssetId,history:(s.regeneration92.history||[]).map(h=>({...h,imageAssetId:assetMap[h.imageAssetId]||h.imageAssetId,videoClipAssetId:assetMap[h.videoClipAssetId]||h.videoClipAssetId}))}}:{}),...(s.imageGeneration?{imageGeneration:{...s.imageGeneration,key:''}}:{})}))};
  if(Array.isArray(original.deliverables))project.deliverables=original.deliverables.map(o=>({...o,assetId:assetMap[o.assetId]||o.assetId}));
  // 실제 두 Voice·캐릭터와 기존 독립 WAV 트랙 연결을 복원 후 신규 ID로 갱신.
  // 다른 사람의 백업 원본·기존 라이브러리 파일을 덮어쓰거나 교체하지 않는다.
@@ -149,5 +161,5 @@ export async function importProjectBundle(file){
  // STEP88: keep the source project reference portable when restoring its linked character.
  for(const c of characters){if(c.dance88?.projectId===original.id)c.dance88={...c.dance88,projectId:project.id};if(c.performance89?.projectId===original.id){const idMap=Object.fromEntries(oldTrackIds.map((id,i)=>[id,project.tracks[i]?.id]));c.performance89={...c.performance89,projectId:project.id,instruments:(c.performance89.instruments||[]).map(e=>({...e,trackId:idMap[e.trackId]||e.trackId}))};}}
  await putFilesAtomic(pendingAssets);
- return {project,voices,characters,voiceModels,trainingPlans,hasAudio:Object.keys(assets).length>0,portable:!!input.format};
+ return {project,voices,characters,voiceModels,trainingPlans,virtualSingers,hasAudio:Object.keys(assets).length>0,portable:!!input.format};
 }
