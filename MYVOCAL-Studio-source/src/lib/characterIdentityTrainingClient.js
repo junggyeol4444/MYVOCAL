@@ -99,3 +99,19 @@ export async function downloadCharacterIdentityLoRA(id,{session,request=fetch,si
  return new File([blob],'MYVOCAL-Identity-'+id+'.safetensors',
   {type:'application/octet-stream'});
 }
+
+export async function installCharacterIdentityLoRA(jobId,comfyRoot,{
+ session,request=fetch,signal
+}={}){
+ if(!/^[a-f0-9]{24}$/.test(jobId||'')||typeof comfyRoot!=='string'||
+  comfyRoot.length>2048||!comfyRoot.trim())throw Error('신규 모델 작업 ID와 설치된 ComfyUI 폴더가 필요합니다.');
+ const res=await checked(await request(endpoint+'install',{
+  method:'POST',headers:{...headers(session),'Content-Type':'application/json'},
+  body:JSON.stringify({jobId,comfyRoot,confirm:true}),cache:'no-store',signal
+ }),'로컬 ComfyUI에 신규 LoRA 모델 추가 실패');
+ const value=await res.json();
+ if(value?.installed!==true||value.jobId!==jobId||
+  value.loraName!=='MYVOCAL_Identity_'+jobId+'.safetensors')
+  throw Error('로컬 ComfyUI LoRA 모델 추가 결과가 일치하지 않습니다.');
+ return value;
+}
