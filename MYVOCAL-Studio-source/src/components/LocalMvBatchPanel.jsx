@@ -146,8 +146,8 @@ export default function LocalMvBatchPanel({project,data,checkpoint,videoModel,im
     seconds:Number(source.neuralAutoScore?.durationSec)||musicDuration,
     demucs:'htdemucs'};
    case 'neural-vocal':return {scoreAt,voice:singingVoiceId||source.voiceId,
-    backend:singingBackend,model:singingBackend==='diffsinger'?diffSingerModelId:
-     source.singingEngine?.modelId||'',style:singingStyle,
+    backend:singingBackend,model:singingBackend==='diffsinger'?diffSingerModelId:'',
+    externalPort:singingBackend==='external'?singingPort:'',style:singingStyle,
     harmony:makeHarmony,duet:makeDuet,adlib:makeNeuralAdlib,
     duetVoice:duetVoiceId,duetModel:diffSingerDuetModelId,
     pitch:harmonyDirection,convertRVC:alsoConvertRVC,rvcId:registeredRVCId};
