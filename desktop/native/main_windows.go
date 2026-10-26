@@ -154,7 +154,7 @@ func getTask()int{
  if int32(ret)<0{return 0}
  return int(ret)
 }
-var fieldNames=[10][7]string{
+var fieldNames=[13][7]string{
  {"Python.exe","MusicGen 모델 폴더","입력 (미사용)","보조 (미사용)","출력 WAV","곡 설명","길이(3~28초)"},
  {"Python.exe","RVC 설치 폴더","학습 데이터 폴더","보조 (미사용)","출력 모델 .pth","설명 (미사용)","학습 Epochs"},
  {"Python.exe","Demucs 모델 폴더","입력 음악 WAV","보조 (미사용)","출력 폴더","설명 (미사용)","모델 이름"},
@@ -165,6 +165,9 @@ var fieldNames=[10][7]string{
  {"Python.exe","MusicGen 모델 폴더","입력 (미사용)","보조 (미사용)","출력 WAV","곡 설명","길이(180~360초)"},
  {"Python (미사용)","모델 (미사용)","반주 WAV","보컬 WAV","출력 WAV","설명 (미사용)","보컬 음량(0~200%)"},
  {"Python (미사용)","모델 (미사용)","입력 (미사용)","보조 (미사용)","마이크 녹음 WAV","설명 (미사용)","녹음 길이(3~180초)"},
+ {"Python (미사용)","모델 (미사용)","입력 WAV","보조 (미사용)","새 출력 WAV","시작 시간(초)","종료 시간(초)"},
+ {"Python (미사용)","모델 (미사용)","입력 WAV","보조 (미사용)","새 출력 WAV","설명 (미사용)","목표 피크(10~100%)"},
+ {"Python (미사용)","모델 (미사용)","입력 WAV","보조 (미사용)","새 출력 WAV","페이드 인(초)","페이드 아웃(초)"},
 }
 func updateFields(){
  task:=getTask()
@@ -176,8 +179,10 @@ func updateFields(){
   if !pathField(task,i){v=0}
   enableWindow.Call(ui.browses[i],v)
  }
- defaults:=[]string{"12","20","htdemucs","0","","0","","180","100","30"}
+ defaults:=[]string{"12","20","htdemucs","0","","0","","180","100","30","10","95","2"}
  setText(ui.edits[6],defaults[task])
+ if task==taskWavTrim{setText(ui.edits[5],"0")}
+ if task==taskWavFade{setText(ui.edits[5],"2")}
  appendLog("\r\n모드: "+taskNames[task]+" (기존 사용자 파일은 덮어쓰지 않습니다)\r\n")
 }
 // Desktop-only Windows folder selection. No browser or remote file picker.
@@ -194,7 +199,7 @@ func pathField(task,index int)bool{
  if directoryField(task,index){return true}
  if index==0{return task!=taskMixWAV}
  if index==4{return true}
- if index==2{return task==taskDemucs||task==taskScoreVocal||task==taskLipSync||task==taskRVCConvert||task==taskDiffSinger||task==taskMixWAV}
+ if index==2{return task==taskDemucs||task==taskScoreVocal||task==taskLipSync||task==taskRVCConvert||task==taskDiffSinger||task==taskMixWAV||task==taskWavTrim||task==taskWavNormalize||task==taskWavFade}
  if index==3{return task==taskScoreVocal||task==taskLipSync||task==taskRVCConvert||task==taskMixWAV}
  if index==5{return task==taskRVCConvert}
  if index==6{return task==taskLipSync}
