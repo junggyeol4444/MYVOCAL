@@ -1,0 +1,33 @@
+name: MYVOCAL Native Windows EXE
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/native/**'
+      - 'desktop/build-windows.ps1'
+      - 'desktop/build-native-windows.ps1'
+      - '.github/workflows/native-windows-exe.yml'
+jobs:
+  build-native-windows:
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout full existing source
+        uses: actions/checkout@v4
+      - name: Set up Go for Win32 GUI build
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: false
+      - name: Build native EXE and bundle original local workers
+        shell: pwsh
+        run: .\desktop\build-windows.ps1
+      - name: Upload complete native EXE package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MYVOCAL-Studio-Native-Windows
+          path: MYVOCAL-Studio-Native-Windows.zip
+          if-no-files-found: error
+          retention-days: 30
