@@ -5,6 +5,7 @@
 import {analyzeMusicStructure} from './musicStructureAnalysis.js';
 import {createMusicStyleProfile} from './musicStyleProfile.js';
 import {createLearningRights,assertLearningPermission} from './learningRights.js';
+import {analyzeOwnedMusicTempoTonal8,suggestOwnedMusicTempoKey8} from './ownedMusicTempoTonal8.js';
 
 const int=(n,a,b)=>Number.isInteger(n)&&n>=a&&n<=b;
 const rounded=n=>Math.round(n*10000)/10000;
@@ -102,12 +103,22 @@ export async function analyzeOwnedMusicStyle8(entry,{
    entries:[entryManifest]
   });
   const energy32=ownedMusicEnergyCurve8(analysis);
+  abort();onProgress('원곡의 실제 PCM 비트 간격과 12개 음높이 클래스 조성 분석 중');
+  const audioFeatures8=frames>=sampleRate*8?
+   analyzeOwnedMusicTempoTonal8(pcm,sampleRate,{signal,onProgress}):null;
+  abort();
   return {...basic,version:2,id:basic.id,sourceLearningId:entry.id,
    ownerRights:entry.rights,energy32,
+   ...(audioFeatures8?{audioFeatures8}:{}),
    analysisSource:'actual-owned-local-pcm',
    learningScope:'original-song-energy-descriptors-only',
    trainedNeuralWeights:false,
-   unavailable:['inferred-bpm','inferred-key','inferred-genre','extracted-melody','separated-instruments']};
+   unavailable:[
+    ...(audioFeatures8?.rhythm.estimatedBpm?[]:['confident-inferred-bpm']),
+    ...(audioFeatures8?.tonality.estimatedKey?[]:['confident-inferred-key']),
+    'inferred-genre','extracted-melody','separated-instruments',
+    'detected-chord-progression','fully-neural-style-training'
+   ]};
  }finally{await context.close().catch(()=>{});}
 }
 export function validateOwnedMusicStyle8(style){
@@ -120,6 +131,19 @@ export function validateOwnedMusicStyle8(style){
   !Array.isArray(style.energy32)||style.energy32.length!==32||
   style.energy32.some(v=>!Number.isFinite(v)||v<0||v>2.5))
   throw Error('소유권 확인된 실제 오디오 분석 스타일 프로필만 재사용할 수 있습니다.');
+ if(style.audioFeatures8!==undefined&&(
+   style.audioFeatures8?.version!==1||
+   style.audioFeatures8.source!=='actual-owner-authorized-pcm-dsp'||
+   style.audioFeatures8.neuralTraining!==false||
+   (style.audioFeatures8.rhythm?.estimatedBpm!==null&&
+    (!Number.isInteger(style.audioFeatures8.rhythm?.estimatedBpm)||
+     style.audioFeatures8.rhythm.estimatedBpm<40||
+     style.audioFeatures8.rhythm.estimatedBpm>240))||
+   (style.audioFeatures8.tonality?.chroma12!==null&&
+    (!Array.isArray(style.audioFeatures8.tonality?.chroma12)||
+     style.audioFeatures8.tonality.chroma12.length!==12||
+     style.audioFeatures8.tonality.chroma12.some(x=>!Number.isFinite(x)||x<0||x>1)))))
+  throw Error('오디오 BPM·조성 추정 프로필 데이터가 올바르지 않습니다.');
  return true;
 }
 export function ownedMusicGuideForProject8(profile){
@@ -127,7 +151,14 @@ export function ownedMusicGuideForProject8(profile){
  return {version:1,type:'original-owned-music-energy-only',
   profileId:profile.id,sourceLearningId:profile.sourceLearningId,
   energy32:[...profile.energy32],sourceHash:profile.sources?.[0]?.sha256||'',
-  scope:'relative-dynamics-not-melody-or-composition'};
+  scope:'relative-dynamics-not-melody-or-composition',
+  ...(profile.audioFeatures8?{
+   estimatedBpm:profile.audioFeatures8.rhythm.estimatedBpm,
+   estimatedKey:profile.audioFeatures8.tonality.estimatedKey,
+   estimatedBpmConfidence:profile.audioFeatures8.rhythm.confidence,
+   estimatedKeyConfidence:profile.audioFeatures8.tonality.confidence,
+   note:'추정 BPM/조성은 수동 선택 전까지 원곡과 새 노래 BPM/Key를 변경하지 않음'
+  }: {})};
 }
 export function ownedMusicSectionEnergy8(project,position){
  const guide=project?.ownedMusicGuide8;
