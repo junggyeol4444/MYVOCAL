@@ -2,18 +2,20 @@
 // real SoundFont PCM stems -> single append-only IndexedDB/project transaction.
 // Do not confuse sample-rendered WAV stems with neural MusicGen audio or vocals.
 export const NEURAL_SONG_STEM_ROLES=Object.freeze(['melody','chords','bass','drums','guitar','pad']);
+export const NEURAL_SONG_STEM_ROLES9=Object.freeze([...NEURAL_SONG_STEM_ROLES,'harmony','piano','synth']);
 const cancelled=()=>Error('작곡 중 취소 또는 프로젝트 변경: 기존 녹음·모델·트랙을 그대로 보존했습니다.');
 export async function produceNeuralSongStems(project,generated,settings,{
   current,onChange,signal,newId,makeMidi,renderStem,readInfo,
   createTrack,saveAssets,removeAssets,onProgress=()=>{}
 }={}){
  if(!project?.id||!Array.isArray(project.tracks)||generated?.neuralSymbolic!==true||
- !Array.isArray(generated.tracks)||generated.tracks.length!==6||
+ !Array.isArray(generated.tracks)||![6,9].includes(generated.tracks.length)||
  [current,onChange,newId,makeMidi,renderStem,readInfo,createTrack,saveAssets,removeAssets].some(x=>typeof x!=='function'))
   throw Error('기존 프로젝트와 신경망 악기 렌더링 연결이 필요합니다.');
+ const expected=generated.tracks.length===9?NEURAL_SONG_STEM_ROLES9:NEURAL_SONG_STEM_ROLES;
  const roles=new Set(generated.tracks.map(t=>t.role));
- if(roles.size!==6||NEURAL_SONG_STEM_ROLES.some(r=>!roles.has(r))||
- generated.tracks.some(t=>!Array.isArray(t.midiNotes)||!t.midiNotes.length))throw Error('신경망 MIDI 악기 6개가 준비되지 않았습니다.');
+ if(roles.size!==expected.length||expected.some(r=>!roles.has(r))||
+ generated.tracks.some(t=>!Array.isArray(t.midiNotes)||!t.midiNotes.length))throw Error('신경망 MIDI 악기 역할과 음표가 모두 준비되지 않았습니다.');
  const verify=()=>{if(signal?.aborted||current()!==project)throw cancelled();};
  verify();
  const midi=[],pcm=[],assets=[],seen=new Set(project.tracks.map(t=>t.id));
@@ -26,7 +28,7 @@ export async function produceNeuralSongStems(project,generated,settings,{
   // Generate actual sampled instrument audio, not oscillator placeholders.
   const score=makeMidi({bpm,tracks:[source]});
   if(!(score instanceof Blob)||score.size<26)throw Error('실제 악기 MIDI 파일 생성에 실패했습니다.');
-  onProgress('신경망 작곡 악기 '+(i+1)+'/6 PCM 렌더링');
+  onProgress('신경망 작곡 악기 '+(i+1)+'/'+generated.tracks.length+' PCM 렌더링');
   const wav=await renderStem(score,settings,{signal});
   verify();
   if(!(wav instanceof Blob)||wav.size<44||wav.size>90*1024*1024)throw Error('실제 악기 PCM WAV가 생성되지 않았습니다.');
