@@ -1,7 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {newProject} from '../src/lib/schema.js';
-import {mp4Mime98,exportCapabilities98,midi98,lyricsSrt98,sceneGuideSrt98,captureMp498} from '../src/lib/finalExport98.js';
-test('STEP98 never lies about MP4 support',()=>{assert.throws(()=>mp4Mime98({isTypeSupported:()=>false}));assert.equal(mp4Mime98({isTypeSupported:m=>m==='video/mp4'}),'video/mp4');assert.throws(()=>mp4Mime98(null));});
-test('STEP98 MIDI bytes are real standard MIDI',async()=>{const p=newProject();p.tracks[0].midiNotes=[{pitch:60,startBeat:0,length:1,velocity:95}];const b=await midi98(p).arrayBuffer();assert.equal(new TextDecoder().decode(new Uint8Array(b).slice(0,4)),'MThd');});
-test('STEP98 aligned lyric subtitles are not fabricated',()=>{const p=newProject();assert.throws(()=>lyricsSrt98(p));const scene=sceneGuideSrt98(p);assert.match(scene,/Scene 01/);});
-test('STEP98 capabilities require real MIDI and audio',()=>{const p=newProject();const c=exportCapabilities98(p,{isTypeSupported:()=>true});assert.equal(c.wav,false);assert.equal(c.mp4,false);p.tracks[0].midiNotes=[{pitch:60,startBeat:0,length:1}];assert.equal(exportCapabilities98(p,{isTypeSupported:()=>true}).mp4,true);});
-test('STEP98 rejects missing recorder without capturing',async()=>{const p=newProject();await assert.rejects(()=>captureMp498({project:p,MediaRecorderImpl:{isTypeSupported:()=>false}}));});

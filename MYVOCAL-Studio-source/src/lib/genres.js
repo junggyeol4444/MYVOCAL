@@ -1,1 +1,0 @@
-export const genreList = ['K-Pop','Ballad','Rock','Pop','R&B','Hip-Hop','EDM','House','Techno','Metal','Punk','Jazz','City Pop','J-Pop','Anime Song','Vocal Synth','Orchestral','Cinematic','Acoustic','Lo-fi','Synthwave'];
