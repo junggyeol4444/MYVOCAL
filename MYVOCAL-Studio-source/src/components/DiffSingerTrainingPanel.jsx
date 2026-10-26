@@ -5,9 +5,9 @@ import {startDiffSingerTraining,readDiffSingerTrainingStatus,stopDiffSingerTrain
 // #06·#08·#33: 권리 있는 실제 노래 WAV·한국어 가사/MIDI 데이터→로컬 신경망 학습.
 // 모델 설치/호환 스크립트가 없으면 학습했다고 표시하지 않는다.
 const KEY='MYVOCAL_DIFFSINGER_TRAINING_PATHS';
-const defaults={root:'',python:'',script:'',args:'["--dataset","{dataset}","--output","{output}"]'};
+const defaults={mode:'official',root:'',python:'',config:'',script:'',args:'["--dataset","{dataset}","--output","{output}"]'};
 function restore(){try{const v=JSON.parse(window.localStorage.getItem(KEY)||'{}');return {
- root:String(v.root||''),python:String(v.python||''),script:String(v.script||''),args:String(v.args||defaults.args)};
+ mode:v.mode==='custom'?'custom':'official',root:String(v.root||''),python:String(v.python||''),config:String(v.config||''),script:String(v.script||''),args:String(v.args||defaults.args)};
  }catch{return defaults;}}
 const session=()=>window.__MYVOCAL_SESSION_KEY;
 const dl=file=>{const url=URL.createObjectURL(file),anchor=document.createElement('a');
@@ -57,22 +57,33 @@ export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle}){
    <input type="file" accept=".zip,application/zip" disabled={busy||working}
     onChange={e=>setBundle(e.target.files?.[0]||null)}/>
   </Field>
-  <Field label="설치된 DiffSinger 원본 폴더">
+  <Field label="학습 방식"><select disabled={busy||working} value={config.mode} onChange={e=>change('mode',e.target.value)}>
+  <option value="official">공식 DiffSinger: 실제 가창 데이터 이진화 + Acoustic 신경망 학습</option>
+  <option value="custom">별도로 설치한 호환 학습 스크립트</option>
+ </select></Field>
+ <Field label="설치된 DiffSinger 원본 폴더">
    <input disabled={busy||working} value={config.root} onChange={e=>change('root',e.target.value)} placeholder="D:\\DiffSinger"/>
   </Field>
   <Field label="설치된 Python.exe">
    <input disabled={busy||working} value={config.python} onChange={e=>change('python',e.target.value)} placeholder="D:\\DiffSinger\\venv\\Scripts\\python.exe"/>
   </Field>
-  <Field label="설치한 DiffSinger 버전에 맞는 실제 학습 스크립트 (.py)">
-   <input disabled={busy||working} value={config.script} onChange={e=>change('script',e.target.value)} placeholder="D:\\DiffSinger\\scripts\\train.py"/>
-  </Field>
-  <Field label="실제 학습 스크립트 CLI 인수(JSON 배열)">
-   <textarea rows={3} disabled={busy||working} value={config.args} onChange={e=>change('args',e.target.value)}/>
-  </Field>
-  <Notice><code>{'{dataset}'}</code>는 MYVOCAL이 생성한 실제 노래 녹음·음소 사본 폴더, <code>{'{output}'}</code>은 별도로 만든 신규 결과 폴더입니다. 이 입력값은 설치한 학습기의 실제 CLI와 일치해야 합니다. 공식 DiffSinger 배포본은 버전에 따라 데이터 binarize, configuration, acoustic/variance/vocoder 학습 절차가 달라 단순 인수만으로 실행되지 않을 수 있습니다. 임의 모델은 생성하거나 학습 성공으로 처리하지 않습니다.</Notice>
+  {config.mode==='official'?<>
+   <Field label="사용자가 준비한 Acoustic 학습 설정 YAML (DiffSinger 폴더 내부)">
+    <input disabled={busy||working} value={config.config} onChange={e=>change('config',e.target.value)} placeholder="D:\\DiffSinger\\configs\\my_acoustic.yaml"/>
+   </Field>
+   <Notice>공식 DiffSinger의 scripts/binarize.py → scripts/train.py 를 설치된 Python에서 실제 실행합니다. 원본 WAV는 작업별 데이터 폴더에 격리하며 매 작업마다 새 myvocal-* 실험 폴더를 만듭니다. 기존 가중치/실험에는 --reset을 사용하지 않습니다. 사용자의 YAML과 기반 발음 사전, 설치된 CUDA/보코더는 실제로 호환되어야 합니다. Acoustic 체크포인트는 원본 프로젝트와 분리된 새 이름으로 생성합니다.</Notice>
+  </>:<>
+   <Field label="설치한 별도 호환 신경망 학습 스크립트 (.py)">
+    <input disabled={busy||working} value={config.script} onChange={e=>change('script',e.target.value)} placeholder="D:\\DiffSinger\\custom_train.py"/>
+   </Field>
+   <Field label="호환 학습 스크립트 CLI 인수(JSON 배열)">
+    <textarea rows={3} disabled={busy||working} value={config.args} onChange={e=>change('args',e.target.value)}/>
+   </Field>
+   <Notice><code>{'{dataset}'}</code>는 실제 녹음 사본, <code>{'{output}'}</code>은 새 체크포인트 출력 폴더입니다. 이 방식은 해당 인수를 직접 지원하는 사용자 설치 스크립트가 필요합니다.</Notice>
+  </>}
   <label className="check-item"><input type="checkbox" disabled={busy||working} checked={rights} onChange={e=>setRights(e.target.checked)}/> 실제 녹음, 가사, 음소 사전과 모델 학습 권한을 확인했습니다.</label>
   <div className="mv7-actions">
-   <Button variant="primary" disabled={busy||working||!voice||!bundle||!rights} onClick={begin}>실제 DiffSinger 학습 시작</Button>
+   <Button variant="primary" disabled={busy||working||!voice||!bundle||!rights} onClick={begin}>{config.mode==='official'?'공식 DiffSinger 전처리·신경망 학습 시작':'사용자 설치 신경망 학습 시작'}</Button>
    <Button disabled={!working} onClick={cancel}>학습 중지</Button>
    <Button disabled={busy} onClick={async()=>{try{setState(await readDiffSingerTrainingStatus({session:session()}));}catch(e){setError(e.message);}}}>학습 상태 새로고침</Button>
    <Button disabled={busy||state?.state!=='completed'||state.voiceId!==voice?.id} onClick={saveWeights}>생성된 실제 신경망 가중치 저장</Button>
