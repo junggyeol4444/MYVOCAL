@@ -177,6 +177,40 @@ export async function importProjectBundle(file){
    ...(t.singerCharacterId?{singerCharacterId:mapping[t.singerCharacterId]||t.singerCharacterId}:{})
   }));
  }
+ // Original #55: restore native Song+MV stage checkpoints only when the
+ // matching REAL generated WAV/MIDI track and asset references were included.
+ // The resume signature can intentionally cease matching when a different
+ // model/voice is selected on the new PC. This never changes original media.
+ if(original.productionResume55?.version===1){
+  const ledger=original.productionResume55.history;
+  if(!Array.isArray(ledger)||ledger.length>16)
+   throw Error('전체 음악+MV 이어하기 기록이 누락되거나 허용 개수를 초과했습니다.');
+  const remapTrack=oldId=>{
+   const index=oldTrackIds.indexOf(oldId);
+   if(index<0||!project.tracks[index]?.id)
+    throw Error('자동 MV 제작 단계의 기존 음원 트랙이 프로젝트 백업에 없습니다.');
+   return project.tracks[index].id;
+  };
+  project.productionResume55={version:1,history:ledger.map(entry=>{
+   if(entry?.version!==1||entry.projectId!==original.id||
+      !Array.isArray(entry.output)||entry.output.length>48||
+      !Array.isArray(entry.startedWithTrackIds)||entry.startedWithTrackIds.length>512)
+    throw Error('자동 제작 단계의 MIDI·WAV 출처가 올바르지 않습니다.');
+   return {...entry,projectId:project.id,
+    startedWithTrackIds:entry.startedWithTrackIds.map(remapTrack),
+    output:entry.output.map(row=>{
+     if(!Array.isArray(row.assets)||row.assets.length>24)
+      throw Error('자동 제작 단계의 원곡 WAV 참조가 손상됐습니다.');
+     const assets=row.assets.map(id=>{
+      if(!assetMap[id])
+       throw Error('이어하기용 실제 원본 WAV가 백업에 포함되지 않았습니다.');
+      return assetMap[id];
+     });
+     return {...row,id:remapTrack(row.id),assets};
+    })
+   };
+  })};
+ }
  // Original #8: own-song energy MIDI edits must remain fully undoable
  // after portable restore. All original notes stay in metadata; source
  // audio is not included or converted into hidden training material.
