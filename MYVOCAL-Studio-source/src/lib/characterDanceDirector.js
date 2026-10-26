@@ -95,13 +95,19 @@ export function saveDancePlan(character,plan){validateDancePlan(character,plan);
 export function usableDancePlan(character){try{return character?.dance88?validateDancePlan(character,character.dance88):null;}catch{return null;}}
 export function danceStatus(character){if(!character?.dance88)return '춤 동작 계획 없음';return usableDancePlan(character)?'STEP88 춤 계획 저장됨':'춤 계획 재검토 필요';}
 export function danceAt(plan,time){if(!plan||!Number.isFinite(time)||!Array.isArray(plan.cues))return null;
- const ms=Math.round(time*1000);if(ms<0||ms>=plan.durationMs)return null;
+ // Virtual Band members can enter mid-song. This optional playback-only
+ // offset maps their local performance time back to the same original PCM
+ // song clock; it never changes stored choreography cue timestamps.
+ const offset=plan.playbackOffsetSec===undefined?0:plan.playbackOffsetSec;
+ if(!finite(offset,0,360))return null;
+ const songTime=time+offset;
+ const ms=Math.round(songTime*1000);if(ms<0||ms>=plan.durationMs)return null;
  let lo=0,hi=plan.cues.length-1,found=null;
  while(lo<=hi){const mid=(lo+hi)>>1,c=plan.cues[mid];if(ms<c.startMs)hi=mid-1;else if(ms>=c.endMs)lo=mid+1;else{found=c;break;}}
  if(!found)return null;
- const phase=(time*plan.bpm/60)%1,pulse=Math.sin(phase*2*Math.PI);
+ const phase=(songTime*plan.bpm/60)%1,pulse=Math.sin(phase*2*Math.PI);
  const fade=Math.max(0,Math.min(1,(ms-found.startMs)/100,(found.endMs-ms)/100));
- return {move:found.move,strength:found.strength*fade,section:found.section,beat:time*plan.bpm/60,phase,pulse,referenceMs:found.referenceStartMs===null?null:found.referenceStartMs+(ms-found.startMs)};
+ return {move:found.move,strength:found.strength*fade,section:found.section,beat:songTime*plan.bpm/60,phase,pulse,referenceMs:found.referenceStartMs===null?null:found.referenceStartMs+(ms-found.startMs)};
 }
 export function dancePose(plan,time){const at=danceAt(plan,time);if(!at)return null;
  const {move,pulse,phase}=at,k=at.strength;
