@@ -147,6 +147,9 @@ func openStudioProjectEditor()error{
 }
 func handleProjectCommand(id int)bool{
  switch id{
+ case idProjectAssets:
+  if err:=openStudioAssetLibrary();err!=nil{showError(err)}
+  return true
  case idProjectNew:
   _,err:=createStudioProject("새 음악 프로젝트")
   if err==nil{err=openStudioProjectEditor()}
