@@ -77,17 +77,23 @@ export async function exportFullSongPv95(project,settings,{
  });
  active=committed.project;
  onProgress('음악 포함 가사 PV WebM 프로젝트 새 산출물로 저장 완료');
- let mp4File=null;
+ let mp4File=null,mp4Error='';
  if(mp4){
-  guard();onProgress('Windows 로컬 FFmpeg로 완성 PV MP4 변환 중');
-  mp4File=await mp4Convert(movie,{session,signal});guard();
-  committed=await persistProductionDeliverables(committed.project,[{kind:'mp4',file:mp4File}],{
-   current,
-   onChange,newId,save,remove,signal
-  });
-  onProgress('음악 포함 3~6분 PV MP4도 원본과 별개 신규 파일로 저장 완료');
+  try{
+   guard();onProgress('Windows 로컬 FFmpeg로 완성 PV MP4 변환 중');
+   mp4File=await mp4Convert(movie,{session,signal});guard();
+   committed=await persistProductionDeliverables(committed.project,[{kind:'mp4',file:mp4File}],{
+    current,onChange,newId,save,remove,signal
+   });
+   active=committed.project;
+   onProgress('음악 포함 3~6분 PV MP4도 원본과 별개 신규 파일로 저장 완료');
+  }catch(error){
+   if(signal?.aborted||current()!==active)throw error;
+   mp4Error=error.message;
+   onProgress('실제 MP4 변환 실패 · 이미 저장한 음악 PV WebM은 보존: '+mp4Error);
+  }
  }
- return {project:committed.project,webm:movie,mp4:mp4File,
+ return {project:committed.project,webm:movie,mp4:mp4File,mp4Error,
   durationSec:duration,lyricCues:eligibility.lyricCues,
   realOriginalMusic:true,realVideo:true,originalsPreserved:true};
 }
