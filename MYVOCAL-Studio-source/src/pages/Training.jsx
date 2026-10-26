@@ -52,7 +52,7 @@ export default function Training({data,add,remove,notify,navigate}){
   const uses=modelDependents(data,model);
   if(uses.length)throw Error('사용 중인 모델 원본을 삭제할 수 없습니다: '+uses.join(', '));
   if(!confirm(`'${model.name}' 체크포인트를 로컬에서 삭제할까요?`))return;
-  const stored=[model.assetId,model.indexAssetId].filter(Boolean);
+  const stored=[model.assetId,model.indexAssetId,model.dictionaryAssetId].filter(Boolean);
   if(stored.length)await deleteFilesAtomic(stored);
   remove('voiceModels',model.id);
   notify('선택한 체크포인트와 연결된 FAISS 인덱스 신규 자산을 삭제한 뒤 등록 정보를 갱신했습니다.');
