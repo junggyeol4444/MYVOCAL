@@ -1,11 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Button,Field,Notice,Panel,Status} from './UI';
 import {startDiffSingerTraining,readDiffSingerTrainingStatus,stopDiffSingerTraining,downloadDiffSingerWeights,downloadDiffSingerTrainingDictionary} from '../lib/diffSingerTrainingClient.js';
-import {officialDiffSingerModelFromJob} from '../lib/diffSingerVoiceRegistry.js';
-import {parseDiffSingerDictionary} from '../lib/diffSingerNative.js';
-import {putFileNew,removeFile} from '../lib/assetDb.js';
-import {genId} from '../lib/schema.js';
-import {sha256File} from '../lib/voiceTraining.js';
+import {registerCompletedDiffSingerModel} from '../lib/diffSingerCheckpointArchive.js';
 
 // #06·#08·#33: 권리 있는 실제 노래 WAV·한국어 가사/MIDI 데이터→로컬 신경망 학습.
 // 모델 설치/호환 스크립트가 없으면 학습했다고 표시하지 않는다.
@@ -59,25 +55,16 @@ export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle,on
  async function registerModel(){
   if(busy)return;setBusy(true);setError('');
   try{
-   if(typeof add!=='function')throw Error('Voice Library 저장 기능을 사용할 수 없습니다.');
-   if(previousVoice.current!==voice?.id)throw Error('학습 시작 후 Voice가 바뀌었습니다.');
-   const record=officialDiffSingerModelFromJob(state,voice);
-   if(registeredModels.some(m=>m?.id===record.id))
-    throw Error('이 학습 모델은 이미 보존되어 있습니다. 기존 모델을 덮어쓰지 않습니다.');
-   const lexicon=await downloadDiffSingerTrainingDictionary(state.id,{session:session()});
-   parseDiffSingerDictionary(await lexicon.text());
-   if(previousVoice.current!==voice.id)throw Error('사전 수신 중 Voice가 변경됐습니다.');
-   const dictionaryAssetId=genId('diffsinger_dictionary');
-   record.dictionaryAssetId=dictionaryAssetId;
-   record.dictionarySha256=await sha256File(lexicon);
-   record.dictionaryName=lexicon.name;
-   await putFileNew(dictionaryAssetId,lexicon);
-   try{await Promise.resolve(add('voiceModels',record));}
-   catch(err){await removeFile(dictionaryAssetId).catch(()=>{});throw err;}
-   if(previousVoice.current!==voice.id)throw Error('Voice가 변경됐습니다. 원본 학습 작업을 다시 확인하세요.');
-   onModelReady?.(record);
-   notify('공식 DiffSinger Acoustic 체크포인트와 학습 당시 한국어 발음 사전을 별도 자산으로 Voice Library에 등록했습니다.');
-  }catch(e){setError(e.message||String(e));}finally{if(alive.current)setBusy(false);}
+   const originalVoiceId=voice?.id,originalJobId=state?.id;
+   const record=await registerCompletedDiffSingerModel(state,voice,{
+    session:session(),registeredModels,add,
+    isCurrent:()=>previousVoice.current===originalVoiceId&&
+      originalVoiceId===voice?.id&&originalJobId===state?.id
+   });
+   if(previousVoice.current===originalVoiceId)onModelReady?.(record);
+   notify('실제 DiffSinger Acoustic 체크포인트와 한국어 발음 사전 원본을 별도 IndexedDB 자산으로 저장하고 Voice Library에 연결했습니다. 기존 설치 모델은 유지됩니다.');
+  }catch(e){setError(e.message||String(e));}
+  finally{if(alive.current)setBusy(false);}
  }
  const working=state?.state==='running'||state?.state==='preparing';
  return <Panel title="본인 한국어 Singing · 실제 로컬 DiffSinger 학습" description="기존 EXE 안에서 내 노래 녹음·가사·MIDI의 학습 ZIP을 설치된 DiffSinger 신경망 학습 스크립트에 전달합니다. 실제 GPU 학습은 로컬 환경과 설치 모델에 달려 있습니다.">
@@ -121,12 +108,13 @@ export default function DiffSingerTrainingPanel({voice,notify,suggestedBundle,on
      onModelReady?.({voiceId:state.voiceId,python:state.python,root:state.root,experiment:state.experiment,trainingJobId:state.id});
      notify('실제로 생성된 공식 DiffSinger 새 acoustic 실험을 Singing 추론 화면에서 선택할 수 있습니다. 보코더 설치와 추론 품질은 아직 확인되지 않았습니다.');
    }}>이번 학습 모델을 Singing 가창 엔진에 연결</Button>
-   <Button disabled={busy||!add||registered||state?.state!=='completed'||!state?.checkpointAvailable||state?.mode!=='official'||state.voiceId!==voice?.id} onClick={registerModel}>{registered?'Voice Library 등록됨':'학습 모델·한국어 발음 사전을 Voice Library에 추가'}</Button>
+   <Button disabled={busy||!add||registered||state?.state!=='completed'||!state?.checkpointAvailable||state?.mode!=='official'||state.voiceId!==voice?.id} onClick={registerModel}>{registered?'Voice Library 등록됨':'실제 학습 가중치·한국어 발음 사전을 Voice Library에 보존'}</Button>
    <Button disabled={busy||working} onClick={()=>{try{window.localStorage.setItem(KEY,JSON.stringify(config));notify('설치 경로와 CLI 설정만 이 PC에 저장했습니다. 개인 녹음은 저장하지 않았습니다.');}catch(e){setError(e.message);}}}>현재 PC의 학습 경로 기억</Button>
   </div>
   <Status>{state?.state||'실행 전'} · {state?.message||'실제 학습은 실행하지 않았습니다.'}</Status>
   {state?.log&&<pre style={{whiteSpace:'pre-wrap',maxHeight:170,overflow:'auto'}}>{state.log}</pre>}
   {error&&<p role="alert" className="mv4-error">{error}</p>}
+  <Notice>학습 가중치까지 IndexedDB에 신규 자산으로 보존합니다. 프로젝트별 백업은 원본 총합 150MiB, 전체 작업공간 ZIP은 256MiB 제한이 있어 큰 가중치는 위의 개별 파일 다운로드로 별도 보관하세요.</Notice>
   <Notice>원본 녹음·기존 모델·프로젝트·IndexedDB를 덮어쓰지 않습니다. 로컬 학습이 새로운 .ckpt/.pth를 생성해도 한국어 발음, RVC 음색 유지, 가창 품질 및 Windows GPU 동작을 자동 증명하지 않습니다.</Notice>
  </Panel>;
 }
