@@ -33,7 +33,7 @@ const outputName=(title,kind)=>`MYVOCAL-${String(title||'Song').replace(/[^a-zA-
 const format=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 function safePort(text){const port=Number(text);if(!/^\d{4,5}$/.test(String(text))||!Number.isInteger(port)||port<1024||port>65535||port===58319)throw Error('엔진 포트는 1024~65535 사이(58319 제외)에서 선택하세요.');return port;}
 function download(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),3000)}
-export default function SingingWorkbench({project:p,data,onChange,notify}){
+export default function SingingWorkbench({project:p,data,onChange,notify,add}){
  const usable=(data.voices||[]).filter(v=>['self','owned','licensed'].includes(v.rights));
  const [voiceId,setVoiceId]=useState(p.voiceId||''),[modelMap,setModelMap]=useState({a:'',eo:'',i:'',u:''}),[busy,setBusy]=useState(false),[result,setResult]=useState(null),[url,setUrl]=useState('');
  const [port,setPort]=useState(String(p.singingEngine?.port||7867)),[bridgeState,setBridgeState]=useState('연결 확인 전'),[externalModelId,setExternalModelId]=useState(p.singingEngine?.modelId||''),[status,setStatus]=useState('');
@@ -321,7 +321,7 @@ export default function SingingWorkbench({project:p,data,onChange,notify}){
   </Panel>
   <DiffSingerNeuralPanel project={p} onChange={onChange} notify={notify} voice={voice} registeredModels={data.voiceModels||[]} trainedSuggestion={trainedDiffSinger?.voiceId===voice?.id?trainedDiffSinger:null}/>
   <SingingTakeDatasetPanel project={p} voice={voice} alignment={alignment} notify={notify} onDatasetReady={setNeuralDataset}/>
-  <DiffSingerTrainingPanel voice={voice} notify={notify} suggestedBundle={neuralDataset?.projectId===p.id&&neuralDataset?.voiceId===voice?.id?neuralDataset.file:null} onModelReady={setTrainedDiffSinger}/>
+  <DiffSingerTrainingPanel voice={voice} notify={notify} suggestedBundle={neuralDataset?.projectId===p.id&&neuralDataset?.voiceId===voice?.id?neuralDataset.file:null} onModelReady={setTrainedDiffSinger} add={add} registeredModels={data.voiceModels||[]}/>
    <RvcVoiceConversion project={p} onChange={onChange} notify={notify} sourceSuggestion={sourceVocal?.file||result?.file||null} registeredModels={data.voiceModels||[]} selectedVoiceId={voice?.id||''} voiceRights={voice?.rights||''}/>
   <Panel title="C. 별도 로컬 Singing 엔진 연결" description="Windows EXE가 같은 PC의 127.0.0.1에 사용자가 실행한 별도 로컬 프로세스로 가사·음표·모델 참조를 보내고 WAV를 받아옵니다. v1.2부터 설치된 엔진의 프로세스를 직접 시작할 수 있습니다.">
    <EngineManager port={port} onPort={setPort} requestBridge={requestBridge} notify={notify}/>
