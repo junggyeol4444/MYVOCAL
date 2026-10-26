@@ -43,6 +43,17 @@ export function mouthAtTime(overlay,sceneId,seconds){
   else {let w=Math.max(0,Math.min(1,(time-c.startMs)/60,(c.endMs-time)/60));
    if(overlay.duetAudioActivity&&row.role){const activity=overlay.duetAudioActivity;
     w*=activity.levels?.[row.role]?.[Math.floor(time/activity.stepMs)]||0;}
+   // A solo 2D character may use the original recorded/trained VOCAL PCM to
+   // close the mouth on genuinely silent syllables. Never gate to backing
+   // MusicGen/drums or another person's voice track.
+   if(overlay.singleVocalAudioActivity?.version===1){
+    const activity=overlay.singleVocalAudioActivity;
+    if(activity.characterId!==row.characterId||
+       activity.origin!=='actual-saved-vocal-pcm'||
+       activity.stepMs!==50||!Array.isArray(activity.levels))
+      throw Error('한 명의 실제 가창 WAV와 입 모양 캐릭터 연결이 일치하지 않습니다.');
+    w*=activity.levels[Math.floor(time/activity.stepMs)]||0;
+   }
    return {viseme:c.viseme,weight:w,lyric:c.lyric,characterId:row.characterId};}}
  return null;
 }
