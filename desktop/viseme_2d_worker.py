@@ -22,7 +22,7 @@ import soundfile as sf
 from PIL import Image, ImageDraw, ImageOps
 
 MAX_SECONDS = 360
-MAX_CUES = 400
+MAX_CUES = 4000
 MAX_IMAGE = 12 * 1024 * 1024
 MAX_AUDIO = 90 * 1024 * 1024
 MOUTH_VOWELS = {
@@ -39,7 +39,7 @@ def validate_cues(document):
         raise ValueError('기존 MYVOCAL 가사·MIDI 싱크 JSON이 필요합니다')
     cues = document.get('cues')
     if not isinstance(cues, list) or not 1 <= len(cues) <= MAX_CUES:
-        raise ValueError('가사 싱크 구간은 1~400개여야 합니다')
+        raise ValueError('가사 싱크 구간은 1~4000개여야 합니다')
     normalized = []
     previous = -1.0
     for cue in cues:
