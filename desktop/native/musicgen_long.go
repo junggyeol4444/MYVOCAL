@@ -49,7 +49,7 @@ func longMusicFingerprint(r request,segments []int)(string,error){
  if err!=nil{return "",err}
  if len(config)>8<<20{return "",errors.New("MusicGen 모델 설정 파일이 너무 큽니다")}
  configHash:=sha256.Sum256(config)
- identity,err:=json.Marshal([]interface{}{r.Python,r.Engine,r.Prompt,r.Option,segments,hex.EncodeToString(configHash[:])})
+ identity,err:=json.Marshal([]interface{}{r.Python,r.Engine,r.Prompt,r.Option,r.GenrePlan,segments,hex.EncodeToString(configHash[:])})
  if err!=nil{return "",err}
  digest:=sha256.Sum256(identity)
  return hex.EncodeToString(digest[:]),nil
@@ -178,7 +178,7 @@ func runLongMusicGen(ctx context.Context,r request,job jobSpec,logLine func(stri
    }
    scratch:=filepath.Join(work,fmt.Sprintf("new-%03d.wav",i+1))
    args:=[]string{job.args[0],"--model-dir",r.Engine,"--output",scratch,
-    "--prompt",r.Prompt,"--seconds",strconv.Itoa(seconds),"--seed",strconv.Itoa(i)}
+    "--prompt",longSegmentGenrePrompt(r.Prompt,r.GenrePlan,i,len(segments)),"--seconds",strconv.Itoa(seconds),"--seed",strconv.Itoa(i)}
    if i>0{args=append(args,"--audio-prompt",filepath.Join(work,fmt.Sprintf("tail-%03d.wav",i)))}
    logLine(fmt.Sprintf("\r\n장편 MusicGen %d/%d 구간 실제 생성 (%d초)\r\n",i+1,len(segments),seconds))
    if e=runProcess(ctx,jobSpec{exe:r.Python,args:args},logLine);e!=nil{
