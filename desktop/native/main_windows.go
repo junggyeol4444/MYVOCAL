@@ -247,6 +247,13 @@ func readRequest()request{
 func startTask(){
  ui.mu.Lock();busy:=ui.running;ui.mu.Unlock();if busy{return}
  r:=readRequest()
+ if r.Task==taskMusicGen||r.Task==taskLongMusicGen||r.Task==taskAILyrics{
+  p,path:=studioSnapshot()
+  if path!=""{
+   r.GenrePlan=p.GenrePlan
+   r.Prompt=promptWithGenre(p.GenrePlan,r.Prompt)
+  }
+ }
  if _,err:=prepareRequest(r);err!=nil{showError(err);return}
  _,projectAtStart:=studioSnapshot()
  ctx,cancel:=context.WithCancel(context.Background())
