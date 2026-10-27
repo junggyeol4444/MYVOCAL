@@ -43,11 +43,12 @@ func validateFullSongRequest(r fullSongRequest)error{
  for title,path:=range map[string]string{
   "Python.exe":r.Python,"FFmpeg.exe":r.FFmpeg,"악보 DS":r.ScoreDS,
   "음악 MIDI":r.MIDI,"SoundFont":r.SoundFont,"FluidSynth DLL":r.FluidSynthDLL,
-  "주인공 이미지":r.Portrait,"가사·음소 시간표":r.Alignment,
+  "주인공 이미지":r.Portrait,
  }{
   if err:=requireExistingFile(path);err!=nil{return fmt.Errorf("%s: %w",title,err)}
  }
  if err:=requireDirectory(r.DiffSingerRoot);err!=nil{return fmt.Errorf("DiffSinger 설치: %w",err)}
+ if r.Alignment!=""{if err:=requireExistingFile(r.Alignment);err!=nil{return fmt.Errorf("가사 싱크 시간표: %w",err)}}
  if !strings.EqualFold(filepath.Ext(r.Output),".mp4"){return errors.New("음악·MV 출력 파일은 .mp4여야 합니다")}
  if err:=preventOverwrite(r.Output);err!=nil{return err}
  if r.Pitch< -24||r.Pitch>24{return errors.New("음색 변환 반음 이동: -24~24")}
@@ -100,13 +101,19 @@ func runFullSong(ctx context.Context,r fullSongRequest,logLine func(string))erro
  logLine("\r\n[3/5] 신경망 보컬 샘플레이트·채널·곡 길이 맞춤\r\n")
  aligned:=filepath.Join(work,"vocal-timed.wav")
  if err=matchSongPCM(ctx,r.FFmpeg,rawVocal,aligned,rate,channels,frames,logLine);err!=nil{return err}
- if err=validateMVAlignment(r.Alignment,float64(frames)/float64(rate));err!=nil{
+ alignment:=r.Alignment
+ if alignment==""{
+  alignment=filepath.Join(work,"diffsinger-phoneme-alignment.json")
+  logLine("\r\nDS 악보의 음소 시간에서 립싱크 타임라인 생성 (실제 발음 정밀 동기화와 구별)\r\n")
+  if err=publishDSAlignment(r.ScoreDS,alignment,float64(frames)/float64(rate));err!=nil{return err}
+ }
+ if err=validateMVAlignment(alignment,float64(frames)/float64(rate));err!=nil{
   return fmt.Errorf("보컬 가사 시간표가 실제 곡 길이와 다릅니다: %w",err)
  }
  logLine("\r\n[4/5] 사용자가 지정한 음색 및 스토리보드를 뮤직비디오에 연결\r\n")
  mv:=mvProductionRequest{
   Python:r.Python,FFmpeg:r.FFmpeg,Portrait:r.Portrait,
-  Vocal:aligned,Accompaniment:rawBacking,Alignment:r.Alignment,
+  Vocal:aligned,Accompaniment:rawBacking,Alignment:alignment,
   VoiceModel:r.VoiceModel,RVCInstall:r.RVCRoot,Pitch:r.Pitch,
   Storyboard:r.Storyboard,Output:r.Output,Style:r.Style,
  }
