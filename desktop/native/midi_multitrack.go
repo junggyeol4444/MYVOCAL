@@ -65,10 +65,20 @@ func buildMultiMIDI(bpm int,source string)([]byte,error){
  binary.Write(&result,binary.BigEndian,uint16(1))
  binary.Write(&result,binary.BigEndian,uint16(len(tracks)))
  binary.Write(&result,binary.BigEndian,uint16(midiPPQ))
+ melodicChannel:=0
+ haveDrums:=false
  for index,t:=range tracks{
-  channel:=byte(index)
-  if channel>=9{channel++}
-  if channel>=16{return nil,errors.New("MIDI 채널 범위 초과")}
+  var channel byte
+  isDrum:=strings.EqualFold(t.Name,"Drums")||strings.EqualFold(t.Name,"Drum")||t.Name=="드럼"
+  if isDrum {
+   if haveDrums{return nil,errors.New("드럼 MIDI 트랙은 한 개만 허용됩니다")}
+   haveDrums=true;channel=9
+  }else{
+   channel=byte(melodicChannel)
+   if channel>=9{channel++}
+   if channel>=16{return nil,errors.New("멜로디 MIDI 채널 범위 초과")}
+   melodicChannel++
+  }
   var stream bytes.Buffer
   stream.WriteByte(0)
   stream.Write([]byte{0xff,0x03})
