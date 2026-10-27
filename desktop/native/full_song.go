@@ -4,6 +4,7 @@ import (
  "context"
  "errors"
  "fmt"
+ "io"
  "os"
  "path/filepath"
  "strconv"
@@ -31,6 +32,7 @@ type fullSongRequest struct {
  Storyboard string
  Style string
  Pitch int
+ SeparateStems bool
  RightsConfirmed bool
 }
 
@@ -134,7 +136,13 @@ func runFullSong(ctx context.Context,r fullSongRequest,logLine func(string))erro
  mixPath:=filepath.Join(work,"full-song-mix.wav")
  if err=mixNativePCM(ctx,request{Task:taskMixWAV,Input:rawBacking,Auxiliary:finalVocal,
   Output:mixPath,Option:"100"},logLine);err!=nil{return fmt.Errorf("완성 MP4는 생성했지만 분리 믹스 WAV 작성 실패: %w",err)}
- if err=publishSongTracks(r.Output,finalVocal,rawBacking,mixPath,alignment);err!=nil{
+ additional:=[]producedStem{}
+ if r.SeparateStems{
+  logLine("\r\n[개별 악기] 각 MIDI 악기 트랙을 별도 SoundFont WAV로 제작\r\n")
+  additional,err=createSeparateInstrumentStems(ctx,r,work,rate,channels,frames,logLine)
+  if err!=nil{return fmt.Errorf("완성 MP4는 생성했지만 요청한 독립 악기 WAV 생성 실패: %w",err)}
+ }
+ if err=publishSongTracks(r.Output,finalVocal,rawBacking,mixPath,alignment,additional);err!=nil{
   return fmt.Errorf("완성 MP4는 생성했지만 개별 트랙 출력을 완료하지 못했습니다: %w",err)
  }
  logLine("\r\nDiffSinger + SoundFont + 2D MV 및 편집용 3개 WAV 제작: "+r.Output+"\r\n")
@@ -144,7 +152,7 @@ func runFullSong(ctx context.Context,r fullSongRequest,logLine func(string))erro
 func songTracksFolder(output string)string{
  return strings.TrimSuffix(output,filepath.Ext(output))+".tracks"
 }
-func publishSongTracks(output,vocal,backing,mixed,alignment string)error{
+func publishSongTracks(output,vocal,backing,mixed,alignment string,additional []producedStem)error{
  folder:=songTracksFolder(output)
  if err:=os.Mkdir(folder,0700);err!=nil{return err}
  // All files are inside our newly created directory and on the same local
@@ -155,10 +163,25 @@ func publishSongTracks(output,vocal,backing,mixed,alignment string)error{
   {mixed,"03-full-mix.wav"},
   {alignment,"04-phoneme-alignment.json"},
  }
+ for _,extra:=range additional{
+  if filepath.Base(extra.File)!=extra.File||extra.File==""{return errors.New("악기 출력 이름에 잘못된 경로가 있습니다")}
+  targets=append(targets,struct{source,name string}{extra.Source,extra.File})
+ }
  for _,entry:=range targets{
   if err:=requireExistingFile(entry.source);err!=nil{return err}
-  if err:=os.Link(entry.source,filepath.Join(folder,entry.name));err!=nil{
-   return fmt.Errorf("트랙 %s 출력 실패: %w",entry.name,err)
+  outputPath:=filepath.Join(folder,entry.name)
+  if err:=os.Link(entry.source,outputPath);err!=nil{
+   // A user-supplied alignment JSON may live on another volume. Only a new
+   // exclusive destination is allowed; never modify the source JSON.
+   if entry.name!="04-phoneme-alignment.json"{return fmt.Errorf("트랙 %s 출력 실패: %w",entry.name,err)}
+   source,e:=os.Open(entry.source);if e!=nil{return e}
+   output,e:=os.OpenFile(outputPath,os.O_WRONLY|os.O_CREATE|os.O_EXCL,0600)
+   if e!=nil{source.Close();return e}
+   _,e=io.Copy(output,source)
+   if e==nil{e=output.Sync()}
+   if ce:=output.Close();e==nil{e=ce}
+   source.Close()
+   if e!=nil{return e}
   }
  }
  return nil
