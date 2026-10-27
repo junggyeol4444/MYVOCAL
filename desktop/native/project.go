@@ -33,6 +33,7 @@ type studioProject struct {
  MIDINotes string
  MIDIProgram int
  Genres string
+ GenrePlan studioGenrePlan
  BPM int
  Key string
  VoiceModel string
@@ -83,7 +84,7 @@ func createStudioProject(name string) (studioProject,error) {
  now:=time.Now().Format(time.RFC3339)
  p:=studioProject{
   Format:studioProjectFormat,Version:studioProjectVersion,ID:id,
-  Name:name,Genres:"K-Pop 100%",BPM:120,Key:"C major",
+  Name:name,Genres:"K-Pop 100%",GenrePlan:defaultGenrePlan(),BPM:120,Key:"C major",
   CreatedAt:now,UpdatedAt:now,Assets:[]studioAsset{},
  }
  path:=filepath.Join(folder,"project.json")
@@ -97,6 +98,7 @@ func validateStudioProject(p studioProject)error{
   return errors.New("프로젝트 ID 또는 이름이 잘못되었습니다")
  }
  if p.BPM<20||p.BPM>320{return errors.New("BPM은 20~320이어야 합니다")}
+ if err:=validateGenrePlan(p.GenrePlan);err!=nil{return err}
  if p.MIDIProgram<0||p.MIDIProgram>127||len(p.MIDINotes)>500000{return errors.New("프로젝트 MIDI 입력 범위 오류")}
  if len(p.Concept)>10000||len(p.Lyrics)>300000||len(p.Genres)>5000||len(p.Key)>100||
  len(p.VoiceModel)>32767||len(p.Character)>1000||len(p.VideoStyle)>1000||len(p.Storyboard)>32767||
@@ -242,6 +244,20 @@ func updateStudioStoryboard(path string)error{
  if studioPath==""{return errors.New("스토리보드를 저장할 프로젝트가 없습니다")}
  p:=studioCurrent
  p.Storyboard=path
+ p.UpdatedAt=time.Now().Format(time.RFC3339)
+ if err:=writeProjectFile(studioPath,p,false);err!=nil{return err}
+ studioCurrent=p
+ return nil
+}
+
+func updateStudioGenrePlan(plan studioGenrePlan)error{
+ if err:=validateGenrePlan(plan);err!=nil{return err}
+ studioMu.Lock()
+ defer studioMu.Unlock()
+ if studioPath==""{return errors.New("장르 설정을 저장할 프로젝트를 먼저 열어야 합니다")}
+ p:=studioCurrent
+ p.GenrePlan=plan
+ p.Genres=genrePlanSummary(plan)
  p.UpdatedAt=time.Now().Format(time.RFC3339)
  if err:=writeProjectFile(studioPath,p,false);err!=nil{return err}
  studioCurrent=p
