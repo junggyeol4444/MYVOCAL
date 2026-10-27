@@ -42,13 +42,13 @@ func parseLyricCueEditor(source string)([]lyricTimingCue,error){
   for _,r:=range lyric{if unicode.IsControl(r){return nil,fmt.Errorf("%d행: 가사에 제어 문자가 있습니다",i+1)}}
   cues=append(cues,lyricTimingCue{StartSec:a,EndSec:b,Lyric:lyric})
   lastStart=a
-  if len(cues)>400{return nil,errors.New("립싱크 가사 구간은 400개 이하여야 합니다")}
+  if len(cues)>maxPhonemeCues{return nil,errors.New("립싱크 가사 구간은 4000개 이하여야 합니다")}
  }
  if len(cues)==0{return nil,errors.New("가사 시간 구간이 하나도 없습니다")}
  return cues,nil
 }
 func encodeLyricTiming(cues []lyricTimingCue)([]byte,error){
- if len(cues)==0||len(cues)>400{return nil,errors.New("가사 구간은 1~400개가 필요합니다")}
+ if len(cues)==0||len(cues)>maxPhonemeCues{return nil,errors.New("가사 구간은 1~4000개가 필요합니다")}
  var lines strings.Builder
  for _,c:=range cues{fmt.Fprintf(&lines,"%.3f|%.3f|%s\n",c.StartSec,c.EndSec,c.Lyric)}
  if _,err:=parseLyricCueEditor(lines.String());err!=nil{return nil,err}
