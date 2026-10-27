@@ -304,7 +304,8 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   callCreate("BUTTON","AI 가창+반주+MV 원클릭",wsChild|wsVisible,20,744,308,38,hwnd,idFullSong)
   callCreate("BUTTON","원본 장르·구간 설정",wsChild|wsVisible,344,744,246,38,hwnd,idGenreStudio)
   callCreate("BUTTON","8개 기능 시작 화면",wsChild|wsVisible,606,744,264,38,hwnd,idWelcomeOpen)
-  ui.projectStatus=callCreate("STATIC",projectStatusText(),wsChild|wsVisible,20,794,960,46,hwnd,0)
+  callCreate("BUTTON","내 AI 가수 녹음·학습",wsChild|wsVisible,20,793,260,38,hwnd,idVoiceStudio)
+  ui.projectStatus=callCreate("STATIC",projectStatusText(),wsChild|wsVisible,20,842,960,46,hwnd,0)
   enableWindow.Call(ui.cancelButton,0)
   if pythonPath,err:=exec.LookPath("python.exe");err==nil&&filepath.IsAbs(pythonPath){setText(ui.edits[0],pythonPath)}
   updateFields()
@@ -317,6 +318,7 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   if id==idFullSong{if err:=openNativeFullSongStudio();err!=nil{showError(err)};return 0}
   if id==idGenreStudio{if err:=openGenreStudio();err!=nil{showError(err)};return 0}
   if id==idWelcomeOpen{if err:=openOriginalHome();err!=nil{showError(err)};return 0}
+  if id==idVoiceStudio{if err:=openNativeVoiceStudio();err!=nil{showError(err)};return 0}
   if handleProjectCommand(id){return 0}
   if id==idTask&&notify==cbnSelChange{updateFields();return 0}
   if id==idStart{startTask();return 0}
@@ -346,7 +348,7 @@ func main(){
  wc:=wndClassEx{Size:uint32(unsafe.Sizeof(wndClassEx{})),WndProc:syscall.NewCallback(handleWindow),Instance:instance,Background:uintptr(6),ClassName:clsName}
  ret,_,e:=registerClass.Call(uintptr(unsafe.Pointer(&wc)))
  if ret==0{fmt.Fprintln(os.Stderr,"Window class:",e);return}
- hwnd:=callCreate("MYVOCALPureNativeWindows","MYVOCAL Studio - Native EXE",wsOverlappedWindow|wsVisible,100,50,1020,915,0,0)
+ hwnd:=callCreate("MYVOCALPureNativeWindows","MYVOCAL Studio - Native EXE",wsOverlappedWindow|wsVisible,100,50,1020,985,0,0)
  if hwnd==0{fmt.Fprintln(os.Stderr,"Windows GUI 생성 실패");return}
  showWindow.Call(hwnd,1);updateWindow.Call(hwnd)
  if err:=openOriginalHome();err!=nil{showError(err)}
