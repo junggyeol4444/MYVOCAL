@@ -6,6 +6,7 @@ import (
  "fmt"
  "os"
  "path/filepath"
+ "strconv"
  "strings"
 )
 
@@ -51,6 +52,7 @@ func validateFullSongRequest(r fullSongRequest)error{
  if r.Alignment!=""{if err:=requireExistingFile(r.Alignment);err!=nil{return fmt.Errorf("가사 싱크 시간표: %w",err)}}
  if !strings.EqualFold(filepath.Ext(r.Output),".mp4"){return errors.New("음악·MV 출력 파일은 .mp4여야 합니다")}
  if err:=preventOverwrite(r.Output);err!=nil{return err}
+ if _,err:=os.Lstat(songTracksFolder(r.Output));err==nil{return errors.New("같은 이름의 음악 개별 트랙 폴더가 이미 존재합니다. 새 MP4 이름을 지정하세요")}else if !os.IsNotExist(err){return err}
  if r.Pitch< -24||r.Pitch>24{return errors.New("음색 변환 반음 이동: -24~24")}
  if r.VoiceModel!=""{
   if err:=requireExistingFile(r.VoiceModel);err!=nil{return err}
@@ -110,15 +112,54 @@ func runFullSong(ctx context.Context,r fullSongRequest,logLine func(string))erro
  if err=validateMVAlignment(alignment,float64(frames)/float64(rate));err!=nil{
   return fmt.Errorf("보컬 가사 시간표가 실제 곡 길이와 다릅니다: %w",err)
  }
- logLine("\r\n[4/5] 사용자가 지정한 음색 및 스토리보드를 뮤직비디오에 연결\r\n")
+ finalVocal:=aligned
+ if r.VoiceModel!=""{
+  logLine("\r\n[4/5] 학습된 내 음색 모델로 전곡 가창 변환\r\n")
+  converted:=filepath.Join(work,"my-voice-raw.wav")
+  modelReq:=request{Task:taskRVCConvert,Python:r.Python,Engine:r.RVCRoot,
+   Input:aligned,Auxiliary:r.VoiceModel,Output:converted,Option:strconv.Itoa(r.Pitch)}
+  if err=executeJob(ctx,modelReq,logLine);err!=nil{return fmt.Errorf("학습한 목소리로 전곡 변환: %w",err)}
+  finalVocal=filepath.Join(work,"my-voice-aligned.wav")
+  if err=matchSongPCM(ctx,r.FFmpeg,converted,finalVocal,rate,channels,frames,logLine);err!=nil{return err}
+ }
+ logLine("\r\n[4/5] 음색 및 스토리보드를 뮤직비디오에 연결\r\n")
  mv:=mvProductionRequest{
   Python:r.Python,FFmpeg:r.FFmpeg,Portrait:r.Portrait,
-  Vocal:aligned,Accompaniment:rawBacking,Alignment:alignment,
-  VoiceModel:r.VoiceModel,RVCInstall:r.RVCRoot,Pitch:r.Pitch,
+  Vocal:finalVocal,Accompaniment:rawBacking,Alignment:alignment,
   Storyboard:r.Storyboard,Output:r.Output,Style:r.Style,
  }
  logLine("\r\n[5/5] 믹싱·가사 립싱크·장면 연출·완성 MP4 자동 제작\r\n")
  if err=runMusicMVProduction(ctx,mv,logLine);err!=nil{return err}
- logLine("\r\nDiffSinger 노래 + SoundFont 다중악기 + 2D MV 생성 경로 완료: "+r.Output+"\r\n")
+ // Preserve editable vocal/instrumental/mix as separate, newly created files.
+ mixPath:=filepath.Join(work,"full-song-mix.wav")
+ if err=mixNativePCM(ctx,request{Task:taskMixWAV,Input:rawBacking,Auxiliary:finalVocal,
+  Output:mixPath,Option:"100"},logLine);err!=nil{return fmt.Errorf("완성 MP4는 생성했지만 분리 믹스 WAV 작성 실패: %w",err)}
+ if err=publishSongTracks(r.Output,finalVocal,rawBacking,mixPath,alignment);err!=nil{
+  return fmt.Errorf("완성 MP4는 생성했지만 개별 트랙 출력을 완료하지 못했습니다: %w",err)
+ }
+ logLine("\r\nDiffSinger + SoundFont + 2D MV 및 편집용 3개 WAV 제작: "+r.Output+"\r\n")
+ return nil
+}
+
+func songTracksFolder(output string)string{
+ return strings.TrimSuffix(output,filepath.Ext(output))+".tracks"
+}
+func publishSongTracks(output,vocal,backing,mixed,alignment string)error{
+ folder:=songTracksFolder(output)
+ if err:=os.Mkdir(folder,0700);err!=nil{return err}
+ // All files are inside our newly created directory and on the same local
+ // volume as the scratch directory. Exclusive hard links never overwrite.
+ targets:=[]struct{source,name string}{
+  {vocal,"01-vocal.wav"},
+  {backing,"02-instrumental.wav"},
+  {mixed,"03-full-mix.wav"},
+  {alignment,"04-phoneme-alignment.json"},
+ }
+ for _,entry:=range targets{
+  if err:=requireExistingFile(entry.source);err!=nil{return err}
+  if err:=os.Link(entry.source,filepath.Join(folder,entry.name));err!=nil{
+   return fmt.Errorf("트랙 %s 출력 실패: %w",entry.name,err)
+  }
+ }
  return nil
 }
