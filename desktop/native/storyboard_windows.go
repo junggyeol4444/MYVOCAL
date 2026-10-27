@@ -17,6 +17,7 @@ const(
  idStoryboardOpen=1100
  idStoryboardSave=1101
  idStoryboardClose=1102
+ idStoryboardCueDraft=1103
 )
 type storyboardGUI struct{ hwnd,editor,status uintptr }
 var sceneGUI storyboardGUI
@@ -44,6 +45,16 @@ func chooseStoryboardJSON(save bool)(string,bool){
  if ok==0{return "",false}
  return syscall.UTF16ToString(buf[:]),true
 }
+func selectCueForStoryDraft()(string,bool){
+ var buf [32768]uint16
+ filter:=syscall.StringToUTF16("가사·립싱크 싱크 JSON\x00*.json\x00\x00")
+ opts:=openFileName{Size:uint32(unsafe.Sizeof(openFileName{})),Owner:sceneGUI.hwnd,
+  File:&buf[0],MaxFile:uint32(len(buf)),Filter:&filter[0],
+  Flags:0x00000800|0x00080000|0x00001000}
+ chosen,_,_:=openDialog.Call(uintptr(unsafe.Pointer(&opts)))
+ if chosen==0{return "",false}
+ return syscall.UTF16ToString(buf[:]),true
+}
 func storyboardWinProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
  switch message{
  case wmCreate:
@@ -53,9 +64,10 @@ func storyboardWinProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr
   callCreate("STATIC","연출 방식: static / performance / story / mixed   ·   장면 설명은 프로젝트 메타데이터로 보존",wsChild|wsVisible,20,80,800,28,hwnd,0)
   sceneGUI.editor=callCreate("EDIT","0|12|performance|첫 공연 장면",wsChild|wsVisible|wsBorder|wsVScroll|esMultiline|esAutoVScroll,20,116,800,425,hwnd,0)
   sendMessage.Call(sceneGUI.editor,0x00C5,60000,0)
-  callCreate("BUTTON","스토리보드 JSON 열기",wsChild|wsVisible,20,554,226,42,hwnd,idStoryboardOpen)
-  callCreate("BUTTON","새 스토리보드 저장",wsChild|wsVisible,257,554,224,42,hwnd,idStoryboardSave)
-  callCreate("BUTTON","닫기",wsChild|wsVisible,493,554,153,42,hwnd,idStoryboardClose)
+  callCreate("BUTTON","가사 싱크 기준 장면 초안",wsChild|wsVisible,20,554,230,42,hwnd,idStoryboardCueDraft)
+  callCreate("BUTTON","JSON 열기",wsChild|wsVisible,264,554,172,42,hwnd,idStoryboardOpen)
+  callCreate("BUTTON","새 JSON 저장",wsChild|wsVisible,450,554,180,42,hwnd,idStoryboardSave)
+  callCreate("BUTTON","닫기",wsChild|wsVisible,645,554,175,42,hwnd,idStoryboardClose)
   sceneGUI.status=callCreate("STATIC","장면별 카메라 연출을 지정합니다. 인물·의상 자동 재생성이나 3D 모션은 별도 기능입니다.",wsChild|wsVisible,20,613,800,56,hwnd,0)
   project,hasProject:=studioSnapshot()
   if hasProject!=""&&project.Storyboard!=""{
@@ -66,6 +78,14 @@ func storyboardWinProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr
  case wmCommand:
   id:=int(wparam&0xffff)
   switch id{
+  case idStoryboardCueDraft:
+   if path,ok:=selectCueForStoryDraft();ok{
+    source,err:=draftStoryboardFromLyricCues(path)
+    if err!=nil{showError(err);return 0}
+    setText(sceneGUI.editor,source)
+    setText(sceneGUI.status,"가사 시간에 맞춰 만든 임시 장면입니다. 공연/스토리 패턴과 연출을 직접 수정하세요.")
+   }
+   return 0
   case idStoryboardOpen:
    if path,ok:=chooseStoryboardJSON(false);ok{
     doc,err:=openNativeStoryboard(path)
