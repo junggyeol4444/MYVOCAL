@@ -291,6 +291,7 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   callCreate("BUTTON","자산 라이브러리",wsChild|wsVisible,728,660,170,35,hwnd,idProjectAssets)
   callCreate("BUTTON","MIDI 작곡·편집",wsChild|wsVisible,20,704,205,34,hwnd,idMIDIEditor)
   callCreate("BUTTON","음악+보컬+2D MV",wsChild|wsVisible,240,704,236,34,hwnd,idMVStudio)
+  callCreate("BUTTON","가사·립싱크 싱크 편집",wsChild|wsVisible,493,704,246,34,hwnd,idNativeSyncEditor)
   ui.projectStatus=callCreate("STATIC",projectStatusText(),wsChild|wsVisible,20,747,960,46,hwnd,0)
   enableWindow.Call(ui.cancelButton,0)
   if pythonPath,err:=exec.LookPath("python.exe");err==nil&&filepath.IsAbs(pythonPath){setText(ui.edits[0],pythonPath)}
@@ -299,6 +300,7 @@ func handleWindow(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
  case wmCommand:
   id:=int(wparam&0xffff);notify:=int((wparam>>16)&0xffff)
   if id==idMVStudio{if err:=openNativeMVStudio();err!=nil{showError(err)};return 0}
+  if id==idNativeSyncEditor{if err:=openNativeSyncStudio();err!=nil{showError(err)};return 0}
   if handleProjectCommand(id){return 0}
   if id==idTask&&notify==cbnSelChange{updateFields();return 0}
   if id==idStart{startTask();return 0}
