@@ -154,7 +154,7 @@ func getTask()int{
  if int32(ret)<0{return 0}
  return int(ret)
 }
-var fieldNames=[15][7]string{
+var fieldNames=[16][7]string{
  {"Python.exe","MusicGen 모델 폴더","입력 (미사용)","보조 (미사용)","출력 WAV","곡 설명","길이(3~28초)"},
  {"Python.exe","RVC 설치 폴더","학습 데이터 폴더","보조 (미사용)","출력 모델 .pth","설명 (미사용)","학습 Epochs"},
  {"Python.exe","Demucs 모델 폴더","입력 음악 WAV","보조 (미사용)","출력 폴더","설명 (미사용)","모델 이름"},
@@ -170,6 +170,7 @@ var fieldNames=[15][7]string{
  {"Python (미사용)","모델 (미사용)","입력 WAV","보조 (미사용)","새 출력 WAV","페이드 인(초)","페이드 아웃(초)"},
  {"Python.exe","FluidSynth DLL","입력 MIDI","SoundFont SF2/SF3","출력 악기 WAV","합성 음량(0.01~1)","샘플레이트(44100/48000)"},
  {"llama-cli.exe","GGUF 모델 파일","입력 (미사용)","보조 (미사용)","출력 가사 TXT","노래 주제·장르·설명","생성 토큰(128~2048)"},
+ {"llama-cli.exe","GGUF 작곡 모델 파일","입력 (미사용)","보조 (미사용)","출력 MIDI .mid","곡 설명·구조·악기 스타일","생성 토큰(512~4096)"},
 }
 func updateFields(){
  task:=getTask()
@@ -181,7 +182,7 @@ func updateFields(){
   if !pathField(task,i){v=0}
   enableWindow.Call(ui.browses[i],v)
  }
- defaults:=[]string{"12","20","htdemucs","0","","0","","180","100","30","10","95","2","44100","768"}
+ defaults:=[]string{"12","20","htdemucs","0","","0","","180","100","30","10","95","2","44100","768","3072"}
  setText(ui.edits[6],defaults[task])
  if task==taskWavTrim{setText(ui.edits[5],"0")}
  if task==taskWavFade{setText(ui.edits[5],"2")}
@@ -206,7 +207,7 @@ func pathField(task,index int)bool{
  if index==3{return task==taskScoreVocal||task==taskLipSync||task==taskRVCConvert||task==taskMixWAV||task==taskSoundFont}
  if index==5{return task==taskRVCConvert}
  if index==6{return task==taskLipSync}
- if index==1{return task==taskLipSync||task==taskSoundFont||task==taskAILyrics}
+ if index==1{return task==taskLipSync||task==taskSoundFont||task==taskAILyrics||task==taskAIComposer}
  return false
 }
 func folderPicker() (string,bool){
@@ -247,11 +248,11 @@ func readRequest()request{
 func startTask(){
  ui.mu.Lock();busy:=ui.running;ui.mu.Unlock();if busy{return}
  r:=readRequest()
- if r.Task==taskMusicGen||r.Task==taskLongMusicGen||r.Task==taskAILyrics{
+ if r.Task==taskMusicGen||r.Task==taskLongMusicGen||r.Task==taskAILyrics||r.Task==taskAIComposer{
   p,path:=studioSnapshot()
   if path!=""{
    r.GenrePlan=p.GenrePlan
-   r.Prompt=promptWithGenre(p.GenrePlan,r.Prompt)
+   if r.Task!=taskAIComposer{r.Prompt=promptWithGenre(p.GenrePlan,r.Prompt)}
   }
  }
  if _,err:=prepareRequest(r);err!=nil{showError(err);return}
