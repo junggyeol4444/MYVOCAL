@@ -42,6 +42,7 @@ type request struct {
  Output string
  Prompt string
  Option string
+ GenrePlan studioGenrePlan
 }
 type jobSpec struct {exe string;args []string;output string;cwd string}
 
