@@ -31,9 +31,11 @@ type fullSongRequest struct {
  Storyboard string
  Style string
  Pitch int
+ RightsConfirmed bool
 }
 
 func validateFullSongRequest(r fullSongRequest)error{
+ if !r.RightsConfirmed{return errors.New("본인 음색·악보·이미지의 학습·생성 이용 권한을 확인하세요")}
  for _,field:=range []string{r.Python,r.FFmpeg,r.DiffSingerRoot,r.ScoreDS,
   r.Experiment,r.MIDI,r.SoundFont,r.FluidSynthDLL,r.Portrait,r.Alignment,
   r.Output,r.VoiceModel,r.RVCRoot,r.Storyboard,r.Style}{
