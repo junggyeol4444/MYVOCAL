@@ -146,6 +146,10 @@ func startFullSong(){
    _,current:=studioSnapshot()
    if projectPath!=""&&projectPath==current{
     if e:=importStudioAsset(r.Output);e!=nil{appendLog("\r\n생성 영상 프로젝트 연결 실패: "+e.Error()+"\r\n")}
+    for _,name:=range []string{"01-vocal.wav","02-instrumental.wav","03-full-mix.wav","04-phoneme-alignment.json"}{
+     asset:=filepath.Join(songTracksFolder(r.Output),name)
+     if e:=importStudioAsset(asset);e!=nil{appendLog("\r\n생성 트랙 자산 등록 실패: "+e.Error()+"\r\n")}
+    }
    }
   }
   ui.mu.Lock();ui.cancel=nil;ui.running=false;ui.mu.Unlock()
