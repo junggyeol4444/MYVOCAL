@@ -50,7 +50,7 @@ func validateMVAlignment(path string,duration float64)error{
  var document mvAlignment
  if err=json.Unmarshal(raw,&document);err!=nil{return fmt.Errorf("음소·가사 시간 JSON 읽기: %w",err)}
  if document.Format!="MYVOCAL_LYRIC_ALIGNMENT"||document.Version!=1{return errors.New("가사 싱크 형식 MYVOCAL_LYRIC_ALIGNMENT / version 1이 필요합니다")}
- if len(document.Cues)==0||len(document.Cues)>400{return errors.New("가사 싱크 구간은 1~400개여야 합니다")}
+ if len(document.Cues)==0||len(document.Cues)>maxPhonemeCues{return errors.New("가사 싱크 구간은 1~4000개여야 합니다")}
  prev:= -1.0
  for i,c:=range document.Cues{
   if math.IsNaN(c.Start)||math.IsNaN(c.End)||math.IsInf(c.Start,0)||math.IsInf(c.End,0)||
