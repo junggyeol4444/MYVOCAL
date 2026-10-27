@@ -94,11 +94,6 @@ func startVoiceOperation(operation string,action func(context.Context,func(strin
  ui.mu.Lock();ui.cancel=cancel;ui.running=true;ui.mu.Unlock()
  setRunning(true)
  voiceUI.running=true
- for _,id:=range []int{idVoiceRecord,idVoiceImport,idVoiceAnalyze,idVoiceTrain}{
-  button,_,_:=sendMessage.Call(voiceUI.hwnd,0x0021,0,0)
-  _=button
-  _=id
- }
  enableWindow.Call(voiceUI.cancel,1)
  setText(voiceUI.status,operation+" 작업을 실행 중입니다. 내 녹음·학습 모델 원본을 변경하지 않습니다.")
  appendLog("\r\n[내 AI 가수] "+operation+" 시작\r\n")
