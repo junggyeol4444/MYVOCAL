@@ -112,10 +112,20 @@ func runMusicMVProduction(ctx context.Context,r mvProductionRequest,logLine func
  vocal:=r.Vocal
  if r.VoiceModel!=""{
   logLine("\r\n1/4 본인 음색 RVC 모델로 보컬 변환\r\n")
-  vocal=filepath.Join(scratch,"vocal-voice-model.wav")
+  rawVoice:=filepath.Join(scratch,"vocal-voice-model-raw.wav")
   req:=request{Task:taskRVCConvert,Python:r.Python,Engine:r.RVCInstall,
-   Input:r.Vocal,Auxiliary:r.VoiceModel,Output:vocal,Option:strconv.Itoa(r.Pitch)}
+   Input:r.Vocal,Auxiliary:r.VoiceModel,Output:rawVoice,Option:strconv.Itoa(r.Pitch)}
   if err=executeJob(ctx,req,logLine);err!=nil{return fmt.Errorf("RVC 음색 변환 중단: %w",err)}
+  // Actual RVC neural output commonly changes source rate and may contain
+  // metadata chunks. Convert to the backing's exact PCM frame layout.
+  backing,openErr:=openNativePCM(r.Accompaniment)
+  if openErr!=nil{return fmt.Errorf("반주 PCM 읽기: %w",openErr)}
+  rate,channels,frames:=backing.rate,backing.channels,backing.frames
+  backing.file.Close()
+  vocal=filepath.Join(scratch,"vocal-voice-model.wav")
+  if err=matchSongPCM(ctx,r.FFmpeg,rawVoice,vocal,rate,channels,frames,logLine);err!=nil{
+   return fmt.Errorf("RVC 음색 변환 길이·채널 정렬: %w",err)
+  }
  }
  // The lip animation requires a guide vocal with exact song timing.
  // A pitch/voice model is not allowed to silently change duration/channel/rate.
