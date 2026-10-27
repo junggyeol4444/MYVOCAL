@@ -20,21 +20,23 @@ const (
  idMVClose=942
  idMVUseProject=943
  idMVEditSync=944
+ idMVEditStoryboard=945
  idMVBrowseFirst=950
  wmMVStatus=0x8002
 )
 type mvStudioWindow struct{
  hwnd,mode,start,cancel,status uintptr
- fields [10]uintptr
+ fields [11]uintptr
  running bool
 }
 var mvStudio mvStudioWindow
 var mvStudioClassReady bool
-var mvFieldLabels=[10]string{
+var mvFieldLabels=[11]string{
  "Python.exe (로컬)","FFmpeg.exe (로컬)","인물·캐릭터 PNG/JPG",
  "보컬 가창 WAV","악기 반주 WAV","가사 시간 JSON",
  "RVC 본인 음색 모델 .pth (선택)","RVC 설치 폴더 (선택)",
  "새 뮤직비디오 MP4 저장","RVC 반음 이동 (-24~24)",
+ "장면 스토리보드 JSON (선택)",
 }
 var mvStyles=[]string{"mixed","performance","story","static"}
 var mvStyleLabels=[]string{"혼합 MV (스토리+공연)","공연형 MV","스토리형 MV","고정형 MV"}
@@ -43,7 +45,7 @@ func mvStatus(value string){
  if mvStudio.status!=0{setText(mvStudio.status,value)}
 }
 func mvRead()mvProductionRequest{
- vals:=[10]string{}
+ vals:=[11]string{}
  for i:=range vals{vals[i]=strings.TrimSpace(readText(mvStudio.fields[i]))}
  index,_,_:=sendMessage.Call(mvStudio.mode,cbGetCurSel,0,0)
  style:="mixed"
@@ -52,7 +54,7 @@ func mvRead()mvProductionRequest{
  return mvProductionRequest{
   Python:vals[0],FFmpeg:vals[1],Portrait:vals[2],
   Vocal:vals[3],Accompaniment:vals[4],Alignment:vals[5],
-  VoiceModel:vals[6],RVCInstall:vals[7],Output:vals[8],
+  VoiceModel:vals[6],RVCInstall:vals[7],Output:vals[8],Storyboard:vals[10],
   Pitch:pitch,Style:style,
  }
 }
@@ -108,7 +110,7 @@ func launchMVProduction(){
 func suggestSavedMVAssets(){
  f,err:=currentMVProjectFields()
  if err!=nil{showError(err);return}
- items:=[]string{f.Python,f.FFmpeg,f.Portrait,f.Vocal,f.Backing,f.Alignment,f.VoiceModel,"",f.Output}
+ items:=[]string{f.Python,f.FFmpeg,f.Portrait,f.Vocal,f.Backing,f.Alignment,f.VoiceModel,"",f.Output,"",f.Storyboard}
  filled:=0
  for index,value:=range items{
   if value!=""&&strings.TrimSpace(readText(mvStudio.fields[index]))==""{
@@ -131,23 +133,25 @@ func mvWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
    if i!=9{callCreate("BUTTON","...",wsChild|wsVisible,885,y,46,31,hwnd,idMVBrowseFirst+uintptr(i))}
   }
   setText(mvStudio.fields[9],"0")
-  callCreate("STATIC","영상 연출",wsChild|wsVisible,20,538,170,30,hwnd,0)
-  mvStudio.mode=callCreate("COMBOBOX","",wsChild|wsVisible|cbsDropDownList|wsVScroll,275,535,600,150,hwnd,0)
+  callCreate("STATIC","영상 연출",wsChild|wsVisible,20,584,170,30,hwnd,0)
+  mvStudio.mode=callCreate("COMBOBOX","",wsChild|wsVisible|cbsDropDownList|wsVScroll,275,581,600,150,hwnd,0)
   for _,name:=range mvStyleLabels{sendMessage.Call(mvStudio.mode,cbAddString,0,uintptr(unsafe.Pointer(utf16(name))))}
   sendMessage.Call(mvStudio.mode,cbSetCurSel,0,0)
-  mvStudio.start=callCreate("BUTTON","가창·반주·MV 전체 제작",wsChild|wsVisible,20,600,280,44,hwnd,idMVStart)
-  mvStudio.cancel=callCreate("BUTTON","작업 취소",wsChild|wsVisible,314,600,180,44,hwnd,idMVCancel)
-  callCreate("BUTTON","닫기",wsChild|wsVisible,508,600,140,44,hwnd,idMVClose)
+  mvStudio.start=callCreate("BUTTON","가창·반주·MV 전체 제작",wsChild|wsVisible,20,631,280,44,hwnd,idMVStart)
+  mvStudio.cancel=callCreate("BUTTON","작업 취소",wsChild|wsVisible,314,631,180,44,hwnd,idMVCancel)
+  callCreate("BUTTON","닫기",wsChild|wsVisible,508,631,140,44,hwnd,idMVClose)
   enableWindow.Call(mvStudio.cancel,0)
-  callCreate("BUTTON","프로젝트 저장 자산 가져오기",wsChild|wsVisible,20,658,290,36,hwnd,idMVUseProject)
-  callCreate("BUTTON","가사·립싱크 시간 편집",wsChild|wsVisible,325,658,260,36,hwnd,idMVEditSync)
-  mvStudio.status=callCreate("STATIC","입력한 오프라인 자료로 최대 6분 2D 음악 영상 MP4를 생성합니다. 실제 AI 가창 모델과 FFmpeg가 필요합니다.",wsChild|wsVisible,20,710,910,60,hwnd,0)
+  callCreate("BUTTON","프로젝트 저장 자산 가져오기",wsChild|wsVisible,20,696,280,36,hwnd,idMVUseProject)
+  callCreate("BUTTON","가사·립싱크 시간 편집",wsChild|wsVisible,314,696,240,36,hwnd,idMVEditSync)
+  callCreate("BUTTON","장면별 스토리보드",wsChild|wsVisible,567,696,270,36,hwnd,idMVEditStoryboard)
+  mvStudio.status=callCreate("STATIC","입력한 오프라인 자료로 최대 6분 2D 음악 영상 MP4를 생성합니다. 실제 AI 가창 모델과 FFmpeg가 필요합니다.",wsChild|wsVisible,20,751,910,60,hwnd,0)
   return 0
  case wmCommand:
   id:=int(wparam&0xffff)
   if id==idMVStart{launchMVProduction();return 0}
   if id==idMVUseProject{suggestSavedMVAssets();return 0}
   if id==idMVEditSync{if err:=openNativeSyncStudio();err!=nil{showError(err)};return 0}
+  if id==idMVEditStoryboard{if err:=openNativeStoryboardEditor();err!=nil{showError(err)};return 0}
   if id==idMVCancel{
    ui.mu.Lock();c:=ui.cancel;ui.mu.Unlock()
    if c!=nil{c();appendLog("\r\n음악+MV 제작 취소 요청\r\n")}
@@ -157,7 +161,7 @@ func mvWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
    if mvStudio.running{showError(errors.New("먼저 작업을 취소하고 종료될 때까지 창을 유지하세요"));return 0}
    destroyWindow.Call(hwnd);return 0
   }
-  if id>=idMVBrowseFirst&&id<idMVBrowseFirst+9{
+  if id>=idMVBrowseFirst&&id<idMVBrowseFirst+11{
    i:=id-idMVBrowseFirst
    if path,ok:=chooseMVSource(i);ok{setText(mvStudio.fields[i],path)}
    return 0
@@ -190,7 +194,7 @@ func openNativeMVStudio()error{
   if result==0{return fmt.Errorf("음악+MV 창 등록 오류: %v",e)}
   mvStudioClassReady=true
  }
- hwnd:=callCreate(mvWindowClass,"MYVOCAL | 음악+보컬+뮤직비디오 자동 제작",wsOverlappedWindow|wsVisible,150,75,980,845,0,0)
+ hwnd:=callCreate(mvWindowClass,"MYVOCAL | 음악+보컬+뮤직비디오 자동 제작",wsOverlappedWindow|wsVisible,150,75,980,895,0,0)
  if hwnd==0{return errors.New("Win32 MV 작업실을 열지 못했습니다")}
  showWindow.Call(hwnd,1);updateWindow.Call(hwnd)
  return nil
