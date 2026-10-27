@@ -24,6 +24,7 @@ type mvProductionRequest struct {
  Vocal string
  Accompaniment string
  Alignment string
+ Storyboard string
  VoiceModel string
  RVCInstall string
  Output string
@@ -60,7 +61,7 @@ func validateMVAlignment(path string,duration float64)error{
  return nil
 }
 func validateMVProduction(r mvProductionRequest)error{
- for _,field:=range []string{r.Python,r.FFmpeg,r.Portrait,r.Vocal,r.Accompaniment,r.Alignment,r.VoiceModel,r.RVCInstall,r.Output,r.Style}{
+ for _,field:=range []string{r.Python,r.FFmpeg,r.Portrait,r.Vocal,r.Accompaniment,r.Alignment,r.Storyboard,r.VoiceModel,r.RVCInstall,r.Output,r.Style}{
   if strings.ContainsRune(field,0)||strings.ContainsAny(field,"\r\n"){return errors.New("경로·설정에 제어 문자가 있습니다")}
  }
  for label,path:=range map[string]string{"Python":r.Python,"FFmpeg":r.FFmpeg,"캐릭터 이미지":r.Portrait,"보컬 음원":r.Vocal,"반주 음원":r.Accompaniment,"가사 싱크":r.Alignment}{
@@ -95,6 +96,10 @@ func validateMVProduction(r mvProductionRequest)error{
  seconds:=float64(voice.frames)/float64(voice.rate)
  if seconds<.2||seconds>360{return errors.New("음악+MV 제작의 전체 곡 길이는 0.2~360초입니다")}
  if err:=validateMVAlignment(r.Alignment,seconds);err!=nil{return err}
+ if r.Storyboard!=""{
+  doc,err:=openNativeStoryboard(r.Storyboard);if err!=nil{return fmt.Errorf("스토리보드: %w",err)}
+  if err=validateNativeStoryboard(doc,seconds);err!=nil{return err}
+ }
  if _,err:=locateWorker("viseme_2d_worker.py");err!=nil{return err}
  return nil
 }
@@ -131,6 +136,7 @@ func runMusicMVProduction(ctx context.Context,r mvProductionRequest,logLine func
   "--image",r.Portrait,"--audio",vocal,"--alignment",r.Alignment,
   "--soundtrack",soundtrack,"--scene-mode",r.Style,"--output",webm,
   "--ffmpeg",r.FFmpeg}}
+ if r.Storyboard!=""{task.args=append(task.args,"--storyboard",r.Storyboard)}
  if err=runProcess(ctx,task,logLine);err!=nil{return fmt.Errorf("2D 립싱크 생성 실패: %w",err)}
  if err=requireExistingFile(webm);err!=nil{return fmt.Errorf("가창 영상 WebM 누락: %w",err)}
  logLine("\r\n4/4 완성 반주·보컬이 들어 있는 H.264/AAC MP4 출력\r\n")
