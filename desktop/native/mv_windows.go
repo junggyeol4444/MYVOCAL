@@ -18,6 +18,8 @@ const (
  idMVStart=940
  idMVCancel=941
  idMVClose=942
+ idMVUseProject=943
+ idMVEditSync=944
  idMVBrowseFirst=950
  wmMVStatus=0x8002
 )
@@ -103,6 +105,19 @@ func launchMVProduction(){
   postMessage.Call(mvStudio.hwnd,wmMVStatus,0,0)
  }()
 }
+func suggestSavedMVAssets(){
+ f,err:=currentMVProjectFields()
+ if err!=nil{showError(err);return}
+ items:=[]string{f.Python,f.FFmpeg,f.Portrait,f.Vocal,f.Backing,f.Alignment,f.VoiceModel,"",f.Output}
+ filled:=0
+ for index,value:=range items{
+  if value!=""&&strings.TrimSpace(readText(mvStudio.fields[index]))==""{
+   setText(mvStudio.fields[index],value)
+   filled++
+  }
+ }
+ mvStatus(fmt.Sprintf("프로젝트에 저장된 사용 가능 자산으로 빈 입력 칸 %d개를 채웠습니다. 길이·모델·권리 확인 후 실행하세요.",filled))
+}
 func mvWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
  switch message{
  case wmCreate:
@@ -124,11 +139,15 @@ func mvWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   mvStudio.cancel=callCreate("BUTTON","작업 취소",wsChild|wsVisible,314,600,180,44,hwnd,idMVCancel)
   callCreate("BUTTON","닫기",wsChild|wsVisible,508,600,140,44,hwnd,idMVClose)
   enableWindow.Call(mvStudio.cancel,0)
-  mvStudio.status=callCreate("STATIC","입력한 오프라인 자료로 최대 6분 2D 음악 영상 MP4를 생성합니다. 실제 AI 가창 모델과 FFmpeg가 필요합니다.",wsChild|wsVisible,20,664,910,55,hwnd,0)
+  callCreate("BUTTON","프로젝트 저장 자산 가져오기",wsChild|wsVisible,20,658,290,36,hwnd,idMVUseProject)
+  callCreate("BUTTON","가사·립싱크 시간 편집",wsChild|wsVisible,325,658,260,36,hwnd,idMVEditSync)
+  mvStudio.status=callCreate("STATIC","입력한 오프라인 자료로 최대 6분 2D 음악 영상 MP4를 생성합니다. 실제 AI 가창 모델과 FFmpeg가 필요합니다.",wsChild|wsVisible,20,710,910,60,hwnd,0)
   return 0
  case wmCommand:
   id:=int(wparam&0xffff)
   if id==idMVStart{launchMVProduction();return 0}
+  if id==idMVUseProject{suggestSavedMVAssets();return 0}
+  if id==idMVEditSync{if err:=openNativeSyncStudio();err!=nil{showError(err)};return 0}
   if id==idMVCancel{
    ui.mu.Lock();c:=ui.cancel;ui.mu.Unlock()
    if c!=nil{c();appendLog("\r\n음악+MV 제작 취소 요청\r\n")}
@@ -171,7 +190,7 @@ func openNativeMVStudio()error{
   if result==0{return fmt.Errorf("음악+MV 창 등록 오류: %v",e)}
   mvStudioClassReady=true
  }
- hwnd:=callCreate(mvWindowClass,"MYVOCAL | 음악+보컬+뮤직비디오 자동 제작",wsOverlappedWindow|wsVisible,150,75,980,790,0,0)
+ hwnd:=callCreate(mvWindowClass,"MYVOCAL | 음악+보컬+뮤직비디오 자동 제작",wsOverlappedWindow|wsVisible,150,75,980,845,0,0)
  if hwnd==0{return errors.New("Win32 MV 작업실을 열지 못했습니다")}
  showWindow.Call(hwnd,1);updateWindow.Call(hwnd)
  return nil
