@@ -30,12 +30,12 @@ var fullLabels=[15]string{
  "로컬 Python.exe","로컬 FFmpeg.exe","DiffSinger 설치 폴더",
  "한국어 가창 악보 .ds","학습 모델 실험 이름","MIDI 악기 편곡 파일",
  "SoundFont 음원 .sf2/.sf3","FluidSynth DLL 파일",
- "내 캐릭터 이미지 PNG/JPG","가사 발음 시간표 JSON","새 MP4 출력 경로",
+ "내 캐릭터 이미지 PNG/JPG","가사 시간 JSON (비우면 DS 음소 추출)","새 MP4 출력 경로",
  "본인 RVC 음색 모델 (선택)","RVC 설치 폴더 (선택)",
  "장면 스토리보드 JSON (선택)","RVC 반음 이동 (-24~24)",
 }
 type fullSongStudio struct{
- hwnd,first,second,start,cancel,status,license,style uintptr
+ hwnd,first,second,start,cancel,status,license,style,stems uintptr
  fields [15]uintptr
  labels [15]uintptr
  browse [15]uintptr
@@ -56,6 +56,7 @@ func songPage(page int){
  }
  showWindow.Call(songUI.style,uintptr(page))
  showWindow.Call(songUI.license,uintptr(page))
+ showWindow.Call(songUI.stems,uintptr(1-page))
 }
 
 func songRequestFromGUI()fullSongRequest{
@@ -67,13 +68,14 @@ func songRequestFromGUI()fullSongRequest{
  pitch,err:=strconv.Atoi(values[14])
  if err!=nil{pitch=1000}
  checked,_,_:=sendMessage.Call(songUI.license,0x00F0,0,0)
+ stems,_,_:=sendMessage.Call(songUI.stems,0x00F0,0,0)
  return fullSongRequest{
   Python:values[0],FFmpeg:values[1],DiffSingerRoot:values[2],
   ScoreDS:values[3],Experiment:values[4],MIDI:values[5],
   SoundFont:values[6],FluidSynthDLL:values[7],Portrait:values[8],
   Alignment:values[9],Output:values[10],VoiceModel:values[11],
   RVCRoot:values[12],Storyboard:values[13],Pitch:pitch,
-  Style:mode,RightsConfirmed:checked==1,
+  Style:mode,RightsConfirmed:checked==1,SeparateStems:stems==1,
  }
 }
 func songBrowseFile(index int)(string,bool){
@@ -146,7 +148,14 @@ func startFullSong(){
    _,current:=studioSnapshot()
    if projectPath!=""&&projectPath==current{
     if e:=importStudioAsset(r.Output);e!=nil{appendLog("\r\n생성 영상 프로젝트 연결 실패: "+e.Error()+"\r\n")}
-    for _,name:=range []string{"01-vocal.wav","02-instrumental.wav","03-full-mix.wav","04-phoneme-alignment.json"}{
+    names:=[]string{"01-vocal.wav","02-instrumental.wav","03-full-mix.wav","04-phoneme-alignment.json"}
+    if r.SeparateStems{
+     if _,tracks,e:=prepareInstrumentStemTracks(r.MIDI);e==nil{
+      for i:=range tracks{names=append(names,instrumentStemFilename(i))}
+     }
+     names=append(names,"05-instruments.json")
+    }
+    for _,name:=range names{
      asset:=filepath.Join(songTracksFolder(r.Output),name)
      if e:=importStudioAsset(asset);e!=nil{appendLog("\r\n생성 트랙 자산 등록 실패: "+e.Error()+"\r\n")}
     }
@@ -179,12 +188,14 @@ func songWinProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
   for _,value:=range mvStyleLabels{sendMessage.Call(songUI.style,cbAddString,0,uintptr(unsafe.Pointer(utf16(value))))}
   sendMessage.Call(songUI.style,cbSetCurSel,0,0)
   songUI.license=callCreate("BUTTON","내 음색·악보·이미지의 사용 권한을 확인했습니다",wsChild|wsVisible|0x00000003,20,600,820,40,hwnd,0)
+  songUI.stems=callCreate("BUTTON","악기별 WAV 트랙도 모두 따로 만들기 (긴 곡·다수 악기에서는 추가 시간이 필요)",wsChild|wsVisible|0x00000003,20,600,890,40,hwnd,0)
+  sendMessage.Call(songUI.stems,0x00F1,1,0)
   songUI.start=callCreate("BUTTON","가창→반주→MV 한번에 제작",wsChild|wsVisible,20,660,320,48,hwnd,idSongStart)
   songUI.cancel=callCreate("BUTTON","작업 취소",wsChild|wsVisible,356,660,172,48,hwnd,idSongCancel)
   callCreate("BUTTON","프로젝트 자산 가져오기",wsChild|wsVisible,544,660,215,48,hwnd,idSongProjectAssets)
   callCreate("BUTTON","닫기",wsChild|wsVisible,774,660,145,48,hwnd,idSongClose)
   enableWindow.Call(songUI.cancel,0)
-  songUI.status=callCreate("STATIC","DiffSinger 학습 모델·MIDI·SoundFont·가사 시간·사진이 준비되어야 합니다. 온라인 업로드는 하지 않습니다.",wsChild|wsVisible,20,731,914,70,hwnd,0)
+  songUI.status=callCreate("STATIC","DiffSinger 학습 모델·MIDI·SoundFont·사진이 필요합니다. 가사 싱크 JSON은 비워 두면 DS 음소에서 생성됩니다.",wsChild|wsVisible,20,731,914,70,hwnd,0)
   songPage(0)
   return 0
  case wmCommand:
