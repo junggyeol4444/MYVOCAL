@@ -116,6 +116,40 @@ def make_frame(base, shape, x, y, width):
     return frame
 
 
+def load_storyboard(path, duration):
+    """Optional purely local shot directions. Gaps use the chosen default mode."""
+    if not path:
+        return []
+    original = Path(path).resolve(strict=True)
+    if not original.is_file() or original.stat().st_size > 128 * 1024:
+        raise ValueError('스토리보드 JSON 크기/경로 오류')
+    payload = json.loads(original.read_text(encoding='utf-8'))
+    if not isinstance(payload, dict) or payload.get('format') != 'MYVOCAL_NATIVE_STORYBOARD' or payload.get('version') != 1:
+        raise ValueError('MYVOCAL 스토리보드 버전 1이 필요합니다')
+    scenes = payload.get('scenes')
+    if not isinstance(scenes, list) or not 1 <= len(scenes) <= 100:
+        raise ValueError('스토리보드 장면은 1~100개여야 합니다')
+    previous_end = -1.0
+    verified = []
+    for position, scene in enumerate(scenes, 1):
+        if not isinstance(scene, dict):
+            raise ValueError(f'{position}번 장면 데이터 형식 오류')
+        a, b = scene.get('startSec'), scene.get('endSec')
+        mode = scene.get('mode')
+        title = scene.get('description', '')
+        if any(not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v) for v in (a, b)):
+            raise ValueError(f'{position}번 장면의 시간은 유효한 숫자여야 합니다')
+        if not (0 <= a < b <= min(MAX_SECONDS, duration + .05) and a >= previous_end and b - a >= .1):
+            raise ValueError(f'{position}번 장면이 겹치거나 실제 노래 길이를 초과했습니다')
+        if mode not in ('static', 'performance', 'story', 'mixed'):
+            raise ValueError(f'{position}번 장면 연출 방식 오류')
+        if not isinstance(title, str) or len(title) > 160:
+            raise ValueError(f'{position}번 장면 설명 오류')
+        verified.append((float(a), float(b), mode))
+        previous_end = float(b)
+    return verified
+
+
 def build_shot_starts(cues, duration):
     """Use actual lyric starts as scene boundaries rather than invented timestamps."""
     boundaries = [0.0]
@@ -159,7 +193,7 @@ def scene_camera(base, time_sec, mode, cue_starts, fps):
     return base.crop((x, y, x + extent, y + extent)).resize(base.size, Image.Resampling.BICUBIC)
 
 
-def render(image_path, audio_path, alignment_path, output_path, *, python_ffmpeg='ffmpeg', x=.5, y=.72, mouth_width=.12, fps=12, size=512, soundtrack_path=None, scene_mode='static'):
+def render(image_path, audio_path, alignment_path, output_path, *, python_ffmpeg='ffmpeg', x=.5, y=.72, mouth_width=.12, fps=12, size=512, soundtrack_path=None, scene_mode='static', storyboard_path=None):
     src_image = Path(image_path).resolve(strict=True)
     src_audio = Path(audio_path).resolve(strict=True)
     src_align = Path(alignment_path).resolve(strict=True)
@@ -209,7 +243,9 @@ def render(image_path, audio_path, alignment_path, output_path, *, python_ffmpeg
     if not executable or not Path(executable).is_file():
         raise ValueError('설치된 FFmpeg 실행 파일을 찾지 못했습니다')
     starts = [c[0] for c in cues]
-    shots = build_shot_starts(cues, info.duration)
+    storyboard = load_storyboard(storyboard_path, info.duration)
+    storyboard_starts = [s[0] for s in storyboard]
+    shots = sorted(set(build_shot_starts(cues, info.duration) + storyboard_starts + [0.0]))
     nframes = math.ceil(info.duration * fps)
     # Encode to a random, private temporary path. Never write to the user's output
     # until the complete video passes checks. A pre-existing output is untouched.
@@ -228,7 +264,12 @@ def render(image_path, audio_path, alignment_path, output_path, *, python_ffmpeg
                 a = max(0,round((t-.025)*rate));b = min(len(mono),round((t+.025)*rate))
                 if b <= a or float(np.sqrt(np.mean(mono[a:b]**2))) < gate:
                     shape = 'closed'
-                image_frame = scene_camera(make_frame(base,shape,x,y,mouth_width), t, scene_mode, shots, fps)
+                active_mode = scene_mode
+                if storyboard:
+                    selected = bisect.bisect_right(storyboard_starts, t) - 1
+                    if selected >= 0 and t < storyboard[selected][1]:
+                        active_mode = storyboard[selected][2]
+                image_frame = scene_camera(make_frame(base,shape,x,y,mouth_width), t, active_mode, shots, fps)
                 process.stdin.write(image_frame.tobytes())
             process.stdin.close()
             process.stdin = None
@@ -271,9 +312,10 @@ def main():
     p.add_argument('--size',type=int,default=512)
     p.add_argument('--soundtrack',default='')
     p.add_argument('--scene-mode',choices=('static','performance','story','mixed'),default='static')
+    p.add_argument('--storyboard',default='')
     args=p.parse_args()
     try:
-        render(args.image,args.audio,args.alignment,args.output,python_ffmpeg=args.ffmpeg,x=args.x,y=args.y,mouth_width=args.mouth_width,fps=args.fps,size=args.size,soundtrack_path=args.soundtrack or None,scene_mode=args.scene_mode)
+        render(args.image,args.audio,args.alignment,args.output,python_ffmpeg=args.ffmpeg,x=args.x,y=args.y,mouth_width=args.mouth_width,fps=args.fps,size=args.size,soundtrack_path=args.soundtrack or None,scene_mode=args.scene_mode,storyboard_path=args.storyboard or None)
         return 0
     except (OSError,ValueError,RuntimeError,ImportError,subprocess.TimeoutExpired,json.JSONDecodeError) as e:
         print('2D 가사·립싱크 렌더링 실패: '+str(e)[:800],file=sys.stderr,flush=True)
