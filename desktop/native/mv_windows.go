@@ -6,7 +6,6 @@ import (
  "context"
  "errors"
  "fmt"
- "path/filepath"
  "strconv"
  "strings"
  "syscall"
@@ -135,7 +134,10 @@ func mvWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr{
    if c!=nil{c();appendLog("\r\n음악+MV 제작 취소 요청\r\n")}
    return 0
   }
-  if id==idMVClose{destroyWindow.Call(hwnd);return 0}
+  if id==idMVClose{
+   if mvStudio.running{showError(errors.New("먼저 작업을 취소하고 종료될 때까지 창을 유지하세요"));return 0}
+   destroyWindow.Call(hwnd);return 0
+  }
   if id>=idMVBrowseFirst&&id<idMVBrowseFirst+9{
    i:=id-idMVBrowseFirst
    if path,ok:=chooseMVSource(i);ok{setText(mvStudio.fields[i],path)}
