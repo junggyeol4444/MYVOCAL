@@ -19,6 +19,7 @@ type mvProjectFields struct {
  Backing string
  Alignment string
  VoiceModel string
+ Storyboard string
  Output string
 }
 
@@ -45,6 +46,9 @@ func currentMVProjectFields()(mvProjectFields,error){
   ext:=strings.ToLower(filepath.Ext(p.Character))
   if ext==".png"||ext==".jpg"||ext==".jpeg"{result.Portrait=p.Character}
  }
+ if regularStudioAsset(p.Storyboard){
+  if _,err:=openNativeStoryboard(p.Storyboard);err==nil{result.Storyboard=p.Storyboard}
+ }
  if regularStudioAsset(p.VoiceModel)&&strings.EqualFold(filepath.Ext(p.VoiceModel),".pth"){
   result.VoiceModel=p.VoiceModel
  }
@@ -67,8 +71,11 @@ func currentMVProjectFields()(mvProjectFields,error){
     // An arbitrary WAV is not presumed to be a vocal or backing track.
    }
   case ".json":
-   // Check actual format, not just the filename.
+   // JSON extension alone does not identify this file.
    if validateMVAlignment(asset.Path,360)==nil{result.Alignment=asset.Path}
+   if result.Storyboard==""{
+    if _,err:=openNativeStoryboard(asset.Path);err==nil{result.Storyboard=asset.Path}
+   }
   }
  }
  // Select a new path; never replace an existing clip or project file.
