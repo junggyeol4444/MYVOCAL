@@ -93,7 +93,7 @@ func parseImportedMultiMIDI(raw []byte,headerSize,trackCount int,ppq uint16)(str
     continue
    }
    if kind!=0x90&&kind!=0x80{continue}
-   if channel==9{return "",0,0,errors.New("드럼 채널은 현재 멜로디 MIDI 편집기에서 지원되지 않습니다")}
+   if channel==9{track.name="Drums";track.program=0}
    if selectedChannel<0{selectedChannel=channel}else if selectedChannel!=channel{
     return "",0,0,errors.New("하나의 트랙에 MIDI 채널이 여러 개 있습니다")
    }
