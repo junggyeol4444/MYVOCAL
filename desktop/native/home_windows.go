@@ -34,12 +34,12 @@ func dispatchOriginalHomeAction(index int){
  var err error
  switch index{
  case 0:err=openNativeFullSongStudio()
- case 1:selectWelcomeTask(taskMicRecord)
+ case 1:err=openNativeVoiceStudio()
  case 2:err=openNativeMIDIEditor()
  case 3:err=openNativeMVStudio()
  case 4:err=openStudioAssetLibrary()
  case 5:err=openNativeMVStudio()
- case 6:selectWelcomeTask(taskRVC)
+ case 6:err=openNativeVoiceStudio()
  case 7:
   var path string
   var ok bool
