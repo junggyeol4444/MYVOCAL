@@ -23,6 +23,7 @@ const (
  idProjectEditorSave=741
  idProjectEditorClose=742
  idProjectLyricImport=743
+ idProjectGenreOpen=744
 )
 type projectWinUI struct {
  hwnd uintptr
@@ -83,6 +84,7 @@ func projectWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr
   callCreate("BUTTON","프로젝트 저장",wsVisible|wsChild,22,679,230,38,hwnd,idProjectEditorSave)
   callCreate("BUTTON","편집 창 닫기",wsVisible|wsChild,265,679,180,38,hwnd,idProjectEditorClose)
   callCreate("BUTTON","가사 TXT 불러오기",wsVisible|wsChild,460,679,190,38,hwnd,idProjectLyricImport)
+  callCreate("BUTTON","장르·비율 설정",wsVisible|wsChild,663,679,154,38,hwnd,idProjectGenreOpen)
   projectWin.status=callCreate("STATIC","",wsVisible|wsChild,22,728,800,48,hwnd,0)
   loadProjectEditorFields()
   return 0
@@ -109,6 +111,7 @@ func projectWindowProc(hwnd uintptr,message uint32,wparam,lparam uintptr)uintptr
    }
    return 0
   }
+  if id==idProjectGenreOpen{if err:=openGenreStudio();err!=nil{showError(err)};return 0}
   if id==idProjectEditorClose{destroyWindow.Call(hwnd);return 0}
  case wmClose:
   destroyWindow.Call(hwnd);return 0
@@ -129,7 +132,9 @@ func readProjectLyrics()string{
 func loadProjectEditorFields(){
  p,path:=studioSnapshot()
  if path==""{return}
- values:=[]string{p.Name,p.Genres,strconv.Itoa(p.BPM),p.Key,p.Concept,p.VoiceModel,p.Character,p.VideoStyle}
+ genre:=p.Genres
+ if p.GenrePlan.Mode!=""{genre=genrePlanSummary(p.GenrePlan)}
+ values:=[]string{p.Name,genre,strconv.Itoa(p.BPM),p.Key,p.Concept,p.VoiceModel,p.Character,p.VideoStyle}
  for i,v:=range values{setText(projectWin.edits[i],v)}
  setText(projectWin.lyrics,p.Lyrics)
  refreshProjectStatus()
@@ -139,7 +144,7 @@ func saveProjectEditorFields()error{
  bpm,err:=strconv.Atoi(strings.TrimSpace(readText(projectWin.edits[2])))
  if err!=nil{return errors.New("BPM은 20~320 사이 정수로 입력하세요")}
  p.Name=strings.TrimSpace(readText(projectWin.edits[0]))
- p.Genres=strings.TrimSpace(readText(projectWin.edits[1]))
+ if p.GenrePlan.Mode!=""{p.Genres=genrePlanSummary(p.GenrePlan)}else{p.Genres=strings.TrimSpace(readText(projectWin.edits[1]))}
  p.BPM=bpm
  p.Key=strings.TrimSpace(readText(projectWin.edits[3]))
  p.Concept=readText(projectWin.edits[4])
