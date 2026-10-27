@@ -38,6 +38,7 @@ type studioProject struct {
  VoiceModel string
  Character string
  VideoStyle string
+ Storyboard string
  CreatedAt string
  UpdatedAt string
  Assets []studioAsset
@@ -98,7 +99,7 @@ func validateStudioProject(p studioProject)error{
  if p.BPM<20||p.BPM>320{return errors.New("BPM은 20~320이어야 합니다")}
  if p.MIDIProgram<0||p.MIDIProgram>127||len(p.MIDINotes)>500000{return errors.New("프로젝트 MIDI 입력 범위 오류")}
  if len(p.Concept)>10000||len(p.Lyrics)>300000||len(p.Genres)>5000||len(p.Key)>100||
- len(p.VoiceModel)>32767||len(p.Character)>1000||len(p.VideoStyle)>1000||
+ len(p.VoiceModel)>32767||len(p.Character)>1000||len(p.VideoStyle)>1000||len(p.Storyboard)>32767||
  len(p.Assets)>10000{return errors.New("프로젝트 입력 또는 자산 목록이 허용 범위를 초과합니다")}
  for _,a:=range p.Assets {
   if len(a.Path)>32767||len(a.Kind)>128||len(a.Task)>128{return errors.New("프로젝트 자산 항목이 너무 큽니다")}
@@ -227,6 +228,20 @@ func updateStudioMIDI(notes string,program,bpm int)error{
  if studioPath==""{return errors.New("MIDI 정보를 저장할 프로젝트가 없습니다")}
  p:=studioCurrent
  p.MIDINotes=notes;p.MIDIProgram=program;p.BPM=bpm
+ p.UpdatedAt=time.Now().Format(time.RFC3339)
+ if err:=writeProjectFile(studioPath,p,false);err!=nil{return err}
+ studioCurrent=p
+ return nil
+}
+
+func updateStudioStoryboard(path string)error{
+ if err:=requireExistingFile(path);err!=nil{return err}
+ if _,err:=openNativeStoryboard(path);err!=nil{return err}
+ studioMu.Lock()
+ defer studioMu.Unlock()
+ if studioPath==""{return errors.New("스토리보드를 저장할 프로젝트가 없습니다")}
+ p:=studioCurrent
+ p.Storyboard=path
  p.UpdatedAt=time.Now().Format(time.RFC3339)
  if err:=writeProjectFile(studioPath,p,false);err!=nil{return err}
  studioCurrent=p
