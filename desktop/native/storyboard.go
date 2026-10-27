@@ -95,3 +95,33 @@ func saveNativeStoryboard(path,text string)error{
  if err=os.Link(name,path);err!=nil{return fmt.Errorf("기존 파일 보호를 위해 스토리보드 저장을 중단했습니다: %w",err)}
  return nil
 }
+
+func draftStoryboardFromLyricCues(path string)(string,error){
+ editor,err:=readLyricTimingEditor(path)
+ if err!=nil{return "",err}
+ cues,err:=parseLyricCueEditor(editor)
+ if err!=nil{return "",err}
+ modes:=[]string{"performance","story","mixed","performance"}
+ scenes:=[]mvStoryboardScene{}
+ begin:=0.0
+ var sectionText string
+ for _,cue:=range cues{
+  if sectionText==""{sectionText=cue.Lyric}
+  if cue.StartSec-begin>=9.0&&cue.StartSec-begin>=0.1{
+   scene:=mvStoryboardScene{StartSec:begin,EndSec:cue.StartSec,
+    Mode:modes[len(scenes)%len(modes)],Description:sectionText}
+   scenes=append(scenes,scene)
+   begin=cue.StartSec
+   sectionText=cue.Lyric
+  }
+ }
+ end:=cues[len(cues)-1].EndSec
+ if end-begin>=0.1{
+  scenes=append(scenes,mvStoryboardScene{StartSec:begin,EndSec:end,
+   Mode:modes[len(scenes)%len(modes)],Description:sectionText})
+ }
+ doc:=mvStoryboard{Format:nativeStoryboardFormat,Version:1,Scenes:scenes}
+ if err:=validateNativeStoryboard(doc,0);err!=nil{return "",err}
+ // A deterministic section draft based on actual lyric times; NOT AI story generation.
+ return "# 가사 싱크 경계를 기준으로 만든 임시 카메라 장면입니다. 내용·시간·모드 수정 후 저장하세요.\r\n"+storyboardText(doc),nil
+}
